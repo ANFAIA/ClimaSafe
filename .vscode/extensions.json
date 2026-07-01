@@ -1,0 +1,23 @@
+{
+  "recommendations": [
+    // ── Python ────────────────────────────────────────────────────────────
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "ms-toolsai.jupyter",
+    "charliermarsh.ruff",
+    "njpwerner.autodocstring",
+    // ── Git (sin GitLens — usar el SCM nativo + estas) ────────────────────
+    "mhutchie.git-graph",             // árbol de commits visual, limpio
+    "donjayamanne.githistory",        // historial por archivo y línea
+    "GitHub.vscode-pull-request-github", // PRs y issues directo en VSCode
+    "vivaxy.vscode-conventional-commits", // commits semánticos (Ctrl+Shift+G C)
+    // ── Datos y archivos ──────────────────────────────────────────────────
+    "mechatroner.rainbow-csv",
+    "tamasfe.even-better-toml",
+    "yzhang.markdown-all-in-one",
+    // ── Utilidades ────────────────────────────────────────────────────────
+    "ms-vscode.makefile-tools",
+    "usernamehw.errorlens"            // errores inline sin abrir Problems
+  ]
+}

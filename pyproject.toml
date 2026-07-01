@@ -1,0 +1,158 @@
+[project]
+name = "climasafeai"
+version = "0.0.1"
+description = "Prediccion de riesgo climatico personalizado (calor/frio/uv) con ML"
+authors = [
+  { name = "Alejandro Cancelas Chapela" }
+]
+readme = "README.md"
+requires-python = ">= 3.12"
+license = { text = "" }
+dependencies = [
+    # ── Datos y computación ───────────────────────────────────────────────
+    "numpy",
+    "pandas",
+    "scipy",           # stats, tests de normalidad, clustering jerárquico
+    # ── ML core (usadas en todos los ml_type) ────────────────────────────
+    "scikit-learn",    # modelos, PCA, pipelines, métricas, preprocesado
+    "joblib",          # serialización de modelos y paralelismo
+    # ── Visualización ────────────────────────────────────────────────────
+    "matplotlib",
+    "seaborn",
+    "plotly",
+    "missingno",
+    # ── Notebooks ────────────────────────────────────────────────────────
+    "jupyter",
+    "jupyterlab",
+    # ── Utilidades ───────────────────────────────────────────────────────
+    "python-dotenv",
+    "loguru",          # logging estructurado
+    "rich",            # output de consola con color y tablas
+    "tqdm",            # barras de progreso
+]
+
+[project.optional-dependencies]
+dev = [
+    "invoke",
+    "nbdime",
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "sphinx",
+    "snakeviz",
+]
+
+# ML supervisado: clasificación + regresión
+supervisado = [
+    "lightgbm",
+    "xgboost",
+
+    "statsmodels",
+    "imbalanced-learn",
+
+    "shap>=0.46,<1.0",
+    "numba>=0.59",
+
+]
+
+
+mlflow_tracking = [
+    "mlflow",
+]
+
+
+# ML no supervisado: clustering + reducción de dimensionalidad
+no_supervisado = [
+    "yellowbrick",       # SilhouetteVisualizer
+    "umap-learn>=0.5.7", # reducción de dimensionalidad no lineal (UMAP)
+    "pynndescent>=0.5.12", # dependencia de umap-learn — pin explícito
+    "numba>=0.59",       # dependencia de pynndescent — evita resolver llvmlite antiguo
+    "hdbscan",           # clustering basado en densidad jerárquico
+]
+
+# Redes neuronales: deep learning con PyTorch
+redes_neuronales = [
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "torchmetrics[visual]",
+    "tensorboard",
+    "polars",         # carga eficiente de datos con dtypes explícitos
+    "pyarrow",        # backend requerido por polars para conversión a pandas
+]
+
+# Modelos híbridos: combinan técnicas supervisadas y no supervisadas
+hibrido = [
+    "umap-learn>=0.5.7",   # UMAP como alternativa a PCA (no lineal)
+    "pynndescent>=0.5.12", # dependencia de umap-learn — pin explícito
+    "numba>=0.59",         # dependencia de pynndescent — evita resolver llvmlite antiguo
+    "lightgbm",             # clasificador final potente
+    "xgboost",               # clasificador final alternativo
+
+    "imbalanced-learn",
+]
+
+
+# Optuna: optimizacion de hiperparametros
+optuna = [
+    "optuna",
+    "optuna-dashboard",  # UI web para explorar estudios (opcional)
+]
+
+
+
+
+
+# API REST para servir el modelo entrenado
+api = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2.0",
+    "httpx",   # cliente HTTP para tests de la API
+]
+
+
+
+# Monitorización: drift detection y performance tracking
+monitoring = [
+    "evidently",
+    "scipy",
+]
+
+
+[tool.setuptools]
+packages = ["climasafeai"]
+
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts   = "-v --tb=short"
+markers   = [
+    "smoke: test de humo — verifica que el pipeline arranca sin errores con datos sintéticos",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    "notebooks/",
+    ".venv",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",   # line too long
+    "I001",   # import sorting — templates can't guarantee alphabetical order
+    "F401",   # imported but unused — template imports are intentionally broad
+    "F811",   # redefinition of unused — happens in generated multi-cell notebooks
+    "F541",   # f-string without placeholders — happens after Jinja substitution
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*"  = ["F401", "F811", "E402", "F841"]
+"docs/*"   = ["E402", "W292"]

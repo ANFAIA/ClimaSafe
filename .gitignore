@@ -1,0 +1,136 @@
+# --- Python ---
+**/__pycache__/
+__pycache__/
+*.py[cod]
+*.pyo
+*$py.class
+*.so
+*.pyd
+
+# --- Entornos virtuales ---
+.venv/
+venv/
+env/
+.env
+ENV/
+
+# --- Distribucion / packaging ---
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+develop-eggs/
+sdist/
+wheels/
+.installed.cfg
+MANIFEST
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# --- Tests / coverage ---
+.tox/
+.coverage
+.coverage.*
+.cache/
+.hypothesis/
+htmlcov/
+coverage.xml
+nosetests.xml
+pytest_cache/
+.pytest_cache/
+
+# --- Datos - ignorar archivos, conservar estructura de carpetas ---
+data/**/*.csv
+data/**/*.tsv
+data/**/*.json
+data/**/*.jsonl
+data/**/*.parquet
+data/**/*.feather
+data/**/*.pkl
+data/**/*.pickle
+data/**/*.h5
+data/**/*.hdf5
+data/**/*.xlsx
+data/**/*.xls
+data/**/*.zip
+data/**/*.tar.gz
+data/**/*.gz
+data/**/*.db
+data/**/*.sqlite
+data/**/*.sqlite3
+!data/**/.gitkeep
+
+# --- Reportes / figuras generadas ---
+reports/figures/*.png
+reports/figures/*.pdf
+reports/figures/*.svg
+reports/**/*.csv
+*.html
+!docs/**/*.html
+
+# --- Modelos entrenados ---
+models/**/*.joblib
+models/**/*.pkl
+models/**/*.pt
+models/**/*.pth
+models/**/*.onnx
+!models/**/.gitkeep
+
+# --- Artefactos ML ---
+artifacts/**/*.joblib
+artifacts/**/*.pkl
+!artifacts/**/.gitkeep
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# TensorBoard
+runs/
+
+# --- Copier ---
+!.copier-answers.yml
+
+# --- IDEs ---
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+*.sublime-project
+*.sublime-workspace
+
+# --- Sistema operativo ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Secretos / credenciales ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# --- Sphinx ---
+docs/_build/
+
+# --- Misc ---
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.python-version
