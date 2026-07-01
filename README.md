@@ -23,6 +23,43 @@ integrarse en alertas o recomendaciones personalizadas.
 
 ---
 
+
+### Fuentes de datos abiertas
+
+- ERA5 (ECMWF / Copernicus) — histórico para entrenamiento del modelo, España minimo 10 años.
+
+- AEMET OpenData — datos oficiales para España.
+
+- Open-Meteo API — datos meteorológicos sin clave de API.
+
+- Open UV — índice UV en tiempo real por coordenada GPS, complementa a Open-Meteo en producción.
+
+- MoMo (ISCIII) — Monitorización de la Mortalidad Diaria; muertes atribuibles a calor (X30) y frío (X31), por provincia y día. Fuente del target/label del modelo.
+
+- CMBD (ISCIII) — Conjunto Mínimo Básico de Datos; ingresos hospitalarios por golpe de calor (T67), hipotermia (T68) y quemadura solar (L55). Captura casos graves que no llegan a muerte y que MoMo no recoge.
+
+---
+
+### Base científica
+  
+- NIOSH Occupational Heat Exposure Guidelines y documentos conexos sobre patologías por calor.
+
+- Rothfusz Heat Index (1990), referencia para el cálculo del Heat Index.
+
+- NWS Wind Chill Advisory, referencia para el cálculo del Wind Chill.
+
+- WHO Heat Health Action Plans — recomendaciones a ciudades y sistemas de salud.
+
+- OIT Informe Seguridad Climática (2024) y datos de mortalidad laboral por calor.
+
+- INSST NTP-322 sobre estrés térmico y normativa española aplicable.
+
+- Ministerio de Sanidad de España — Plan Calor 2026, con datos de mortalidad y episodios extremos en España.
+
+
+---
+
+
 ## Estructura del proyecto
 
 ```
