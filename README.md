@@ -36,7 +36,6 @@ integrarse en alertas o recomendaciones personalizadas.
 
 - MoMo (ISCIII) — Monitorización de la Mortalidad Diaria; muertes atribuibles a calor (X30) y frío (X31), por provincia y día. Fuente del target/label del modelo.
 
-- CMBD (ISCIII) — Conjunto Mínimo Básico de Datos; ingresos hospitalarios por golpe de calor (T67), hipotermia (T68) y quemadura solar (L55). Captura casos graves que no llegan a muerte y que MoMo no recoge.
 
 ---
 
