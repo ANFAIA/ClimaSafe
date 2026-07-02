@@ -29,6 +29,7 @@ dependencies = [
     "loguru",          # logging estructurado
     "rich",            # output de consola con color y tablas
     "tqdm",            # barras de progreso
+    "cdsapi>=0.7.7",
 ]
 
 [project.optional-dependencies]

@@ -75,7 +75,7 @@ respuesta.
 | **AEMET OpenData** | API oficial de la Agencia Estatal de Meteorología con observaciones, predicciones y datos climatológicos de España. | Predicciones meteorológicas, observaciones de estaciones, climatología, avisos meteorológicos, radar, rayos e información oficial de España. | **Requiere API Key** gratuita. Sin límites de peticiones documentados. | [AEMET](https://opendata.aemet.es/) | [Docs AEMET](https://opendata.aemet.es/centrodedescargas/inicio) |
 | **Open-Meteo API** | API gratuita para predicciones meteorológicas y datos históricos. | Predicción meteorológica, datos históricos, calidad del aire, índice UV, radiación solar, elevación y modelos climáticos. | **Sin API Key.** Hasta **10.000 llamadas/día**, **5.000/hora**, **600/minuto**. | [Open-Meteo](https://open-meteo.com/en/docs) | [Open-Meteo docs](https://open-meteo.com/en/docs) |
 | **OpenUV** | API para consultar el índice UV y exposición solar. | Índice UV actual, histórico y previsto, tiempos de exposición segura e intensidad solar. | **Requiere API Key.** Plan gratuito con **50 solicitudes/día**. | [OpenUV](https://www.openuv.io/) | [OpenUV docs](https://www.openuv.io/) |
-| **MoMo (ISCIII)** | Sistema de monitorización de mortalidad diaria en España. | Mortalidad observada, esperada, exceso de mortalidad, desagregación por edad, sexo y región. | **Sin API Key.** Descarga directa de datos. | [MoMo](https://momo.isciii.es/public/momo/data) | [MoMo dashboard](https://momo.isciii.es/public/momo/dashboard/momo_dashboard.html) |
+| **MoMo (ISCIII)** | Sistema de monitorización de mortalidad diaria en España. | Mortalidad observada, esperada, exceso de mortalidad, desagregación por edad, sexo y región. | **Sin API Key.** Descarga directa de datos. | [MoMo](https://momo.isciii.es/public/momo/data) | [MoMo dashboard](https://momo.isciii.es/public/momo/dashboard) |
 
 ERA5 url api: https://cds.climate.copernicus.eu/api/v2
 
@@ -123,6 +123,22 @@ para frío. Para cada provincia y día del histórico se calcula el Heat
 Index a partir de ERA5, se identifica la hora de mayor riesgo, y esa hora
 se cruza con las muertes por temperaturas altas (modelo calor) o bajas
 (modelo frío) de ese mismo día y provincia.
+A partir de estas series horarias se selecciona **la hora de mayor riesgo del día**, entendida como aquella en la que el valor de riesgo combinado es máximo.
+El riesgo combinado se define como:
+
+- el máximo entre los índices normalizados de calor, frío y radiación UV.
+
+Esto permite evitar inconsistencias temporales, ya que no se mezclan condiciones de distintas horas en un mismo registro.
+El resultado final de cada día es un único vector representativo:
+
+- Provincia
+- Fecha
+- Hora de mayor riesgo
+- Variables meteorológicas en esa hora
+- Índices derivados en esa hora
+
+Este vector es el que se utiliza posteriormente para cruzarlo con los datos de mortalidad de MoMo.
+
 
 **Qué cubre el ML y qué no:** el ML (MoMo) aprende el patrón poblacional
 real de España — cuándo unas condiciones meteorológicas se traducen

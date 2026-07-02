@@ -134,3 +134,6 @@ docs/_build/
 pip-log.txt
 pip-delete-this-directory.txt
 .python-version
+
+# --- nc ---
+*.nc

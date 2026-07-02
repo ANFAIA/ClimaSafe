@@ -88,6 +88,30 @@ climasafeai/
 
 ## Inicio rápido
 
+> **Nota sobre ERA5:** El cliente oficial de Copernicus (`cdsapi`) requiere un archivo de configuración llamado `.cdsapirc`, ubicado en el directorio personal del usuario (`~/.cdsapirc` en Linux/macOS o `C:\Users\<usuario>\.cdsapirc` en Windows). Cada usuario debe generar su propio **Personal Access Token** desde su cuenta del **Copernicus Climate Data Store (CDS)** y crear este archivo siguiendo la documentación oficial. Este archivo es personal, **no debe incluirse en el repositorio ni compartirse con otros usuarios**.
+
+**Documentación oficial:** https://cds.climate.copernicus.eu/how-to-api
+
+Crear el archivo:
+
+```bash
+nano ~/.cdsapirc
+```
+
+Contenido del archivo:
+
+```yaml
+url: https://cds.climate.copernicus.eu/api
+key: TU_PERSONAL_ACCESS_TOKEN
+```
+
+Guardar el archivo y, opcionalmente, restringir sus permisos:
+
+```bash
+chmod 600 ~/.cdsapirc
+```
+
+
 Consulta el archivo `documentacion` para más detalles.
 
 ---

@@ -2,8 +2,9 @@
 Punto de entrada principal del proyecto.
 Ejecutar: python main.py
 """
-
-from climasafeai.data.make_dataset import load_data
+import os
+from dotenv import load_dotenv
+from climasafeai.data.make_dataset import load_data, download_aemet, download_era5_data, download_momo_data
 from climasafeai.features.build_features import preprocess_data
 from climasafeai.models.train_model import train_models
 from climasafeai.models.predict_model import evaluate_models, DECISION_THRESHOLD, try_model
@@ -37,7 +38,11 @@ OPTUNA_TRIALS = 50
 
 def run_full_pipeline() -> None:
     print('=' * 60)
-    print('1. Cargando datos...')
+    print('1. Descarga y carga de datos...')
+    load_dotenv()
+    download_momo_data()
+    download_era5_data()
+
     df = load_data(DATA_FILE)
     print(f'   Shape: {df.shape}')
 
