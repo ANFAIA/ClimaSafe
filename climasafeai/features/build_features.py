@@ -39,6 +39,7 @@ def preprocess_data(
     test_size: float = 0.2,
     random_state: int = 42,
     use_pca=None,
+    tipo="calor"
 ):
     """
     Pipeline completo de preprocesado para aprendizaje supervisado.
@@ -130,10 +131,25 @@ def preprocess_data(
         print(f"    Encoders guardados → encoders.joblib  ({cols_encoded})")
 
 
+    # 8. Train/test split (sin stratify, es regresión)
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y,
+        X, y, test_size=test_size, random_state=random_state,
     )
 
+    # Submuestreo de la mitad de los ceros SOLO en entrenamiento
+    rng = np.random.default_rng(random_state)
+    mask_ceros = (y_train == 0)
+    idx_ceros = y_train[mask_ceros].index        # pd.Index
+    n_conservar = len(idx_ceros) // 2
+    # Elegir la mitad de los índices y convertir a pd.Index para poder usar .union
+    idx_ceros_sub = pd.Index(rng.choice(idx_ceros, size=n_conservar, replace=False))
+    idx_pos = y_train[~mask_ceros].index         # pd.Index
+    idx_keep = idx_ceros_sub.union(idx_pos)      # pd.Index combinado
+
+    X_train = X_train.loc[idx_keep]
+    y_train = y_train.loc[idx_keep]
+    print(f"    Muestras de entrenamiento tras submuestreo: {len(X_train)}")
+    print(f"    Muestras de entrenamiento tras submuestreo: {len(X_train)}")
 
     # Guardar nombres de features originales (antes de PCA) para test_model()
     joblib.dump(list(X.columns), ARTIFACTS_DIR / "feature_names.joblib")
@@ -146,11 +162,6 @@ def preprocess_data(
     joblib.dump(scaler, ARTIFACTS_DIR / "scaler.joblib")
     print(f"    Scaler guardado → scaler.joblib")
 
-    # threshold.joblib se genera DESPUÉS del entrenamiento, no aquí.
-    # Descomenta find_best_threshold en predict_model.py (solo binaria) y
-    # guárdalo al final de train_model.py:
-    #   joblib.dump(best_threshold, ARTIFACTS_DIR / "threshold.joblib")
-
     # 10. PCA opcional
     if use_pca is not None:
         X_train, X_test = _apply_pca(X_train, X_test, use_pca)
@@ -161,10 +172,10 @@ def preprocess_data(
 
 
     # Guardar conjuntos procesados
-    pd.DataFrame(X_train).to_csv(PROCESSED_DATA_DIR / "X_train.csv", index=False)
-    pd.DataFrame(X_test).to_csv(PROCESSED_DATA_DIR  / "X_test.csv",  index=False)
-    pd.Series(y_train).to_csv(PROCESSED_DATA_DIR / "y_train.csv", index=False)
-    pd.Series(y_test).to_csv(PROCESSED_DATA_DIR  / "y_test.csv",  index=False)
+    pd.DataFrame(X_train).to_csv(PROCESSED_DATA_DIR / f"X_train_{tipo}.csv", index=False)
+    pd.DataFrame(X_test).to_csv(PROCESSED_DATA_DIR  / f"X_test_{tipo}.csv",  index=False)
+    pd.Series(y_train).to_csv(PROCESSED_DATA_DIR / f"y_train_{tipo}.csv", index=False)
+    pd.Series(y_test).to_csv(PROCESSED_DATA_DIR  / f"y_test_{tipo}.csv",  index=False)
 
     return X_train, X_test, y_train, y_test
 
