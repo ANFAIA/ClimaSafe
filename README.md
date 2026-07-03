@@ -110,7 +110,7 @@ Guardar el archivo y, opcionalmente, restringir sus permisos:
 ```bash
 chmod 600 ~/.cdsapirc
 ```
-
+descargar el shapefile de https://centrodedescargas.cnig.es/CentroDescargas/limites-municipales-provinciales-autonomicos y aañdirlo a data/raw
 
 Consulta el archivo `documentacion` para más detalles.
 

@@ -137,3 +137,6 @@ pip-delete-this-directory.txt
 
 # --- nc ---
 *.nc
+
+# --- raw ---
+data/raw/*
