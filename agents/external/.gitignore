@@ -1,0 +1,10 @@
+# Los agentes externos que coloques aquí son locales a tu máquina/proyecto por
+# defecto: no se versionan a menos que los añadas explícitamente con
+# `git add -f`. Si quieres que un agente externo concreto SÍ se versione con
+# el proyecto, esa es la vía — este .gitignore no te lo impide, solo evita
+# que se cuele por accidente (p. ej. un agente descargado con credenciales
+# de prueba embebidas).
+*
+!.gitignore
+!__init__.py
+!README.md
