@@ -38,24 +38,28 @@ agents/
 ├── __main__.py             # permite `python -m agents ...`
 ├── cli.py                  # CLI (list / describe / run / ask / tools)
 ├── config.py                # lee .copier-answers.yml -> ProjectConfig
-├── context.py                # SharedContext: rutas + config, calculado una vez
-├── orchestrator.py            # rutea lenguaje natural -> agente por capabilities
+├── context.py                # SharedContext: rutas + config + workspace por agente
+├── orchestrator.py            # rutea lenguaje natural -> agente + acción
 ├── exceptions.py               # jerarquía de excepciones propia
 ├── core/
-│   ├── base_agent.py            # BaseAgent, AgentResult
+│   ├── base_agent.py            # BaseAgent, AgentResult, best_action()
 │   └── registry.py               # @register_agent + auto-descubrimiento
 ├── tools/                          # herramientas reutilizables, una responsabilidad cada una
 │   ├── git_tool.py · docker_tool.py · process_tool.py · filesystem_tool.py
 │   ├── data_io_tool.py · dataframe_analysis_tool.py · sklearn_tool.py
 │   ├── vision_tool.py · duckdb_tool.py · sqlite_tool.py · rest_tool.py
-│   └── code_analysis_tool.py
-├── agents/                          # los 7 agentes iniciales (+ plantilla de ejemplo)
+│   ├── code_analysis_tool.py · notebook_tool.py · agent_installer_tool.py
+├── agents/                          # los 9 agentes iniciales (+ plantilla de ejemplo)
 │   ├── git_agent.py · data_agent.py · graph_agent.py · docker_agent.py
 │   ├── ml_agent.py · review_agent.py · documentation_agent.py
+│   ├── notebook_agent.py · installer_agent.py
 │   └── _template_agent.py            # plantilla — no se auto-registra (prefijo `_`)
 ├── external/                          # agentes de terceros / tuyos, fuera del núcleo
 │   ├── README.md
 │   └── __init__.py
+├── workspace/                          # lo que generan los agentes — nunca en la raíz del proyecto
+│   ├── README.md
+│   └── <agente>/                        # creado bajo demanda por ctx.agent_workspace(nombre)
 └── prompts/                            # una ficha markdown por agente (rol, cuándo usarlo)
 ```
 
@@ -84,36 +88,68 @@ print(result.data["suggested_message"])
 uv run python -m agents list
 uv run python -m agents describe git
 uv run python -m agents run git suggest_commit_message
+uv run python -m agents run git tag_release --version 1.9.0
+uv run python -m agents run cicd generate_workflow
+uv run python -m agents run test run_tests
+uv run python -m agents run dependency check_outdated
 uv run python -m agents run data eda_report --filename dataset.csv --target-col target
+uv run python -m agents run installer install_from_git --repo_url usuario/repo
 uv run python -m agents ask "revisa el Dockerfile"
 uv run python -m agents tools
 ```
 
-## Instalar este mismo sistema en otro proyecto
+## Instalar agentes — dos herramientas distintas, no redundantes
 
-Existe una Skill de Claude (`dskit-agents-installer`, fuera de este
-template) que empaqueta esta carpeta y la instala en cualquier proyecto
-Python, resolviendo `project_slug` automáticamente. Es un artefacto
-separado de este template — pregunta por ella si la necesitas, no vive
-dentro de `agents/` porque no tiene sentido que un proyecto ya generado
-cargue con su propio instalador.
+- **`installer` (agente, dentro de este sistema)**: instala un agente
+  concreto (URL de git, atajo `usuario/repo`, o ruta local) dentro de un
+  proyecto que **ya tiene** `agents/`. Es la vía normal para añadir un
+  agente nuevo de un tercero o de otro proyecto tuyo.
+- **`dskit-agents-installer` (Skill de Claude, fuera de este template)**:
+  instala **toda la carpeta `agents/`** en un proyecto que todavía no la
+  tiene. Solo hace falta la primera vez, en un proyecto sin este sistema —
+  pregunta por ella si la necesitas.
 
-## Los 7 agentes iniciales
+## Los 15 agentes iniciales
 
 | Agente | Responsabilidad | Herramientas que usa |
 |---|---|---|
-| `git` | Conventional Commits, changelog, release notes, breaking changes, resumen de PR | `git_tool` |
+| `git` | Conventional Commits, changelog, release notes, breaking changes, resumen de PR, **commit+changelog en un paso** (`commit_with_changelog`), **release completo** (`tag_release`: versión + changelog + CI/CD + commit + tag) | `git_tool` |
 | `data` | EDA: constantes, cardinalidad, missing, outliers, fuga de información, correlaciones | `data_io_tool`, `dataframe_analysis_tool` |
 | `graph` | Audita `reports/figures/`: figuras vacías, aspect ratio inusual | `vision_tool` |
 | `docker` | Lint de Dockerfile, validación de docker-compose | `docker_tool` |
 | `ml` | Inspección de modelos `.joblib`, importancia de variables, overfitting | `sklearn_tool` |
 | `review` | Funciones largas, demasiados argumentos, `except` desnudos, duplicación estructural | `code_analysis_tool` |
-| `documentation` | README ↔ Makefile desincronizados, actualiza CHANGELOG.md, genera docs Sphinx | `filesystem_tool`, `process_tool`, agente `git` |
+| `documentation` | README ↔ Makefile desincronizados, actualiza CHANGELOG.md, **sube versión en pyproject.toml+README** (`bump_version`), genera docs Sphinx | `filesystem_tool`, `process_tool`, agente `git` |
+| `notebook` | Extrae salidas de un `.ipynb` (imágenes, texto) e inserta interpretaciones como celdas markdown — no interpreta nada él mismo, ver su docstring | `notebook_tool` |
+| `installer` | Instala agentes externos (URL de git, atajo `usuario/repo`, o ruta local) en `agents/external/`, valida su estructura, confirma que quedan registrados | `agent_installer_tool` |
+| `cicd` | Genera y valida `.github/workflows/*.yml` **del proyecto generado** (no del template), cruzando los `make <target>` invocados contra el Makefile real | `cicd_tool` |
+| `test` | Ejecuta pytest, resume fallos/cobertura (JUnit XML + JSON de `pytest-cov`, ambos formatos reales verificados), detecta módulos sin test homónimo | `pytest_tool` |
+| `dependency` | Detecta paquetes desactualizados y vulnerabilidades conocidas (OSV vía API de PyPI) contra `uv.lock`, valida sincronía con `uv lock --check`. Necesita internet | `dependency_tool` |
+| `secrets` | Escanea el proyecto en busca de secretos hardcodeados. Usa `detect-secrets` si está instalado; si no, un heurístico propio mucho más limitado (avisado explícitamente) | `secrets_tool` |
+| `mlflow` | Lista runs del experimento (`project_slug`, misma convención que `train_model.py`), encuentra el mejor por métrica, avisa si el run más reciente empeoró. Solo aplica con `use_mlflow=true` | `mlflow_tool` |
+| `api` | Cruza endpoints `@app.get/post(...)` declarados en `api/main.py` contra los documentados en su docstring, y hace un smoke test real con `TestClient`. Solo aplica con `use_api=true` | `api_tool` |
 
 Cada agente documenta en su propio docstring qué responsabilidades de la
 lista original están implementadas y cuáles quedan como extensión (p. ej.
 `GitAgent.detect_breaking_changes` solo mira mensajes de commit, no el diff
 de la API pública — está señalado explícitamente en su `AgentResult.warnings`).
+
+### Límites conocidos que quedaron documentados construyendo estos agentes
+
+- **`secrets`**: sin `detect-secrets` instalado, no detecta tokens de Slack/Stripe/GitHub/JWT/etc. — solo claves AWS, cabeceras PEM y asignaciones de alta entropía.
+- **`mlflow`**: la versión de mlflow que se instala sin fijar versión puede resolver su tracking URI por defecto a un `sqlite:///...mlflow.db` en vez del clásico `mlruns/` — este agente no fuerza ningún tracking_uri, usa el que resuelva mlflow (o `MLFLOW_TRACKING_URI` si lo fijas). Verifica tu versión instalada si esto te importa.
+- **`api`**: `fastapi.testclient.TestClient` avisa (deprecation warning) de que prefiere `httpx2` sobre `httpx` en las versiones actuales de Starlette — `httpx` (el que ya declara `pyproject.toml`) sigue funcionando, pero puede que en algún momento quieras migrar la dependencia.
+
+### Agentes que colaboran entre sí (no todo tiene que ser independiente)
+
+`agents/agents/git_agent.py` es el ejemplo de referencia: `commit_with_changelog`
+llama a `DocumentationAgent.update_changelog` antes de hacer el commit, y
+`tag_release` encadena `DocumentationAgent.bump_version` +
+`commit_with_changelog` + `git tag` en un único flujo. El patrón es siempre
+el mismo: import perezoso (dentro del método, no a nivel de módulo, para
+evitar ciclos de import) + instanciar el otro agente con `context=self.ctx`
++ llamar a `.run("accion", **kwargs)`. No hace falta un mecanismo especial
+de orquestación entre agentes — son objetos Python normales.
 
 ## Cómo extender el sistema
 
@@ -137,18 +173,38 @@ necesite. Nunca dupliques una herramienta existente entre agentes.
 2. **Un paquete pip instalado** que expone un entry point del grupo
    `dskit.agents` en su propio `pyproject.toml` — útil si el agente externo
    tiene dependencias propias o lo compartes entre varios proyectos.
+3. **El agente `installer`** automatiza la vía 1 (clona/copia, valida
+   estructura con AST, confirma el registro) — pero instalar código de un
+   origen que no controlas sigue siendo ejecución de código arbitrario al
+   importarlo. La validación es estructural, no de seguridad — revisa el
+   código tú mismo si el origen no es de confianza. Ver
+   `agents/prompts/installer_agent.md`.
 
-Ninguna de las dos vías requiere tocar `orchestrator.py`, `cli.py` ni ningún
-otro agente.
+Ninguna de las tres vías requiere tocar `orchestrator.py`, `cli.py` ni
+ningún otro agente.
 
 ## Extender el ruteo del Orchestrator
 
-`Orchestrator.select_agent` usa una heurística de palabras clave
-(`BaseAgent.can_handle`), determinista a propósito (ver Filosofía). Si más
-adelante quieres un ruteo basado en un LLM (de cualquier proveedor —
-Anthropic, OpenAI, un modelo local...) decidiendo qué agente usar, ese único
-método es el punto de extensión — no hace falta tocar ningún agente ni el
-resto del `Orchestrator`.
+`Orchestrator.select_agent` elige el agente por palabras clave
+(`BaseAgent.can_handle`), determinista a propósito (ver Filosofía).
+`Orchestrator.dispatch` además adivina la **acción** con
+`BaseAgent.best_action` (solapamiento de palabras con el nombre de la
+acción) y solo la ejecuta sola si no necesita argumentos obligatorios
+(`BaseAgent.can_auto_run`) — si hace falta un argumento que no se puede
+adivinar de una frase (un `filename`, un `message`, una `version`...), se
+informa de qué falta en vez de inventarlo.
+
+Cuando dos acciones de un mismo agente comparten palabras con la consulta
+(p. ej. "commit" aparece tanto en `commit_with_changelog` como en
+`suggest_commit_message`), define `action_aliases()` en ese agente para
+desambiguar — ver `GitAgent.action_aliases` para el caso real que motivó
+este mecanismo. No hace falta definirlo para cada acción, solo donde hay
+ambigüedad real.
+
+Si más adelante quieres un ruteo basado en un LLM (de cualquier proveedor —
+Anthropic, OpenAI, un modelo local...) decidiendo agente y acción, esos dos
+métodos (`can_handle` y `best_action`) son el punto de extensión — no hace
+falta tocar ningún agente ni el resto del `Orchestrator`.
 
 ---
 

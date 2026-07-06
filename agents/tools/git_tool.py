@@ -104,6 +104,17 @@ class GitTool:
     def commit(self, message: str) -> ProcessResult:
         return self._git("commit", "-m", message)
 
+    def add(self, *paths: str) -> ProcessResult:
+        return self._git("add", *paths)
+
+    def create_tag(self, tag: str, *, message: str | None = None) -> ProcessResult:
+        if message:
+            return self._git("tag", "-a", tag, "-m", message)
+        return self._git("tag", tag)
+
+    def tag_exists(self, tag: str) -> bool:
+        return self._git("rev-parse", tag).ok
+
     @staticmethod
     def parse_conventional_commit(message: str) -> dict[str, str] | None:
         """Extrae {type, scope, breaking, subject} de un mensaje Conventional Commits, o None."""

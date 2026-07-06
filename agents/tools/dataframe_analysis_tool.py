@@ -51,6 +51,13 @@ class DataFrameAnalysisTool:
         n = len(df)
         if n == 0:
             return findings
+        # Nota: en pandas 3.x esto genera un FutureWarning sugiriendo incluir
+        # "str" explícitamente junto a "object"/"category". No lo añado aquí:
+        # no pude verificar si "str" como token de select_dtypes se comporta
+        # igual en pandas 2.x (que algún proyecto ya generado podría tener
+        # fijado en su lockfile), y una incompatibilidad real es peor que un
+        # warning cosmético. Si te molesta el warning y sabes que tu proyecto
+        # usa pandas 3.x, añade "str" tú mismo a esta lista.
         cols = df.select_dtypes(include=["object", "category"]).columns if categorical_only else df.columns
         for col in cols:
             ratio = df[col].nunique(dropna=True) / n

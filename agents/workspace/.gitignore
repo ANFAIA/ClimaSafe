@@ -1,0 +1,9 @@
+# Todo lo que los agentes escriben aquí (manifests, imágenes extraídas de
+# notebooks, staging de agentes clonados...) es contenido derivado/temporal
+# por defecto — no se versiona salvo que lo añadas explícitamente con
+# `git add -f`. Cada agente tiene su propia subcarpeta (agents/workspace/<nombre>/),
+# creada automáticamente por SharedContext.agent_workspace() la primera vez
+# que hace falta.
+*
+!.gitignore
+!README.md

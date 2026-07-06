@@ -18,6 +18,7 @@ de scoring distinta sin tocar ningún agente.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 
 from agents.context import SharedContext, get_context
@@ -64,11 +65,18 @@ class Orchestrator:
             best_name = None
         return RoutingDecision(query=query, agent_name=best_name, confidence=best_score, candidates=scores)
 
-    def dispatch(self, query: str, *, action: str | None = None, **kwargs) -> AgentResult:
+    def dispatch(self, query: str, /, *, action: str | None = None, **kwargs) -> AgentResult:
         """
         Rutea `query` en lenguaje natural al agente con mayor puntuación de
-        `can_handle` y ejecuta `action` sobre él (si no se especifica, usa la
-        primera acción declarada por el agente — ver nota más abajo).
+        `can_handle` y ejecuta una acción sobre él.
+
+        Si no se pasa `action` explícitamente, se intenta adivinar con
+        `agent.best_action(query)` — pero solo se ejecuta automáticamente si
+        esa acción no necesita argumentos obligatorios (`agent.can_auto_run`).
+        Si la acción adivinada necesita argumentos (p. ej. un `filename` o un
+        `message`), no se inventan valores: se informa de la acción sugerida
+        y de los argumentos que hacen falta, en vez de arriesgar una
+        ejecución con datos inventados.
         """
         decision = self.select_agent(query)
         if decision.agent_name is None:
@@ -80,21 +88,35 @@ class Orchestrator:
             )
 
         agent = self._get_instance(decision.agent_name)
-        if action is None:
-            # Sin acción explícita: el ruteo por palabras clave identifica el agente
-            # correcto, pero no la acción — se necesita más contexto para adivinarla
-            # bien. Devolvemos las acciones disponibles en vez de arriesgar una
-            # ejecución equivocada.
+
+        chosen_action = action or agent.best_action(query)
+        if chosen_action is None or chosen_action not in agent.actions():
             return AgentResult(
                 True, "orchestrator", "dispatch",
-                f"Agente seleccionado: '{decision.agent_name}' (confianza {decision.confidence:.2f}). "
-                f"Especifica una acción con action=... — acciones disponibles: {sorted(agent.actions())}",
+                f"Agente seleccionado: '{decision.agent_name}' (confianza {decision.confidence:.2f}), "
+                f"pero no pude adivinar qué acción concreta usar. Especifica una acción con action=... "
+                f"— acciones disponibles: {sorted(agent.actions())}",
                 data={"selected_agent": decision.agent_name, "available_actions": sorted(agent.actions())},
             )
 
-        return self.run(decision.agent_name, action, **kwargs)
+        if action is None and not kwargs and not agent.can_auto_run(chosen_action):
+            signature = inspect.signature(agent.actions()[chosen_action])
+            required = [
+                name for name, param in signature.parameters.items()
+                if param.default is inspect.Parameter.empty
+                and param.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            ]
+            return AgentResult(
+                True, "orchestrator", "dispatch",
+                f"Agente y acción más probables: '{decision.agent_name}.{chosen_action}', pero necesita "
+                f"argumento(s) que no puedo adivinar de una frase en lenguaje natural: {required}. "
+                f"Llama a run('{decision.agent_name}', '{chosen_action}', {', '.join(f'{r}=...' for r in required)}).",
+                data={"selected_agent": decision.agent_name, "selected_action": chosen_action, "required_args": required},
+            )
 
-    def run(self, agent_name: str, action: str, **kwargs) -> AgentResult:
+        return self.run(decision.agent_name, chosen_action, **kwargs)
+
+    def run(self, agent_name: str, action: str, /, **kwargs) -> AgentResult:
         """Ejecuta una acción concreta de un agente concreto, sin pasar por el ruteo por keywords."""
         from agents.exceptions import ActionNotSupportedError
 

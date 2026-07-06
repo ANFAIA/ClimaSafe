@@ -131,6 +131,24 @@ class SharedContext:
             return self.root / "runs"
         return None
 
+    # -- workspace de los propios agentes -----------------------------------
+    @property
+    def workspace_dir(self) -> Path:
+        """
+        Raíz donde los agentes guardan lo que generan (manifests, imágenes
+        extraídas, staging de clonados...). Nunca en la raíz del proyecto —
+        eso es una decisión explícita del usuario de este template, no un
+        detalle de implementación: cada agente tiene su propia subcarpeta
+        dentro de `agents/workspace/`.
+        """
+        return self.root / "agents" / "workspace"
+
+    def agent_workspace(self, agent_name: str) -> Path:
+        """Crea (si hace falta) y devuelve `agents/workspace/<agent_name>/`."""
+        path = self.workspace_dir / agent_name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
 
 _cached_context: SharedContext | None = None
 

@@ -42,6 +42,7 @@ class DocumentationAgent(BaseAgent):
             "check_readme_makefile_sync": self.check_readme_makefile_sync,
             "update_changelog": self.update_changelog,
             "build_docs": self.build_docs,
+            "bump_version": self.bump_version,
         }
 
     def check_readme_makefile_sync(self) -> AgentResult:
@@ -143,3 +144,56 @@ class DocumentationAgent(BaseAgent):
             return AgentResult(False, self.name, "build_docs", "El build HTML de Sphinx falló.", data=html.stderr)
 
         return AgentResult(True, self.name, "build_docs", "Documentación generada en docs/build/html/.")
+
+    def bump_version(self, *, new_version: str) -> AgentResult:
+        """
+        Actualiza el número de versión en `pyproject.toml` (`version = "..."`)
+        y en `README.md` (el badge `Version-X-green` y la línea
+        `**Versión:** X`) — comprobé estos tres sitios exactos leyendo el
+        `README.md`/`pyproject.toml` reales de este template antes de escribir
+        este método, no son una suposición.
+
+        Si algún patrón no aparece en el archivo (p. ej. porque el usuario
+        reescribió el README a mano y quitó el badge), se avisa explícitamente
+        en vez de fallar en silencio o fingir que se actualizó algo que no
+        estaba ahí.
+        """
+        changed_files = []
+        warnings = []
+
+        pyproject_path = self.ctx.pyproject_file
+        if pyproject_path.exists():
+            text = pyproject_path.read_text(encoding="utf-8")
+            new_text, n = re.subn(
+                r'^version = "[^"]*"', f'version = "{new_version}"', text, count=1, flags=re.MULTILINE
+            )
+            if n:
+                pyproject_path.write_text(new_text, encoding="utf-8")
+                changed_files.append(str(pyproject_path.relative_to(self.ctx.root)))
+            else:
+                warnings.append("No se encontró 'version = \"...\"' en pyproject.toml — no se tocó.")
+        else:
+            warnings.append("No existe pyproject.toml en la raíz del proyecto.")
+
+        if self.ctx.readme_file.exists():
+            text = self.ctx.readme_file.read_text(encoding="utf-8")
+            text, n_badge = re.subn(r"Version-[^-]+-green", f"Version-{new_version}-green", text, count=1)
+            text, n_line = re.subn(r"(\*\*Versión:\*\*\s*)[^\s{·]+", rf"\g<1>{new_version}", text, count=1)
+            if n_badge or n_line:
+                self.ctx.readme_file.write_text(text, encoding="utf-8")
+                changed_files.append(str(self.ctx.readme_file.relative_to(self.ctx.root)))
+            if not n_badge:
+                warnings.append("No se encontró el badge 'Version-X-green' en README.md.")
+            if not n_line:
+                warnings.append("No se encontró la línea '**Versión:** X' en README.md.")
+        else:
+            warnings.append("No existe README.md en la raíz del proyecto.")
+
+        if not changed_files:
+            return AgentResult(False, self.name, "bump_version", "No se actualizó ningún archivo.", warnings=warnings)
+
+        return AgentResult(
+            True, self.name, "bump_version",
+            f"Versión actualizada a '{new_version}' en: {', '.join(changed_files)}.",
+            data={"new_version": new_version, "changed_files": changed_files}, warnings=warnings,
+        )
