@@ -9,6 +9,17 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.geometry import Polygon, MultiPolygon
 
+from climasafeai.features.weather_indices import (
+    kelvin_to_celsius,
+    relative_humidity_from_dewpoint,
+    wind_speed_kmh_from_components,
+    select_risk_hour_row,
+)
+from climasafeai.features.labels import (
+    asignar_clase_riesgo_calor,
+    asignar_clase_riesgo_frio,
+)
+
 def download_aemet(
     municipio: str,
     filename: str
@@ -254,7 +265,7 @@ def calcular_puntos_provincia(provincias: gpd.GeoDataFrame, col_nombre: str) -> 
     subpolígono de mayor área, para evitar islotes sueltos).
 
     Returns
-    ------- 
+    -------
     dict: {nombre_provincia: {"centro": (lon, lat), "norte": (lon, lat), ...}}
     """
     puntos_por_provincia = {}
@@ -343,24 +354,89 @@ def cargar_era5_filtrado(puntos_por_provincia: dict) -> xr.Dataset:
 
     return ds_filtrado
 
-def dataset_calor(momo: pd.DataFrame, era5: xr.Dataset) -> pd.DataFrame:
-    """
-    Fusiona los datos de mortalidad de MoMo (diarios por provincia)
-    con variables climáticas de ERA5 (horarias, 5 puntos por provincia).
 
-    Parameters
-    ----------
-    momo : pd.DataFrame
-        Dataset de MoMo descargado.
-    era5 : xr.Dataset
-        Dataset ERA5 filtrado (salida de ``cargar_era5_filtrado``).
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame combinado listo para modelado.
+def _resolver_expver(era5: xr.Dataset) -> xr.Dataset:
     """
-    # ── 1. Preparar MoMo ──────────────────────────────────────────
+    Colapsa la dimensión 'expver' si existe.
+
+    ERA5 mezcla, en las descargas de los meses más recientes, el dato
+    final (ERA5) con el provisional (ERA5T) bajo una dimensión extra
+    'expver' con 2 valores -- cada timestamp trae NaN en uno de los dos.
+    No se asume si el valor de esa dimensión es el string "0001"/"0005" o
+    el entero 1/5 (varía según versión de xarray/cdsapi/formato) -- se
+    indexa POR POSICIÓN (isel) en vez de por valor (sel), y se rellenan
+    los NaN del primero (dato final) con el segundo (provisional) vía
+    combine_first, que es el patrón recomendado por ECMWF para este caso.
+    """
+    if "expver" in era5.dims:
+        if era5.sizes["expver"] > 1:
+            era5 = era5.isel(expver=0).combine_first(era5.isel(expver=-1))
+        else:
+            era5 = era5.isel(expver=0)
+    return era5
+
+
+def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
+    """
+    Convierte el xr.Dataset de ERA5 (ya filtrado a 5 puntos/provincia) en
+    un DataFrame con una fila por (provincia, fecha) -- la hora de mayor
+    riesgo del día, con las unidades ya convertidas.
+
+    Pasos:
+      1. Resuelve 'expver' si aparece (ver _resolver_expver).
+      2. xr.Dataset -> DataFrame largo (una fila por punto/hora).
+      3. Conversión de unidades ERA5 -> unidades del proyecto:
+         Kelvin -> °C (t2m, d2m), punto de rocío -> RH, componentes
+         u10/v10 -> velocidad de viento en km/h (u10/v10 son las
+         componentes del vector, NO la velocidad -- hace falta el módulo).
+      4. Media espacial: colapsa los 5 puntos -> una fila por provincia/hora.
+      5. Selección de la hora de mayor riesgo del día (select_risk_hour_row,
+         que además calcula y deja heat_index_c/wbgt_c/wind_chill_c) ->
+         una fila por provincia/día.
+    """
+    era5 = _resolver_expver(era5)
+
+    df = era5.to_dataframe().reset_index()
+
+    # La coordenada temporal real de este dataset es 'valid_time' (no 'time').
+    df = df.rename(columns={"valid_time": "datetime"})
+
+    # --- Conversión de unidades ERA5 -> unidades del proyecto ---
+    df["t2m_c"] = kelvin_to_celsius(df["t2m"])
+    df["d2m_c"] = kelvin_to_celsius(df["d2m"])
+    df["rh"] = relative_humidity_from_dewpoint(df["t2m_c"], df["d2m_c"])
+    # u10/v10 son las componentes del vector viento, no la velocidad --
+    # hay que calcular el módulo antes de poder usarla en Wind Chill.
+    df["wind_speed_kmh"] = wind_speed_kmh_from_components(df["u10"], df["v10"])
+
+    # --- Media espacial: colapsa los 5 puntos (centro/N/S/E/O) ---
+    value_cols = ["t2m_c", "rh", "wind_speed_kmh", "sp"]
+    df_hora = (
+        df.groupby(["provincia", "datetime"])[value_cols]
+        .mean()
+        .reset_index()
+    )
+
+    # --- Selección de la hora de mayor riesgo del día ---
+    df_hora["fecha"] = df_hora["datetime"].dt.date
+    df_dia = select_risk_hour_row(
+        df_hora,
+        group_cols=["provincia", "fecha"],
+        temp_col="t2m_c",
+        rh_col="rh",
+        wind_col="wind_speed_kmh",
+    )
+
+    print(f"    ERA5: {len(df)} filas (punto/hora) -> {len(df_hora)} (provincia/hora) -> {len(df_dia)} (provincia/día)")
+    return df_dia
+
+
+def _procesar_momo_provincial(momo: pd.DataFrame, col_mortalidad: str) -> pd.DataFrame:
+    """
+    Filtra MoMo a ámbito provincial y agrega sexo/edad sumando
+    `col_mortalidad` -- común a dataset_calor()/dataset_frio(), cambia
+    solo la columna de mortalidad de origen.
+    """
     momo = momo[momo["ambito"] == "provincia"].copy()
     momo = momo.rename(columns={
         "nombre_ambito": "provincia",
@@ -369,36 +445,66 @@ def dataset_calor(momo: pd.DataFrame, era5: xr.Dataset) -> pd.DataFrame:
     momo["fecha"] = pd.to_datetime(momo["fecha"]).dt.date
 
     momo_agg = (
-        momo[["fecha", "provincia", "defunciones_atrib_exc_temp"]]
+        momo[["fecha", "provincia", col_mortalidad]]
         .groupby(["fecha", "provincia"], as_index=False)
         .sum()
     )
+    return momo_agg
 
-    # ── 2. Preparar ERA5 ─────────────────────────────────────────
-    # Quedarse con el experimento final (si existe la coordenada expver)
-    if "expver" in era5.coords:
-        era5 = era5.sel(expver="0001")   # o 1, según el tipo de dato
 
-    # Convertir a DataFrame y aplanar índices
-    era5_df = era5.to_dataframe().reset_index()
+def dataset_calor(momo: pd.DataFrame, era5: xr.Dataset) -> pd.DataFrame:
+    """
+    Fusiona los datos de mortalidad de MoMo (diarios por provincia, calor)
+    con variables climáticas de ERA5 -- una fila por (provincia, fecha),
+    quedándose con la hora de mayor riesgo del día (no la media de las 24h).
 
-    # Renombrar la coordenada temporal real (¡cuidado! en tu caso es 'valid_time')
-    era5_df = era5_df.rename(columns={"valid_time": "fecha"})
+    Parameters
+    ----------
+    momo : pd.DataFrame
+        Dataset de MoMo descargado (crudo, sin filtrar).
+    era5 : xr.Dataset
+        Dataset ERA5 filtrado (salida de ``cargar_era5_filtrado``).
 
-    # Dejar solo la fecha (sin hora) para alinear con MoMo
-    era5_df["fecha"] = pd.to_datetime(era5_df["fecha"]).dt.date
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame combinado listo para asignar_clase_riesgo_calor() y,
+        después, build_features.py.
+    """
+    momo_agg = _procesar_momo_provincial(momo, col_mortalidad="defunciones_atrib_exc_temp")
+    era5_dia = _procesar_era5_a_diario(era5)
 
-    # Agrupar por fecha y provincia → un solo valor diario representativo
-    # (promedio de todas las horas y de los 5 puntos interiores)
-    era5_agg = (
-        era5_df.groupby(["fecha", "provincia"], as_index=False)
-        .mean(numeric_only=True)
-    )
-
-    # ── 3. Merge final ───────────────────────────────────────────
-    df = pd.merge(momo_agg, era5_agg, on=["fecha", "provincia"], how="inner")
-
+    df = pd.merge(momo_agg, era5_dia, on=["fecha", "provincia"], how="inner")
+    print(f"    dataset_calor: {len(df)} filas (provincia/día)")
     return df
+
+
+def dataset_frio(momo: pd.DataFrame, era5: xr.Dataset) -> pd.DataFrame:
+    """
+    Fusiona los datos de mortalidad de MoMo (diarios por provincia, frío)
+    con variables climáticas de ERA5 -- una fila por (provincia, fecha),
+    quedándose con la hora de mayor riesgo del día (no la media de las 24h).
+
+    Parameters
+    ----------
+    momo : pd.DataFrame
+        Dataset de MoMo descargado (crudo, sin filtrar).
+    era5 : xr.Dataset
+        Dataset ERA5 filtrado (salida de ``cargar_era5_filtrado``).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame combinado listo para asignar_clase_riesgo_frio() y,
+        después, build_features.py.
+    """
+    momo_agg = _procesar_momo_provincial(momo, col_mortalidad="defunciones_atrib_def_temp")
+    era5_dia = _procesar_era5_a_diario(era5)
+
+    df = pd.merge(momo_agg, era5_dia, on=["fecha", "provincia"], how="inner")
+    print(f"    dataset_frio: {len(df)} filas (provincia/día)")
+    return df
+
 
 def load_data(filename="credit-train.csv"):
     """
@@ -414,3 +520,44 @@ def load_data(filename="credit-train.csv"):
     except FileNotFoundError:
         print(f"ERROR: No se encontró el archivo {filename} en {RAW_DATA_DIR}")
         raise
+
+
+def process_data(momo: pd.DataFrame, era5: xr.Dataset, clase: str = "calor") -> pd.DataFrame:
+    """
+    Orquesta el pipeline completo para una `clase` (calor|frio): construye
+    el dataset combinado ERA5+MoMo y le asigna la etiqueta de riesgo
+    correspondiente -- es la función que normalmente llamarías desde el
+    notebook en vez de encadenar dataset_calor()/dataset_frio() y
+    asignar_clase_riesgo_*() a mano.
+
+    Parameters
+    ----------
+    momo : pd.DataFrame
+        MoMo crudo, sin filtrar (dataset_calor/dataset_frio ya filtran
+        internamente por ambito=="provincia").
+    era5 : xr.Dataset
+        ERA5 ya filtrado a 5 puntos/provincia (salida de cargar_era5_filtrado).
+    clase : "calor" | "frio"
+        Qué pipeline ejecutar. Determina tanto la columna de mortalidad
+        usada (defunciones_atrib_exc_temp vs defunciones_atrib_def_temp)
+        como la función de etiquetado (asignar_clase_riesgo_calor vs
+        asignar_clase_riesgo_frio).
+
+    Returns
+    -------
+    pd.DataFrame
+        Una fila por (provincia, fecha), con las variables meteorológicas
+        de la hora de mayor riesgo + la columna 'clase_riesgo_{clase}'
+        (0=SEGURO/1=PRECAUCION/2=PELIGRO) lista para
+        build_features.preprocess_data(..., clase=clase).
+    """
+    if clase == "calor":
+        df = dataset_calor(momo, era5)
+        df = asignar_clase_riesgo_calor(df)
+    elif clase == "frio":
+        df = dataset_frio(momo, era5)
+        df = asignar_clase_riesgo_frio(df)
+    else:
+        raise ValueError(f"clase='{clase}' no reconocida -- debe ser 'calor' o 'frio'")
+
+    return df

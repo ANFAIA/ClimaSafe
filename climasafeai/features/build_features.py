@@ -1,12 +1,11 @@
-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
-from sklearn.decomposition import PCA
 import joblib
 from loguru import logger
 from climasafeai.utils.paths import PROCESSED_DATA_DIR, ARTIFACTS_DIR
+from climasafeai.features.weather_indices import add_weather_index_columns
 
 
 # ---------------------------------------------------------------------------
@@ -22,14 +21,66 @@ ORDINAL_MAPPINGS: dict = {
 }
 
 COLS_TO_DROP: list = [
-    # "duration",     # fuga de datos
-    # "nr_employed",  # alta correlación con euribor3m
+    # --- Sesgo geográfico (ver spatial_integration.py / diseño_modelo.md) ---
+    # 'provincia', 'lat', 'lon' se mantienen en el dataset combinado como
+    # identificadores (unir ERA5+MoMo, depurar, visualizar), pero NO deben
+    # entrar como features de entrenamiento: el modelo debe aprender de
+    # condiciones meteorológicas, no de "dónde" (evita que aprenda
+    # "Madrid → riesgo alto" en vez de "38°C + poca humedad → riesgo alto").
+    # --- Sesgo temporal ---
+    # 'fecha' también se mantiene como identificador (split train/test por
+    # fechas, trazabilidad, orden temporal) pero se excluye como feature
+    # por el mismo motivo que la provincia: si el modelo ve la fecha
+    # exacta, puede memorizar "esta fecha tuvo mucha mortalidad" (una ola
+    # de calor puntual, un efecto COVID en el histórico de MoMo, etc.) en
+    # vez de aprender la relación física temperatura/humedad -> riesgo,
+    # y eso no generaliza a fechas futuras.
+    # 'datetime' (la hora exacta seleccionada como "hora de mayor riesgo"
+    # por select_risk_hour_row) es, en la práctica, casi un identificador
+    # único por fila -- LabelEncoder la codificaría como si fuera una
+    # categoría sin ningún significado numérico real, y al ser casi única
+    # por fila puede actuar como clave de memorización en vez de feature
+    # meteorológica.
+    "provincia", "fecha", "datetime",
 ]
 
 # Columnas a las que aplicar transformación logarítmica (np.log1p).
 # Útil para features con distribución muy sesgada (skewness > 1).
 # Ejemplo: ["amount", "salary", "tenure_days"]
 LOGCOLS: list = []
+
+# ---------------------------------------------------------------------------
+# Índices meteorológicos derivados (Heat Index / WBGT / Wind Chill)
+# ---------------------------------------------------------------------------
+# Nombres de columna esperados tras la agregación ERA5 + GeoPandas (ver
+# climasafeai/data/make_dataset.py y documenatcion/diseño_modelo.md sección 3).
+# Ajusta estos tres nombres cuando se cierre el esquema final del dataset
+# agregado por provincia/día — add_weather_index_columns() avisa (no falla)
+# si alguna columna no existe todavía.
+WEATHER_TEMP_COL = "t2m_c"
+WEATHER_RH_COL = "rh"
+WEATHER_WIND_COL = "wind_speed_kmh"
+
+
+# Columnas que serían fuga de datos si entran a X, según qué modelo
+# (calor/frío) se esté entrenando. Se excluyen ADEMÁS de COLS_TO_DROP y
+# del propio target_col -- ver preprocess_data(clase=...).
+LEAKAGE_COLS_BY_CLASE: dict = {
+    "calor": [
+        "clase_riesgo_frio",          # la otra clase, no debe verla este modelo
+        "clase_riesgo_calor_label",   # versión en texto del propio target
+        "clase_riesgo_frio_label",
+        "defunciones_atrib_exc_temp", # de aquí sale clase_riesgo_calor -- fuga directa
+        "defunciones_atrib_def_temp",
+    ],
+    "frio": [
+        "clase_riesgo_calor",
+        "clase_riesgo_calor_label",
+        "clase_riesgo_frio_label",
+        "defunciones_atrib_exc_temp",
+        "defunciones_atrib_def_temp",  # de aquí sale clase_riesgo_frio -- fuga directa
+    ],
+}
 
 
 def preprocess_data(
@@ -38,8 +89,7 @@ def preprocess_data(
     scaler_type: str = "standard",
     test_size: float = 0.2,
     random_state: int = 42,
-    use_pca=None,
-    tipo="calor"
+    clase: str = "calor",
 ):
     """
     Pipeline completo de preprocesado para aprendizaje supervisado.
@@ -48,26 +98,35 @@ def preprocess_data(
       1. Elimina duplicados
       2. Feature engineering personalizable (_feature_engineering)
       3. Codificación ordinal (ORDINAL_MAPPINGS)
-      4. Elimina columnas no deseadas (COLS_TO_DROP)
+      4. Elimina columnas no deseadas (COLS_TO_DROP + LEAKAGE_COLS_BY_CLASE[clase])
       5. Rellena nulos (media/moda)
       6. LabelEncoder para categóricas
       7. Train/test split estratificado
       8. Escalado (StandardScaler o MinMaxScaler)
-      9. PCA opcional (use_pca)
-      10. Guarda artefactos en artifacts/
+      9. Guarda artefactos en artifacts/, namespaceados por `clase`
 
     Parameters
     ----------
     scaler_type : "standard" | "minmax"
-    use_pca     : None → sin PCA
-                  float (0 < n < 1) → nº componentes por varianza explicada, e.g. 0.95
-                  int  → nº fijo de componentes, e.g. 10
+    clase : "calor" | "frio"
+        Qué modelo se está entrenando. Controla dos cosas:
+        - Qué columnas se excluyen de X como fuga de datos (ver
+          LEAKAGE_COLS_BY_CLASE) -- la etiqueta y la mortalidad bruta de
+          la que sale NUNCA deben entrar como features.
+        - El sufijo de los artefactos guardados (scaler_calor.joblib vs
+          scaler_frio.joblib, etc.) para que entrenar un modelo no
+          sobrescriba los artefactos del otro.
 
     Returns
     -------
     X_train, X_test, y_train, y_test  (arrays numpy)
     """
-    print(f"--> Preprocesando datos (target='{target_col}', scaler='{scaler_type}', PCA={use_pca})...")
+    if clase not in LEAKAGE_COLS_BY_CLASE:
+        raise ValueError(
+            f"clase='{clase}' no reconocida -- debe ser una de {list(LEAKAGE_COLS_BY_CLASE)}"
+        )
+
+    print(f"--> Preprocesando datos (clase='{clase}', target='{target_col}', scaler='{scaler_type}')...")
 
     df = df.copy()
 
@@ -89,11 +148,12 @@ def preprocess_data(
             df[col] = df[col].map(mapping)
             print(f"    Codificación ordinal: {col}")
 
-    # 4. Eliminar columnas
-    cols_present = [c for c in COLS_TO_DROP if c in df.columns]
-    if cols_present:
-        df.drop(columns=cols_present, inplace=True)
-        print(f"    Columnas eliminadas: {cols_present}")
+    # 4. Eliminar columnas (generales + fuga de datos específica de `clase`)
+    cols_a_eliminar = list(COLS_TO_DROP) + LEAKAGE_COLS_BY_CLASE[clase]
+    cols_presentes = [c for c in cols_a_eliminar if c in df.columns and c != target_col]
+    if cols_presentes:
+        df.drop(columns=cols_presentes, inplace=True)
+        print(f"    Columnas eliminadas: {cols_presentes}")
 
     # 5. X / y
     X = df.drop(columns=[target_col])
@@ -121,95 +181,45 @@ def preprocess_data(
             name=target_col,
         )
         encoders["__target__"] = le_target
-        joblib.dump(le_target, ARTIFACTS_DIR / "target_encoder.joblib")
-        print("    Target codificado → target_encoder.joblib")
+        joblib.dump(le_target, ARTIFACTS_DIR / f"target_encoder_{clase}.joblib")
+        print(f"    Target codificado → target_encoder_{clase}.joblib")
 
     # Guardar todos los encoders en un único joblib (reproducibilidad inferencia)
-    joblib.dump(encoders, ARTIFACTS_DIR / "encoders.joblib")
+    joblib.dump(encoders, ARTIFACTS_DIR / f"encoders_{clase}.joblib")
     if encoders:
         cols_encoded = [c for c in encoders if c != "__target__"]
-        print(f"    Encoders guardados → encoders.joblib  ({cols_encoded})")
+        print(f"    Encoders guardados → encoders_{clase}.joblib  ({cols_encoded})")
 
-
-    # 8. Train/test split (sin stratify, es regresión)
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state,
+        X, y, test_size=test_size, random_state=random_state, stratify=y,
     )
 
-    # Submuestreo de la mitad de los ceros SOLO en entrenamiento
-    rng = np.random.default_rng(random_state)
-    mask_ceros = (y_train == 0)
-    idx_ceros = y_train[mask_ceros].index        # pd.Index
-    n_conservar = len(idx_ceros) // 2
-    # Elegir la mitad de los índices y convertir a pd.Index para poder usar .union
-    idx_ceros_sub = pd.Index(rng.choice(idx_ceros, size=n_conservar, replace=False))
-    idx_pos = y_train[~mask_ceros].index         # pd.Index
-    idx_keep = idx_ceros_sub.union(idx_pos)      # pd.Index combinado
-
-    X_train = X_train.loc[idx_keep]
-    y_train = y_train.loc[idx_keep]
-    print(f"    Muestras de entrenamiento tras submuestreo: {len(X_train)}")
-    print(f"    Muestras de entrenamiento tras submuestreo: {len(X_train)}")
-
-    # Guardar nombres de features originales (antes de PCA) para test_model()
-    joblib.dump(list(X.columns), ARTIFACTS_DIR / "feature_names.joblib")
-    print(f"    feature_names.joblib guardado ({len(X.columns)} features)")
+    # Guardar nombres de features originales para test_model()
+    joblib.dump(list(X.columns), ARTIFACTS_DIR / f"feature_names_{clase}.joblib")
+    print(f"    feature_names_{clase}.joblib guardado ({len(X.columns)} features)")
 
     # 9. Escalado
     scaler = MinMaxScaler() if scaler_type == "minmax" else StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test  = scaler.transform(X_test)
-    joblib.dump(scaler, ARTIFACTS_DIR / "scaler.joblib")
-    print(f"    Scaler guardado → scaler.joblib")
+    joblib.dump(scaler, ARTIFACTS_DIR / f"scaler_{clase}.joblib")
+    print(f"    Scaler guardado → scaler_{clase}.joblib")
 
-    # 10. PCA opcional
-    if use_pca is not None:
-        X_train, X_test = _apply_pca(X_train, X_test, use_pca)
+    # threshold.joblib se genera DESPUÉS del entrenamiento, no aquí.
+    # Descomenta find_best_threshold en predict_model.py (solo binaria) y
+    # guárdalo al final de train_model.py:
+    #   joblib.dump(best_threshold, ARTIFACTS_DIR / f"threshold_{clase}.joblib")
 
     print(f"    Train: {X_train.shape} | Test: {X_test.shape}")
-
     print(f"    Proporción clases (train): {y_train.value_counts(normalize=True).to_dict()}")
 
-
-    # Guardar conjuntos procesados
-    pd.DataFrame(X_train).to_csv(PROCESSED_DATA_DIR / f"X_train_{tipo}.csv", index=False)
-    pd.DataFrame(X_test).to_csv(PROCESSED_DATA_DIR  / f"X_test_{tipo}.csv",  index=False)
-    pd.Series(y_train).to_csv(PROCESSED_DATA_DIR / f"y_train_{tipo}.csv", index=False)
-    pd.Series(y_test).to_csv(PROCESSED_DATA_DIR  / f"y_test_{tipo}.csv",  index=False)
+    # Guardar conjuntos procesados (namespaceados por clase)
+    pd.DataFrame(X_train).to_csv(PROCESSED_DATA_DIR / f"X_train_{clase}.csv", index=False)
+    pd.DataFrame(X_test).to_csv(PROCESSED_DATA_DIR  / f"X_test_{clase}.csv",  index=False)
+    pd.Series(y_train).to_csv(PROCESSED_DATA_DIR / f"y_train_{clase}.csv", index=False)
+    pd.Series(y_test).to_csv(PROCESSED_DATA_DIR  / f"y_test_{clase}.csv",  index=False)
 
     return X_train, X_test, y_train, y_test
-
-
-def _apply_pca(X_train, X_test, n_components):
-    """
-    Aplica PCA a train/test y guarda el objeto PCA en artifacts/.
-
-    Parameters
-    ----------
-    n_components : float (varianza) | int (componentes fijos)
-                   Ejemplos: 0.95 → 95% varianza | 10 → 10 componentes
-
-    ¿Cuándo usar PCA antes del clasificador?
-      - Muchas features correladas (|r| > 0.8 en varios pares)
-      - Alta dimensionalidad (>50 features) → riesgo de maldición dimensional
-      - Modelos lentos en alta dimensión (SVM, KNN)
-      - Datos con ruido: PCA elimina las componentes de menor varianza
-
-    ¿Cuándo NO usar PCA?
-      - Cuando la interpretabilidad de features es crítica
-      - Árboles y ensembles (RandomForest, XGBoost): ya gestionan la
-        dimensionalidad internamente; PCA no suele mejorar resultados
-    """
-    pca = PCA(n_components=n_components, random_state=42)
-    X_train_pca = pca.fit_transform(X_train)
-    X_test_pca  = pca.transform(X_test)
-    joblib.dump(pca, ARTIFACTS_DIR / "pca.joblib")
-
-    n_comp = pca.n_components_
-    var_exp = pca.explained_variance_ratio_.sum()
-    print(f"    PCA: {X_train.shape[1]} → {n_comp} componentes "
-          f"({var_exp:.1%} varianza explicada) → pca.joblib")
-    return X_train_pca, X_test_pca
 
 
 def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
@@ -221,7 +231,18 @@ def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
       df['was_contacted'] = df['pdays'].apply(lambda x: 0 if x == 999 else 1)
       df['total_loans']   = df['housing'] + df['loan']
     """
-    # --- Añade tus transformaciones aquí ---
+    # Heat Index, WBGT y Wind Chill (ver climasafeai/features/weather_indices.py
+    # y documenatcion/diseño_modelo.md sección 1 — "features principales").
+    # Se calculan sobre la fila ya seleccionada como hora de mayor riesgo del
+    # día (ver diseño_modelo.md sección 2); aquí solo se derivan como features
+    # del modelo, no se recalcula ninguna selección de hora.
+    df = add_weather_index_columns(
+        df,
+        temp_col=WEATHER_TEMP_COL,
+        rh_col=WEATHER_RH_COL,
+        wind_col=WEATHER_WIND_COL,
+    )
+    # --- Añade aquí más transformaciones si hacen falta ---
     return df
 
 
@@ -270,18 +291,27 @@ def _apply_logcols(df: pd.DataFrame, cols: list) -> pd.DataFrame:
     return df
 
 
-def process_input(df_new: pd.DataFrame) -> np.ndarray:
+def process_input(df_new: pd.DataFrame, clase: str = "calor") -> np.ndarray:
     """
     Preprocesa nuevos datos para inferencia usando los artefactos guardados.
-    Aplica: feature_engineering → ordinal → drop → encode (encoders.joblib)
-            → scaler → PCA (si existe).
+    Aplica: feature_engineering → ordinal → drop → encode (encoders_{clase}.joblib)
+            → scaler_{clase}.
 
-    Los encoders.joblib garantizan que el mapping de categorías sea idéntico
-    al del entrenamiento, evitando silenciosos errores de codificación.
+    Los encoders_{clase}.joblib garantizan que el mapping de categorías sea
+    idéntico al del entrenamiento, evitando silenciosos errores de codificación.
+
+    Parameters
+    ----------
+    clase : "calor" | "frio"
+        Qué modelo se usa para inferencia -- debe coincidir con el `clase`
+        usado en preprocess_data() al entrenar, para cargar los artefactos
+        correctos (scaler_{clase}.joblib, encoders_{clase}.joblib).
     """
-    import os
-    scaler   = joblib.load(ARTIFACTS_DIR / "scaler.joblib")
-    encoders = joblib.load(ARTIFACTS_DIR / "encoders.joblib") if (ARTIFACTS_DIR / "encoders.joblib").exists() else {}
+    scaler_path = ARTIFACTS_DIR / f"scaler_{clase}.joblib"
+    encoders_path = ARTIFACTS_DIR / f"encoders_{clase}.joblib"
+
+    scaler   = joblib.load(scaler_path)
+    encoders = joblib.load(encoders_path) if encoders_path.exists() else {}
 
     df_new = df_new.copy()
     df_new = _feature_engineering(df_new)
@@ -291,7 +321,8 @@ def process_input(df_new: pd.DataFrame) -> np.ndarray:
         if col in df_new.columns:
             df_new[col] = df_new[col].map(mapping)
 
-    cols_present = [c for c in COLS_TO_DROP if c in df_new.columns]
+    cols_a_eliminar = list(COLS_TO_DROP) + LEAKAGE_COLS_BY_CLASE.get(clase, [])
+    cols_present = [c for c in cols_a_eliminar if c in df_new.columns]
     if cols_present:
         df_new.drop(columns=cols_present, inplace=True)
 
@@ -311,11 +342,4 @@ def process_input(df_new: pd.DataFrame) -> np.ndarray:
 
     X = scaler.transform(df_new)
 
-    pca_path = ARTIFACTS_DIR / "pca.joblib"
-    if pca_path.exists():
-        pca = joblib.load(pca_path)
-        X = pca.transform(X)
-
     return X
-
-
