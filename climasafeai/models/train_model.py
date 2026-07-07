@@ -1,14 +1,15 @@
 import numpy as np
 import joblib
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import cross_val_score, GridSearchCV
 from xgboost import XGBClassifier
 import mlflow
 import mlflow.sklearn
 from mlflow.tracking import MlflowClient
 
 
-from climasafeai.utils.paths import MODELS_DIR, ARTIFACTS_DIR
+from climasafeai.utils.paths import MODELS_DIR, ARTIFACTS_DIR, PROJECT_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -16,29 +17,71 @@ from climasafeai.utils.paths import MODELS_DIR, ARTIFACTS_DIR
 # ---------------------------------------------------------------------------
 
 def _load_best_params(model_name: str) -> dict:
-    """Carga los mejores hiperparámetros de Optuna si existen."""
+    """Carga los mejores hiperparámetros cacheados si existen (de Optuna
+    para RandomForest/XGBoost, o de GridSearchCV para KNN -- ver _tune_knn_k)."""
     path = ARTIFACTS_DIR / f"best_params_{model_name}.joblib"
     if path.exists():
         params = joblib.load(path)
-        print(f"    [{model_name}] best_params cargados desde Optuna: {params}")
+        print(f"    [{model_name}] best_params cargados desde caché: {params}")
         return params
     return {}
 
 
-def _build_models() -> dict:
+def _tune_knn_k(X_train, y_train, k_range=range(1, 31, 2)) -> int:
+    """
+    Busca el mejor valor de k para KNN vía GridSearchCV (5-fold,
+    F1_weighted -- misma métrica que se usa para evaluar el resto de
+    modelos en train_models(), para que las puntuaciones sean comparables).
+
+    k_range por defecto: impares de 1 a 29 (evita empates de votación en
+    problemas binarios; aquí es multiclase pero mantiene la convención).
+
+    El resultado se cachea en best_params_KNN.joblib (mismo patrón que
+    _load_best_params usa para Optuna) para no repetir la búsqueda -- que
+    el propio docstring de la config del notebook ya advierte que es
+    lenta en datasets grandes -- en cada llamada a train_models().
+    """
+    print(f"    [KNN] buscando mejor k en {list(k_range)}...")
+    grid = GridSearchCV(
+        KNeighborsClassifier(),
+        param_grid={"n_neighbors": list(k_range)},
+        cv=5,
+        scoring="f1_weighted",
+        n_jobs=-1,
+    )
+    grid.fit(X_train, y_train)
+    best_k = grid.best_params_["n_neighbors"]
+    print(f"    [KNN] mejor k = {best_k} (F1_weighted CV = {grid.best_score_:.3f})")
+
+    joblib.dump({"n_neighbors": best_k}, ARTIFACTS_DIR / "best_params_KNN.joblib")
+    return best_k
+
+
+def _build_models(X_train=None, y_train=None, tune_knn: bool = True) -> dict:
     """
     Define los modelos a entrenar.
     Tarea: clasificacion
     RandomForest       → ensemble robusto con feature importances.
     XGBoost            → gradient boosting optimizado. Referencia en Kaggle.
+    KNN                → sensible a la escala (ya viene escalado por
+                          preprocess_data) y al valor de k -- ver tune_knn.
 
+    Parameters
+    ----------
+    X_train, y_train : necesarios solo si tune_knn=True y no hay
+        best_params_KNN.joblib cacheado todavía (hace falta ajustar k con
+        los datos reales). Si tune_knn=False, no se usan.
+    tune_knn : bool
+        Si True, busca el mejor k con GridSearchCV (lento en datasets
+        grandes) la primera vez, y cachea el resultado. Llamadas
+        posteriores reutilizan el k cacheado en vez de re-buscar.
     """
     models = {}
 
     _best = {name: _load_best_params(name) for name in [
         "RandomForest",
         "XGBoost",
-
+        "KNN",
     ]}
 
     models["RandomForest"] = RandomForestClassifier(**{
@@ -53,6 +96,24 @@ def _build_models() -> dict:
         "reg_alpha": 0.1, "reg_lambda": 1.0,
         "eval_metric": "logloss", "random_state": 42, "n_jobs": -1,
         **_best.get("XGBoost", {}),
+    })
+
+    knn_params = dict(_best.get("KNN", {}))
+    if "n_neighbors" not in knn_params:
+        if tune_knn:
+            if X_train is None or y_train is None:
+                raise ValueError(
+                    "_build_models: tune_knn=True pero no hay best_params_KNN.joblib "
+                    "cacheado todavía -- hacen falta X_train/y_train para poder buscar k."
+                )
+            knn_params["n_neighbors"] = _tune_knn_k(X_train, y_train)
+        else:
+            knn_params["n_neighbors"] = 5  # valor por defecto de sklearn, sin buscar
+
+    models["KNN"] = KNeighborsClassifier(**{
+        "weights": "distance",  # vecinos más cercanos pesan más -- razonable con clases desequilibradas
+        "n_jobs": -1,
+        **knn_params,
     })
 
     return models
@@ -72,14 +133,56 @@ def train_models(
     experimento 'climasafeai'. Los artifacts (.joblib) se registran
     en el Model Registry bajo el nombre del modelo.
 
+    Parameters
+    ----------
+    tune_knn : bool
+        Si True, busca el mejor k para KNN vía GridSearchCV (ver
+        _tune_knn_k) antes de entrenar -- la primera vez es lento en
+        datasets grandes; llamadas siguientes reutilizan el k cacheado
+        en best_params_KNN.joblib. Si False, usa k=5 (o el valor
+        cacheado, si ya existe) sin buscar.
+
     Returns
     -------
     dict : {nombre_modelo: modelo_entrenado}
     """
     print("--> Entrenando modelos de clasificacion...")
-    models = _build_models()
+    models = _build_models(X_train=X_train, y_train=y_train, tune_knn=tune_knn)
 
-    mlflow.set_experiment("climasafeai")
+    try:
+        mlflow.set_experiment("climasafeai")
+    except Exception as e:
+        # Típicamente ConnectionRefusedError/MlflowException si
+        # MLFLOW_TRACKING_URI apunta a un servidor (p.ej. localhost:5000)
+        # que no está levantado -- en vez de reventar todo el entrenamiento,
+        # se cae a tracking local (sqlite, sin necesitar ningún proceso
+        # corriendo -- MLflow 3.x ya no permite el backend de fichero
+        # plano './mlruns' sin más). Arranca el servidor con
+        # `make mlflow-ui` si prefieres la UI en vez de tracking local.
+        #
+        # Ruta ABSOLUTA basada en PROJECT_DIR (no relativa a './') para
+        # que el fichero .db quede siempre en la raíz del proyecto, sin
+        # importar desde qué carpeta (notebooks/, raíz, etc.) se ejecute
+        # -- una ruta relativa aquí crea un mlflow.db distinto por cada
+        # cwd desde la que se lance el notebook.
+        db_path = PROJECT_DIR / "mlflow.db"
+        print(f"    AVISO: no se pudo conectar al tracking server de MLflow ({e}).")
+        print(f"    Usando tracking local (sqlite:///{db_path}) en su lugar.")
+        try:
+            mlflow.set_tracking_uri(f"sqlite:///{db_path}")
+            mlflow.set_experiment("climasafeai")
+        except Exception as e2:
+            # Si esto también falla, casi seguro es un problema de
+            # permisos del fichero/carpeta (p.ej. mlflow.db creado
+            # previamente sin permiso de escritura para el usuario actual,
+            # o la carpeta del proyecto es de solo lectura) -- no es algo
+            # que el código pueda arreglar solo, hace falta revisarlo a mano.
+            raise RuntimeError(
+                f"No se pudo usar ni el tracking server ni el fallback local "
+                f"({db_path}). Revisa permisos del fichero/carpeta: "
+                f"`ls -la {db_path.parent}` y `chmod u+w {db_path}` si ya existe, "
+                f"o bórralo y deja que MLflow lo recree."
+            ) from e2
 
 
     trained = {}
@@ -116,6 +219,13 @@ def train_models(
             mlflow.sklearn.log_model(
                 model, artifact_path=name,
                 registered_model_name=f"climasafeai_{name}",
+                # serialization_format="cloudpickle": el formato por defecto
+                # de MLflow 3.x (skops) rechaza objetos internos de KNN
+                # (KDTree/EuclideanDistance64) y de XGBoost como "tipos no
+                # confiables" (UntrustedTypesFoundException). cloudpickle
+                # evita ese chequeo -- es el mismo compromiso de seguridad
+                # que ya asumes al usar joblib.dump() unas líneas arriba.
+                serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE,
             )
             mlflow.log_artifact(str(MODELS_DIR / f"{name}.joblib"))
 
