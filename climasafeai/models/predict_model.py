@@ -69,6 +69,16 @@ def evaluate_models(
         f1_test   = f1_score(y_test,  y_pred_test,  average="weighted", zero_division=0)
         prec_test = precision_score(y_test, y_pred_test, average="weighted", zero_division=0)
         rec_test  = recall_score(y_test,  y_pred_test,  average="weighted", zero_division=0)
+        # Métricas NO ponderadas -- las ponderadas (F1_test/Rec_test) están
+        # dominadas por la clase 0 (seguro ~90-94%) y hacen "ganar" a modelos
+        # que casi nunca avisan. Para un sistema de aviso importan estas:
+        #   F1_macro   -> media por clase (penaliza ignorar minoritarias)
+        #   Rec_riesgo -> recall medio de las clases de riesgo (todas menos la 0)
+        f1_macro  = f1_score(y_test, y_pred_test, average="macro", zero_division=0)
+        risk_labels = [c for c in np.unique(y_test) if c != 0]
+        rec_riesgo = (recall_score(y_test, y_pred_test, labels=risk_labels,
+                                   average="macro", zero_division=0)
+                      if risk_labels else float("nan"))
         roc_auc   = None
         if hasattr(model, "predict_proba") and len(np.unique(y_test)) == 2:
             roc_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
@@ -76,6 +86,7 @@ def evaluate_models(
         print(f"  Accuracy  → train: {acc_train:.3f} | test: {acc_test:.3f}")
         print(f"  F1 (w)    → train: {f1_train:.3f}  | test: {f1_test:.3f}")
         print(f"  Precision → {prec_test:.3f}  | Recall → {rec_test:.3f}")
+        print(f"  F1_macro  → {f1_macro:.3f}  | Rec_riesgo (clases 1..n) → {rec_riesgo:.3f}")
         if roc_auc is not None:
             print(f"  ROC-AUC   → {roc_auc:.3f}")
         print()
@@ -87,6 +98,7 @@ def evaluate_models(
             "Acc_train": round(acc_train, 4), "Acc_test":  round(acc_test,  4),
             "F1_train":  round(f1_train,  4), "F1_test":   round(f1_test,   4),
             "Prec_test": round(prec_test, 4), "Rec_test":  round(rec_test,  4),
+            "F1_macro":  round(f1_macro,  4), "Rec_riesgo": round(rec_riesgo, 4),
         }
         if roc_auc is not None:
             row["ROC_AUC"] = round(roc_auc, 4)
@@ -96,13 +108,14 @@ def evaluate_models(
                 "acc_train": acc_train, "acc_test": acc_test,
                 "f1_train":  f1_train,  "f1_test":  f1_test,
                 "prec_test": prec_test, "rec_test":  rec_test,
+                "f1_macro":  f1_macro,  "rec_riesgo": rec_riesgo,
             })
             if roc_auc is not None:
                 mlflow.log_metric("roc_auc", roc_auc)
             mlflow.log_artifact(str(FIGURES_DIR / f"cm_{name}.png"))
         results.append(row)
 
-    df_results = pd.DataFrame(results).sort_values("Acc_test", ascending=False)
+    df_results = pd.DataFrame(results).sort_values("F1_macro", ascending=False)
 
     out_csv = REPORTS_DIR / "resultados_modelos.csv"
     df_results.to_csv(out_csv, index=False)
