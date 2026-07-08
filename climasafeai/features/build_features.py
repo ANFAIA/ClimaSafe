@@ -90,6 +90,7 @@ def preprocess_data(
     test_size: float = 0.2,
     random_state: int = 42,
     clase: str = "calor",
+    split_by_date: bool = True,
 ):
     """
     Pipeline completo de preprocesado para aprendizaje supervisado.
@@ -101,7 +102,7 @@ def preprocess_data(
       4. Elimina columnas no deseadas (COLS_TO_DROP + LEAKAGE_COLS_BY_CLASE[clase])
       5. Rellena nulos (media/moda)
       6. LabelEncoder para categóricas
-      7. Train/test split estratificado
+      7. Train/test split -- por FECHA (recomendado) o aleatorio estratificado
       8. Escalado (StandardScaler o MinMaxScaler)
       9. Guarda artefactos en artifacts/, namespaceados por `clase`
 
@@ -116,6 +117,18 @@ def preprocess_data(
         - El sufijo de los artefactos guardados (scaler_calor.joblib vs
           scaler_frio.joblib, etc.) para que entrenar un modelo no
           sobrescriba los artefactos del otro.
+    split_by_date : bool
+        Si True (recomendado, por defecto): el test es el `test_size`
+        final de FECHAS distintas (p.ej. los últimos ~20% de días del
+        histórico), no una muestra aleatoria de filas. Evita que días de
+        la misma ola de calor (correlacionados entre sí) queden
+        repartidos entre train y test -- un split aleatorio infla el
+        rendimiento aparente de modelos basados en similitud/vecinos
+        (KNN), porque el "vecino más parecido" de un día de test puede
+        ser literalmente otro día de la misma ola que sí está en train.
+        Si False, usa el split aleatorio estratificado de siempre
+        (`train_test_split(..., stratify=y)`) -- requiere que `df`
+        contenga la columna 'fecha'.
 
     Returns
     -------
@@ -147,6 +160,17 @@ def preprocess_data(
         if col in df.columns:
             df[col] = df[col].map(mapping)
             print(f"    Codificación ordinal: {col}")
+
+    # Capturar 'fecha' ANTES de que COLS_TO_DROP la elimine (paso 4) --
+    # split_by_date la necesita para decidir qué filas van a test.
+    if split_by_date:
+        if "fecha" not in df.columns:
+            raise ValueError(
+                "preprocess_data: split_by_date=True requiere que 'fecha' "
+                "esté en el DataFrame de entrada. Pasa split_by_date=False "
+                "si no la tienes, o añádela antes de llamar a esta función."
+            )
+        fechas_para_split = pd.to_datetime(df["fecha"]).copy()
 
     # 4. Eliminar columnas (generales + fuga de datos específica de `clase`)
     cols_a_eliminar = list(COLS_TO_DROP) + LEAKAGE_COLS_BY_CLASE[clase]
@@ -190,9 +214,24 @@ def preprocess_data(
         cols_encoded = [c for c in encoders if c != "__target__"]
         print(f"    Encoders guardados → encoders_{clase}.joblib  ({cols_encoded})")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y,
-    )
+    if split_by_date:
+        fechas_para_split = fechas_para_split.loc[X.index]
+        fechas_unicas = np.sort(fechas_para_split.unique())
+        n_test_dates = max(1, round(len(fechas_unicas) * test_size))
+        fechas_test = set(fechas_unicas[-n_test_dates:])
+        mask_test = fechas_para_split.isin(fechas_test)
+
+        X_train, X_test = X[~mask_test], X[mask_test]
+        y_train, y_test = y[~mask_test], y[mask_test]
+
+        print(
+            f"    Split por fecha: train hasta {fechas_unicas[-n_test_dates-1] if n_test_dates < len(fechas_unicas) else '(sin margen)'} "
+            f"| test desde {fechas_unicas[-n_test_dates]} ({len(fechas_test)} días distintos)"
+        )
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=random_state, stratify=y,
+        )
 
     # Guardar nombres de features originales para test_model()
     joblib.dump(list(X.columns), ARTIFACTS_DIR / f"feature_names_{clase}.joblib")
