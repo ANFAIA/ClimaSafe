@@ -14,6 +14,7 @@ from climasafeai.features.weather_indices import (
     relative_humidity_from_dewpoint,
     wind_speed_kmh_from_components,
     select_risk_hour_row,
+    add_weather_index_columns,
 )
 from climasafeai.features.labels import (
     asignar_clase_riesgo_calor,
@@ -376,6 +377,120 @@ def _resolver_expver(era5: xr.Dataset) -> xr.Dataset:
     return era5
 
 
+# Umbrales para las estadísticas diarias de "horas de riesgo":
+#   - Calor: 32°C de Heat Index es el corte "precaución extrema" de la tabla
+#     clínica (HEAT_INDEX_CATEGORIES en weather_indices.py). horas_sobre_umbral
+#     cuenta cuántas horas del día se pasan de ahí.
+#   - Frío: 0°C de Wind Chill (sensación térmica bajo cero) como proxy simple de
+#     riesgo por frío. horas_bajo_umbral cuenta las horas por debajo.
+HEAT_INDEX_UMBRAL_C = 32.0
+WIND_CHILL_UMBRAL_C = 0.0
+
+
+def _agregar_estadisticas_diarias(
+    df_hora: pd.DataFrame,
+    group_cols: list,
+    heat_col: str = "heat_index_c",
+    cold_col: str = "wind_chill_c",
+    umbral_calor: float = HEAT_INDEX_UMBRAL_C,
+    umbral_frio: float = WIND_CHILL_UMBRAL_C,
+) -> pd.DataFrame:
+    """
+    Estadísticas de la DISTRIBUCIÓN diaria (24h) del calor/frío, no solo el
+    pico -- para que el modelo distinga un día de calor sostenido de otro con
+    el mismo máximo pero puntual.
+
+    Devuelve una fila por `group_cols` (típicamente ['provincia', 'fecha']) con,
+    sobre las 24 horas de `heat_col` (Heat Index):
+        heat_index_mean    media diaria (acumulación de calor)
+        heat_index_std     desviación estándar (sostenido vs. puntual)
+        heat_index_min     mínimo diario (proxy de alivio nocturno)
+        horas_sobre_umbral nº de horas con heat_col > `umbral_calor`
+    y, de forma análoga para el frío sobre `cold_col` (Wind Chill):
+        wind_chill_mean / wind_chill_std / wind_chill_max
+        horas_bajo_umbral  nº de horas con cold_col < `umbral_frio`
+
+    Estas columnas son features meteorológicas legítimas (no hay fuga de datos):
+    se calculan solo a partir de variables de ERA5.
+    """
+    df = df_hora.copy()
+    df["_over"] = df[heat_col] > umbral_calor
+    df["_under"] = df[cold_col] < umbral_frio
+    stats = (
+        df.groupby(group_cols)
+        .agg(
+            heat_index_mean=(heat_col, "mean"),
+            heat_index_std=(heat_col, "std"),
+            heat_index_min=(heat_col, "min"),
+            horas_sobre_umbral=("_over", "sum"),
+            wind_chill_mean=(cold_col, "mean"),
+            wind_chill_std=(cold_col, "std"),
+            wind_chill_max=(cold_col, "max"),
+            horas_bajo_umbral=("_under", "sum"),
+        )
+        .reset_index()
+    )
+    return stats
+
+
+def _agregar_rezagos_temporales(
+    df_dia: pd.DataFrame,
+    group_col: str = "provincia",
+    date_col: str = "fecha",
+) -> pd.DataFrame:
+    """
+    Features de PERSISTENCIA entre días (no dentro del día): capturan que el
+    riesgo depende de la racha, no solo del día actual.
+
+    Motivación: el efecto del frío sobre la mortalidad es RETARDADO y
+    ACUMULATIVO (una racha de días fríos mata más que un día suelto), mientras
+    que el del calor es de lag corto (mismo día / día siguiente). Por eso el
+    frío lleva medias móviles de varios días y una racha, y el calor solo el
+    día anterior.
+
+    Estrictamente PASADO (shift positivo) -> no hay fuga de datos aunque el
+    split train/test sea temporal: cada día solo mira sus propios días
+    ANTERIORES. La serie diaria es continua por provincia, así que shift = día
+    de calendario.
+
+    Columnas nuevas (una fila por (provincia, fecha)):
+      Calor (lag corto):
+        heat_index_c_lag1        Heat Index (pico) del día anterior
+      Frío (acumulativo):
+        wind_chill_mean_roll3    media de wind_chill_mean de los 3 días previos
+        wind_chill_mean_roll7    ... de los 7 días previos
+        dias_consec_bajo_umbral  nº de días consecutivos ANTERIORES con
+                                 horas_bajo_umbral > 0 (racha de frío sin tregua)
+
+    NaN en el primer día de cada provincia (sin histórico) -> preprocess_data
+    los rellena con la media, igual que el resto de features.
+    """
+    df = df_dia.sort_values([group_col, date_col]).copy()
+    g = df.groupby(group_col, sort=False)
+
+    if "heat_index_c" in df.columns:
+        df["heat_index_c_lag1"] = g["heat_index_c"].shift(1)
+
+    if "wind_chill_mean" in df.columns:
+        # shift(1) primero -> el día actual NO entra en su propia media (solo pasado)
+        df["wind_chill_mean_roll3"] = g["wind_chill_mean"].transform(
+            lambda s: s.shift(1).rolling(3, min_periods=1).mean()
+        )
+        df["wind_chill_mean_roll7"] = g["wind_chill_mean"].transform(
+            lambda s: s.shift(1).rolling(7, min_periods=1).mean()
+        )
+
+    if "horas_bajo_umbral" in df.columns:
+        def _racha_frio_previa(col: pd.Series) -> pd.Series:
+            frio = (col > 0).astype(int)
+            bloques = (frio != frio.shift()).cumsum()            # id de racha
+            incl = frio.groupby(bloques).cumcount().add(1).where(frio == 1, 0)
+            return incl.shift(1).fillna(0)                        # racha hasta AYER
+        df["dias_consec_bajo_umbral"] = g["horas_bajo_umbral"].transform(_racha_frio_previa)
+
+    return df
+
+
 def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
     """
     Convierte el xr.Dataset de ERA5 (ya filtrado a 5 puntos/provincia) en
@@ -390,9 +505,12 @@ def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
          u10/v10 -> velocidad de viento en km/h (u10/v10 son las
          componentes del vector, NO la velocidad -- hace falta el módulo).
       4. Media espacial: colapsa los 5 puntos -> una fila por provincia/hora.
-      5. Selección de la hora de mayor riesgo del día (select_risk_hour_row,
-         que además calcula y deja heat_index_c/wbgt_c/wind_chill_c) ->
-         una fila por provincia/día.
+      5. Índices meteorológicos horarios (heat_index_c/wbgt_c/wind_chill_c).
+      6. Estadísticas de la distribución diaria (24h) del calor/frío -- ver
+         _agregar_estadisticas_diarias -- calculadas ANTES de colapsar el día.
+      7. Selección de la hora de mayor riesgo del día (select_risk_hour_row,
+         que mantiene heat_index_c/wbgt_c/wind_chill_c del pico) -> una fila
+         por provincia/día, a la que se le mergean las estadísticas del paso 6.
     """
     era5 = _resolver_expver(era5)
 
@@ -416,9 +534,19 @@ def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
         .mean()
         .reset_index()
     )
-
-    # --- Selección de la hora de mayor riesgo del día ---
     df_hora["fecha"] = df_hora["datetime"].dt.date
+
+    # --- Índices meteorológicos HORARIOS (necesarios para agregar la
+    #     distribución diaria del calor/frío antes de colapsar el día) ---
+    df_hora = add_weather_index_columns(
+        df_hora, temp_col="t2m_c", rh_col="rh", wind_col="wind_speed_kmh"
+    )
+
+    # --- Estadísticas de la distribución diaria (24h), NO solo el pico ---
+    df_stats = _agregar_estadisticas_diarias(df_hora, group_cols=["provincia", "fecha"])
+
+    # --- Selección de la hora de mayor riesgo del día (mantiene el
+    #     heat_index_c/wind_chill_c del pico) ---
     df_dia = select_risk_hour_row(
         df_hora,
         group_cols=["provincia", "fecha"],
@@ -426,6 +554,12 @@ def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
         rh_col="rh",
         wind_col="wind_speed_kmh",
     )
+
+    # --- Añade (no sustituye) las estadísticas diarias a la fila hora-pico ---
+    df_dia = df_dia.merge(df_stats, on=["provincia", "fecha"], how="left")
+
+    # --- Features de persistencia entre días (lags/medias móviles del pasado) ---
+    df_dia = _agregar_rezagos_temporales(df_dia, group_col="provincia", date_col="fecha")
 
     print(f"    ERA5: {len(df)} filas (punto/hora) -> {len(df_hora)} (provincia/hora) -> {len(df_dia)} (provincia/día)")
     return df_dia
