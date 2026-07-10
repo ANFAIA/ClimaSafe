@@ -1,41 +1,63 @@
 # ClimaSafe
 
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
-![ML Type](https://img.shields.io/badge/ML-Random%20Forest-orange)
+![ML](https://img.shields.io/badge/ML-XGBoost%20%2F%20RandomForest-orange)
 ![Tracking](https://img.shields.io/badge/Experiment%20Tracking-MLflow-blue?logo=mlflow)
 ![Version](https://img.shields.io/badge/Version-0.0.1-green)
 ![Author](https://img.shields.io/badge/Author-Alejandro%20Cancelas%20Chapela-blueviolet)
 ![Template](https://img.shields.io/badge/Generado%20con-dskit-58a6ff?logo=github)
 
-> Prediccion de riesgo climatico personalizado (calor/frio/uv) con ML
+> Sistema de **aviso** de riesgo por temperatura (calor / frío) por provincia y día, con ML
 
 **Tipo de ML:** `supervisado`  
 **Autor:** Alejandro Cancelas Chapela  
-**Versión:** 0.0.1 · RandomForest
+**Versión:** 0.0.1 · dos modelos por clase — XGBoost (calor) / RandomForest (frío)
 
 
-ClimaSafe predice el nivel de riesgo climático (calor, frío y radiación UV)
-a partir de variables meteorológicas y de ubicación, con el objetivo de anticipar
-condiciones potencialmente peligrosas para las personas antes de que ocurran.
-El modelo (Random Forest, clasificación supervisada) se entrena con datos históricos
-de clima y devuelve una categoría de riesgo interpretable, pensada para
-integrarse en alertas o recomendaciones personalizadas.
+ClimaSafe estima, para cada **provincia y día**, el nivel de riesgo por temperatura
+(`0` seguro / `1` precaución / `2` peligro) a partir de variables meteorológicas de
+ERA5, para anticipar días peligrosos antes de que ocurran. Es un sistema de **aviso**:
+se prioriza **no perderse días de riesgo** (recall), asumiendo más falsas alarmas antes
+que un aviso de menos. (La radiación UV queda como línea futura; hoy cubre calor y frío.)
+
+### Enfoque de modelado
+
+- **Target**: percentiles de mortalidad atribuida de MoMo (X30 calor / X31 frío),
+  calculados **por provincia** para no penalizar a las provincias pequeñas.
+- **Features**: índices de sensación térmica (Heat Index, WBGT, Wind Chill) de la hora de
+  mayor riesgo del día, + **distribución diaria** de las 24 h (media/desv/mín-máx, horas
+  sobre/bajo umbral), + **persistencia temporal** (lags y medias móviles del pasado, p. ej.
+  `wind_chill_mean_roll7`, `dias_consec_bajo_umbral`) — el frío es acumulativo, así que la
+  *racha* de días fríos pesa más que el día suelto.
+- **Split por fecha** (no aleatorio) para no filtrar días de la misma ola entre train y test.
+- **Dos modelos, uno por clase**, elegidos por **recall de las clases de riesgo**
+  (`Rec_riesgo`), no por accuracy: **XGBoost (con pesos de clase) para calor** y
+  **RandomForest para frío**. Seguimiento con **MLflow** y validación cruzada **temporal
+  por años**.
+- Detalle y justificación de cada decisión en
+  [`documenatcion/conclusiones_modelos.md`](documenatcion/conclusiones_modelos.md).
 
 ---
 
 
 ### Fuentes de datos abiertas
 
-- ERA5 (ECMWF / Copernicus) — histórico para entrenamiento del modelo, España minimo 10 años.
+- **ERA5 (ECMWF / Copernicus)** — histórico para entrenamiento del modelo, España minimo 10 años.
 
-- AEMET OpenData — datos oficiales para España.
+- **AEMET OpenData** — datos oficiales para España.
 
-- Open-Meteo API — datos meteorológicos sin clave de API.
+- **Open-Meteo API** — datos meteorológicos sin clave de API. En producción, su
+  API de pronóstico (horaria, hasta 16 días) es también la fuente prevista para
+  estimar el riesgo con días de antelación: encaja con el pipeline de features
+  actual (que requiere resolución horaria) sin cambios.
 
-- Open UV — índice UV en tiempo real por coordenada GPS, complementa a Open-Meteo en producción.
+- **Open UV** — índice UV en tiempo real por coordenada GPS, complementa a Open-Meteo en producción.
 
-- MoMo (ISCIII) — Monitorización de la Mortalidad Diaria; muertes atribuibles a calor (X30) y frío (X31), por provincia y día. Fuente del target/label del modelo.
+- **MoMo** (ISCIII) — Monitorización de la Mortalidad Diaria; muertes atribuibles a calor (X30) y frío (X31), por provincia y día. Fuente del target/label del modelo.
 
+Se evaluaron y descartaron otras tres fuentes (WeatherNext 2, Prithvi EO 2.0 y
+AlphaEarth Foundations); el análisis y los motivos están en
+[`documenatcion/evaluacion_fuentes_externas.md`](documenatcion/evaluacion_fuentes_externas.md).
 
 ---
 
@@ -67,8 +89,8 @@ climasafeai/
 │   ├── raw/            ← datos originales (nunca modificar)
 │   ├── interim/        ← datos en proceso
 │   └── processed/      ← datos listos para modelar
-├── models/             ← modelos entrenados (.joblib / .pt)
-│   └── artifacts/      ← encoders, scalers, etc.
+├── models/             ← modelos por clase ({Modelo}_{calor,frio}.joblib, modelo_desplegado_*)
+│   └── artifacts/      ← scalers, encoders, feature_names_{clase}.joblib
 ├── notebooks/
 │   ├── 0-0-...-Descargadatos.ipynb
 │   ├── 0-1-...-ProcesamientoDatos.ipynb
@@ -77,9 +99,10 @@ climasafeai/
 ├── climasafeai/
 │   ├── data/           make_dataset.py
 │   ├── features/       build_features.py
-│   ├── models/         train_model.py · predict_model.py
+│   ├── models/         train_model.py · predict_model.py · temporal_cv.py
 │   ├── visualization/  visualize.py
 │   └── utils/          paths.py
+├── documenatcion/      conclusiones_modelos.md · fórmulas de riesgo
 ├── tests/
 ├── main.py             ← pipeline completo
 ├── Makefile

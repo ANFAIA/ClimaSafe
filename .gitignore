@@ -140,3 +140,6 @@ pip-delete-this-directory.txt
 
 # --- raw ---
 data/raw/*
+
+# --- graphify ---
+graphify-out/cache/

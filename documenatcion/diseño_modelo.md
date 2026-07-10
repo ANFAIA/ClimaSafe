@@ -205,3 +205,40 @@ fórmula (tablas Heat Index/Wind Chill del NWS, fórmula de tiempo hasta
 eritema de la OMS por fototipo, y código de referencia).
 
 ---
+
+---
+
+## 6. LSTM como cuarta estimación — corrigiendo el sesgo poblacional de la fórmula
+
+Las fórmulas de Heat Index y Wind Chill (NWS) usadas en la fórmula determinista
+(sección 5) están calibradas sobre población y condiciones estadounidenses. No tengo
+una fuente verificada que confirme en qué medida esos umbrales se sostienen igual
+sobre población española (aclimatación, franjas de edad, vivienda, dieta) — es una
+suposición razonable que puedan estar sesgadas, pero conviene tratarlo como hipótesis
+de trabajo, no como hecho contrastado, hasta revisar literatura específica.
+
+Para corregir ese posible sesgo sin descartar la fórmula (que sigue cubriendo el
+riesgo individual que MoMo no puede capturar, ver sección 5), se entrena una **LSTM**
+sobre las mismas variables de entrada que alimentan Heat Index / Wind Chill
+(temperatura, humedad, viento, radiación UV), pero con el label de mortalidad real
+de MoMo — es decir, la LSTM aprende la correlación empírica española entre esas
+variables meteorológicas y el riesgo, en lugar de heredar los coeficientes fijos
+calibrados en EE. UU.
+
+**Arquitectura resultante — cuatro estimaciones en cada consulta:**
+
+| Estimación | Qué captura | Fuente de calibración |
+|---|---|---|
+| Modelo ML calor (XGBoost) | Riesgo poblacional-empírico, calor | MoMo (España) |
+| Modelo ML frío (RandomForest) | Riesgo poblacional-empírico, frío | MoMo (España) |
+| **LSTM (nueva)** | Correlación temporal Heat Index/Wind Chill ↔ mortalidad, sin sesgo de calibración americana | MoMo (España) |
+| Fórmula determinista | Riesgo individual (fototipo, tiempo de exposición) | NWS / OMS (EE. UU. / internacional) |
+
+Se mantiene la lógica de la sección 5: el resultado final es el **criterio más
+restrictivo** de las cuatro estimaciones. La LSTM no sustituye a la fórmula — cubre
+un hueco distinto: mientras la fórmula da precisión individual-teórica con posible
+sesgo poblacional, la LSTM da precisión poblacional-empírica española sobre las
+mismas variables meteorológicas de entrada, sirviendo de respaldo cuando el sesgo
+americano de la fórmula pueda subestimar o sobreestimar el riesgo real en España.
+
+---
