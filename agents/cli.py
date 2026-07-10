@@ -70,6 +70,26 @@ def build_parser() -> argparse.ArgumentParser:
     ask_p = subparsers.add_parser("ask", help="Rutea una petición en lenguaje natural al agente más relevante.")
     ask_p.add_argument("query")
 
+    pipeline_p = subparsers.add_parser("pipeline", help="Ejecuta un pipeline predefinido (develop|fix|release|cycle|analyze|data).")
+    pipeline_p.add_argument("name", choices=["develop", "fix", "release", "cycle", "analyze", "data"])
+    pipeline_p.add_argument("params", nargs=argparse.REMAINDER, help="--version 1.0.0 --filename data.csv")
+
+    doctor_p = subparsers.add_parser("doctor", help="Diagnóstico completo del proyecto: entorno, código, tests, datos.")
+    doctor_p.add_argument("--fix", action="store_true", help="Intenta corregir problemas automáticamente (usa auto_fix pipeline)")
+
+    plan_p = subparsers.add_parser(
+        "plan",
+        help="Describe un encargo: el agente 'plan' lo descompone, pregunta lo que falte y delega. "
+             "(atajo de `run plan intake --brief ...`; responde/ejecuta con `run plan answer/execute`)",
+    )
+    plan_p.add_argument("brief", help="El encargo en lenguaje natural (un paso por línea o separado por ';')")
+
+    audit_p = subparsers.add_parser("audit", help="Audita al equipo de agentes con el log de ejecuciones.")
+    audit_p.add_argument(
+        "what", nargs="?", default="report", choices=["report", "failures", "suggest"],
+        help="report (uso y tasas de éxito) | failures (fallos recientes) | suggest (mejoras propuestas)",
+    )
+
     subparsers.add_parser("tools", help="Lista las herramientas registradas.")
 
     return parser
@@ -102,6 +122,36 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ask":
         result = orchestrator.dispatch(args.query)
+        _print_result(result)
+        return 0 if result.success else 1
+
+    if args.command == "pipeline":
+        from agents.gstack.pipelines import run_pipeline
+        pipe_kwargs = _parse_kwargs(args.params)
+        result = run_pipeline(args.name, **pipe_kwargs)
+        print(result.summary)
+        return 0 if result.success else 1
+
+    if args.command == "doctor":
+        if args.fix:
+            from agents.gstack.pipelines import auto_fix
+            result = auto_fix(auto_commit=True)
+        else:
+            from agents.gstack.pipelines import auto_analyze
+            result = auto_analyze()
+        print(result.summary)
+        return 0 if result.success else 1
+
+    if args.command == "plan":
+        result = orchestrator.run("plan", "intake", brief=args.brief)
+        _print_result(result)
+        for question in result.needs:
+            print(f"  ? {question}")
+        return 0 if result.success else 1
+
+    if args.command == "audit":
+        action = {"report": "report", "failures": "failures", "suggest": "suggest_improvements"}[args.what]
+        result = orchestrator.run("audit", action)
         _print_result(result)
         return 0 if result.success else 1
 

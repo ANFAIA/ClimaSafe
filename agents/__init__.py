@@ -19,12 +19,24 @@ O agente a agente, sin pasar por el orquestador:
     git = GitAgent()
     print(git.suggest_commit_message().data)
 
-Ver `agents/README.md` para la guía completa de arquitectura y extensión.
+Flujos autónomos (GStack)
+--------------------------
+    from agents.gstack import GStack, auto_develop
+
+    stack = GStack(auto_commit=True)
+    stack.push("git", "analyze_diff")
+    stack.push("test", "run_tests")
+    result = stack.run()
+
+    auto_develop()
+
+Ver `AGENTS.md` y `agents/README.md` para la guía completa.
 """
 
 from agents.context import SharedContext, get_context
 from agents.core.registry import agent_registry, register_agent
 from agents.core.base_agent import BaseAgent, AgentResult
+from agents.helpers import delegate_to
 from agents.orchestrator import Orchestrator
 
 __all__ = [
@@ -35,6 +47,7 @@ __all__ = [
     "BaseAgent",
     "AgentResult",
     "Orchestrator",
+    "delegate_to",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

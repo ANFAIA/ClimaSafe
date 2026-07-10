@@ -39,6 +39,12 @@ class AgentResult:
     message: str
     data: Any = None
     warnings: list[str] = field(default_factory=list)
+    # Preguntas pendientes: si a la acción le falta información que solo el
+    # humano puede dar, se devuelve success=False con la lista de preguntas
+    # aquí — NUNCA se inventa un valor. Es el mecanismo estándar de "pedir
+    # información" del sistema (lo usa PlanAgent, y cualquier agente puede
+    # usarlo igual).
+    needs: list[str] = field(default_factory=list)
 
     def __bool__(self) -> bool:
         return self.success
@@ -76,14 +82,47 @@ class BaseAgent(ABC):
         raise NotImplementedError
 
     def run(self, action: str, /, **kwargs) -> AgentResult:
-        """Despacho genérico: `agent.run("suggest_commit_message")`."""
+        """
+        Despacho genérico: `agent.run("suggest_commit_message")`.
+
+        Toda ejecución que pasa por aquí (CLI, Orchestrator, GStack,
+        delegate_to) queda registrada en el log de auditoría
+        (`agents/workspace/audit/audit.jsonl`, ver `agents/audit.py`) — es
+        la base para medir y mejorar a los agentes con el agente `audit`.
+        """
+        import time
+
+        from agents import audit
+
         available = self.actions()
         if action not in available:
             raise ActionNotSupportedError(
                 f"El agente '{self.name}' no soporta la acción '{action}'. "
                 f"Acciones disponibles: {sorted(available)}"
             )
-        return available[action](**kwargs)
+
+        start = time.perf_counter()
+        try:
+            result = available[action](**kwargs)
+        except Exception as exc:
+            # Los agentes no deberían dejar escapar excepciones (ver docstring
+            # del módulo), pero si ocurre, se audita igualmente antes de
+            # propagarla — un fallo no auditado es invisible para `audit`.
+            audit.record(
+                self.ctx, agent=self.name, action=action, success=False,
+                duration_ms=(time.perf_counter() - start) * 1000,
+                message="excepción no controlada", error=f"{type(exc).__name__}: {exc}",
+                kwarg_names=sorted(kwargs),
+            )
+            raise
+
+        audit.record(
+            self.ctx, agent=self.name, action=action, success=result.success,
+            duration_ms=(time.perf_counter() - start) * 1000,
+            message=result.message, warnings=len(result.warnings),
+            kwarg_names=sorted(kwargs),
+        )
+        return result
 
     def can_handle(self, query: str) -> float:
         """
@@ -113,8 +152,17 @@ class BaseAgent(ABC):
         if not self.capabilities:
             return 0.0
         text = query.lower()
-        hits = sum(1 for kw in self.capabilities if re.search(rf"\b{re.escape(kw.lower())}\b", text))
-        return min(1.0, hits * 0.4)
+        matched = [kw for kw in self.capabilities if re.search(rf"\b{re.escape(kw.lower())}\b", text)]
+        if not matched:
+            return 0.0
+        # Desempate por especificidad: dos agentes con el mismo nº de aciertos
+        # empataban y ganaba el descubierto antes (orden alfabético) — puro
+        # azar. Caso real: "pre-commit" acierta 'pre-commit' (env) y también
+        # 'commit' (git, el guion es límite de palabra). La coincidencia más
+        # larga (más específica) gana el empate; el bonus (≤0.1) nunca puede
+        # alterar el ranking entre números de aciertos distintos (0.4 cada uno).
+        specificity = min(0.1, sum(len(kw) for kw in matched) * 0.001)
+        return min(1.0, len(matched) * 0.4 + specificity)
 
     def action_aliases(self) -> dict[str, list[str]]:
         """
@@ -183,9 +231,15 @@ class BaseAgent(ABC):
         return True
 
     def describe(self) -> dict[str, Any]:
-        return {
+        from agents.contracts import contract_for
+
+        info = {
             "name": self.name,
             "description": self.description,
             "capabilities": self.capabilities,
             "actions": sorted(self.actions()),
         }
+        contract = contract_for(self.name)
+        if contract is not None:
+            info["contract"] = contract.as_dict()
+        return info
