@@ -252,9 +252,12 @@ def preprocess_data(
     print(f"    Train: {X_train.shape} | Test: {X_test.shape}")
     print(f"    Proporción clases (train): {y_train.value_counts(normalize=True).to_dict()}")
 
-    # Guardar conjuntos procesados (namespaceados por clase)
-    pd.DataFrame(X_train).to_csv(PROCESSED_DATA_DIR / f"X_train_{clase}.csv", index=False)
-    pd.DataFrame(X_test).to_csv(PROCESSED_DATA_DIR  / f"X_test_{clase}.csv",  index=False)
+    # Guardar conjuntos procesados (namespaceados por clase). Se conservan los
+    # NOMBRES de columna (X ya trae los nombres reales de las features) para que
+    # al releer el CSV, X_train.columns dé los nombres y no 0,1,2,... -- así la
+    # importancia de variables sale con nombres. Mismo orden que feature_names_{clase}.joblib.
+    pd.DataFrame(X_train, columns=list(X.columns)).to_csv(PROCESSED_DATA_DIR / f"X_train_{clase}.csv", index=False)
+    pd.DataFrame(X_test,  columns=list(X.columns)).to_csv(PROCESSED_DATA_DIR / f"X_test_{clase}.csv",  index=False)
     pd.Series(y_train).to_csv(PROCESSED_DATA_DIR / f"y_train_{clase}.csv", index=False)
     pd.Series(y_test).to_csv(PROCESSED_DATA_DIR  / f"y_test_{clase}.csv",  index=False)
 
