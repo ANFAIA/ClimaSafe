@@ -2,7 +2,7 @@
 weather_indices.py — Índices meteorológicos derivados (feature engineering).
 
 Implementa las fórmulas documentadas en
-`documenatcion/formulas_riesgo_deterministico.md`:
+`documentacion/formulas_riesgo_deterministico.md`:
 
   - Heat Index (Rothfusz, 1990)      → sección 1.1
   - WBGT aproximado desde Heat Index → sección 1.4 (Bernard & Iheanacho, 2015)

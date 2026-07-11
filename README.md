@@ -35,7 +35,7 @@ que un aviso de menos. (La radiación UV queda como línea futura; hoy cubre cal
   **RandomForest para frío**. Seguimiento con **MLflow** y validación cruzada **temporal
   por años**.
 - Detalle y justificación de cada decisión en
-  [`documenatcion/conclusiones_modelos.md`](documenatcion/conclusiones_modelos.md).
+  [`documentacion/conclusiones_modelos.md`](documentacion/conclusiones_modelos.md).
 
 ---
 
@@ -57,7 +57,7 @@ que un aviso de menos. (La radiación UV queda como línea futura; hoy cubre cal
 
 Se evaluaron y descartaron otras tres fuentes (WeatherNext 2, Prithvi EO 2.0 y
 AlphaEarth Foundations); el análisis y los motivos están en
-[`documenatcion/evaluacion_fuentes_externas.md`](documenatcion/evaluacion_fuentes_externas.md).
+[`documentacion/evaluacion_fuentes_externas.md`](documentacion/evaluacion_fuentes_externas.md).
 
 ---
 
@@ -102,7 +102,7 @@ climasafeai/
 │   ├── models/         train_model.py · predict_model.py · temporal_cv.py
 │   ├── visualization/  visualize.py
 │   └── utils/          paths.py
-├── documenatcion/      conclusiones_modelos.md · fórmulas de riesgo
+├── documentacion/      conclusiones_modelos.md · fórmulas de riesgo
 ├── tests/
 ├── main.py             ← pipeline completo
 ├── Makefile

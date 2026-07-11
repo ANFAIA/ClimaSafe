@@ -34,7 +34,7 @@ de aprender ese patrón; el Heat Index de pico lo descarta por diseño.
 | | RandomForest (ya existe) | LSTM (propuesto) |
 |---|---|---|
 | Calor | Modelo 1 | Modelo 3 |
-| Frío  | Modelo 2 | Modelo 4 |
+| Frío  | Modelo 2 | Modelo 3 |
 
 ## Input de la LSTM
 
