@@ -491,11 +491,14 @@ def _agregar_rezagos_temporales(
     return df
 
 
-def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
+def procesar_era5_a_horario(era5: xr.Dataset) -> pd.DataFrame:
     """
     Convierte el xr.Dataset de ERA5 (ya filtrado a 5 puntos/provincia) en
-    un DataFrame con una fila por (provincia, fecha) -- la hora de mayor
-    riesgo del día, con las unidades ya convertidas.
+    un DataFrame HORARIO: una fila por (provincia, datetime), con las
+    unidades ya convertidas y los índices meteorológicos calculados.
+
+    Es la base común del pipeline diario (_procesar_era5_a_diario) y del
+    dataset de secuencias 24h para la LSTM (climasafeai/data/sequences.py).
 
     Pasos:
       1. Resuelve 'expver' si aparece (ver _resolver_expver).
@@ -506,11 +509,9 @@ def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
          componentes del vector, NO la velocidad -- hace falta el módulo).
       4. Media espacial: colapsa los 5 puntos -> una fila por provincia/hora.
       5. Índices meteorológicos horarios (heat_index_c/wbgt_c/wind_chill_c).
-      6. Estadísticas de la distribución diaria (24h) del calor/frío -- ver
-         _agregar_estadisticas_diarias -- calculadas ANTES de colapsar el día.
-      7. Selección de la hora de mayor riesgo del día (select_risk_hour_row,
-         que mantiene heat_index_c/wbgt_c/wind_chill_c del pico) -> una fila
-         por provincia/día, a la que se le mergean las estadísticas del paso 6.
+
+    Devuelve columnas: provincia, datetime, fecha, t2m_c, rh, wind_speed_kmh,
+    sp, heat_index_c, wbgt_c, wind_chill_c.
     """
     era5 = _resolver_expver(era5)
 
@@ -542,6 +543,26 @@ def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
         df_hora, temp_col="t2m_c", rh_col="rh", wind_col="wind_speed_kmh"
     )
 
+    print(f"    ERA5: {len(df)} filas (punto/hora) -> {len(df_hora)} (provincia/hora)")
+    return df_hora
+
+
+def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
+    """
+    Convierte el xr.Dataset de ERA5 (ya filtrado a 5 puntos/provincia) en
+    un DataFrame con una fila por (provincia, fecha) -- la hora de mayor
+    riesgo del día, con las unidades ya convertidas.
+
+    Delega la parte horaria (expver, unidades, media espacial, índices) en
+    procesar_era5_a_horario y añade la agregación diaria:
+      6. Estadísticas de la distribución diaria (24h) del calor/frío -- ver
+         _agregar_estadisticas_diarias -- calculadas ANTES de colapsar el día.
+      7. Selección de la hora de mayor riesgo del día (select_risk_hour_row,
+         que mantiene heat_index_c/wbgt_c/wind_chill_c del pico) -> una fila
+         por provincia/día, a la que se le mergean las estadísticas del paso 6.
+    """
+    df_hora = procesar_era5_a_horario(era5)
+
     # --- Estadísticas de la distribución diaria (24h), NO solo el pico ---
     df_stats = _agregar_estadisticas_diarias(df_hora, group_cols=["provincia", "fecha"])
 
@@ -561,7 +582,7 @@ def _procesar_era5_a_diario(era5: xr.Dataset) -> pd.DataFrame:
     # --- Features de persistencia entre días (lags/medias móviles del pasado) ---
     df_dia = _agregar_rezagos_temporales(df_dia, group_col="provincia", date_col="fecha")
 
-    print(f"    ERA5: {len(df)} filas (punto/hora) -> {len(df_hora)} (provincia/hora) -> {len(df_dia)} (provincia/día)")
+    print(f"    ERA5: {len(df_hora)} filas (provincia/hora) -> {len(df_dia)} (provincia/día)")
     return df_dia
 
 

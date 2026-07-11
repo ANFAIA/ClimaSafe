@@ -53,6 +53,7 @@ data/**/*.pkl
 data/**/*.pickle
 data/**/*.h5
 data/**/*.hdf5
+data/**/*.npz
 data/**/*.xlsx
 data/**/*.xls
 data/**/*.zip

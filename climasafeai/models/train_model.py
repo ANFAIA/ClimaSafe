@@ -149,6 +149,51 @@ def _build_models(X_train=None, y_train=None, tune_knn: bool = True,
 
     return models
 
+
+def configurar_mlflow() -> None:
+    """
+    Apunta MLflow al experimento 'climasafeai' con fallback a tracking local.
+
+    Reutilizable desde cualquier módulo que loguee a MLflow (train_models,
+    lstm_model, ...) para que todos compartan el mismo experimento y el
+    mismo fallback.
+    """
+    try:
+        mlflow.set_experiment("climasafeai")
+    except Exception as e:
+        # Típicamente ConnectionRefusedError/MlflowException si
+        # MLFLOW_TRACKING_URI apunta a un servidor (p.ej. localhost:5000)
+        # que no está levantado -- en vez de reventar todo el entrenamiento,
+        # se cae a tracking local (sqlite, sin necesitar ningún proceso
+        # corriendo -- MLflow 3.x ya no permite el backend de fichero
+        # plano './mlruns' sin más). Arranca el servidor con
+        # `make mlflow-ui` si prefieres la UI en vez de tracking local.
+        #
+        # Ruta ABSOLUTA basada en PROJECT_DIR (no relativa a './') para
+        # que el fichero .db quede siempre en la raíz del proyecto, sin
+        # importar desde qué carpeta (notebooks/, raíz, etc.) se ejecute
+        # -- una ruta relativa aquí crea un mlflow.db distinto por cada
+        # cwd desde la que se lance el notebook.
+        db_path = PROJECT_DIR / "mlflow.db"
+        print(f"    AVISO: no se pudo conectar al tracking server de MLflow ({e}).")
+        print(f"    Usando tracking local (sqlite:///{db_path}) en su lugar.")
+        try:
+            mlflow.set_tracking_uri(f"sqlite:///{db_path}")
+            mlflow.set_experiment("climasafeai")
+        except Exception as e2:
+            # Si esto también falla, casi seguro es un problema de
+            # permisos del fichero/carpeta (p.ej. mlflow.db creado
+            # previamente sin permiso de escritura para el usuario actual,
+            # o la carpeta del proyecto es de solo lectura) -- no es algo
+            # que el código pueda arreglar solo, hace falta revisarlo a mano.
+            raise RuntimeError(
+                f"No se pudo usar ni el tracking server ni el fallback local "
+                f"({db_path}). Revisa permisos del fichero/carpeta: "
+                f"`ls -la {db_path.parent}` y `chmod u+w {db_path}` si ya existe, "
+                f"o bórralo y deja que MLflow lo recree."
+            ) from e2
+
+
 def train_models(
     X_train,
     y_train,
@@ -186,41 +231,7 @@ def train_models(
     print(f"--> Entrenando modelos de clasificacion (clase='{clase}')...")
     models = _build_models(X_train=X_train, y_train=y_train, tune_knn=tune_knn, clase=clase)
 
-    try:
-        mlflow.set_experiment("climasafeai")
-    except Exception as e:
-        # Típicamente ConnectionRefusedError/MlflowException si
-        # MLFLOW_TRACKING_URI apunta a un servidor (p.ej. localhost:5000)
-        # que no está levantado -- en vez de reventar todo el entrenamiento,
-        # se cae a tracking local (sqlite, sin necesitar ningún proceso
-        # corriendo -- MLflow 3.x ya no permite el backend de fichero
-        # plano './mlruns' sin más). Arranca el servidor con
-        # `make mlflow-ui` si prefieres la UI en vez de tracking local.
-        #
-        # Ruta ABSOLUTA basada en PROJECT_DIR (no relativa a './') para
-        # que el fichero .db quede siempre en la raíz del proyecto, sin
-        # importar desde qué carpeta (notebooks/, raíz, etc.) se ejecute
-        # -- una ruta relativa aquí crea un mlflow.db distinto por cada
-        # cwd desde la que se lance el notebook.
-        db_path = PROJECT_DIR / "mlflow.db"
-        print(f"    AVISO: no se pudo conectar al tracking server de MLflow ({e}).")
-        print(f"    Usando tracking local (sqlite:///{db_path}) en su lugar.")
-        try:
-            mlflow.set_tracking_uri(f"sqlite:///{db_path}")
-            mlflow.set_experiment("climasafeai")
-        except Exception as e2:
-            # Si esto también falla, casi seguro es un problema de
-            # permisos del fichero/carpeta (p.ej. mlflow.db creado
-            # previamente sin permiso de escritura para el usuario actual,
-            # o la carpeta del proyecto es de solo lectura) -- no es algo
-            # que el código pueda arreglar solo, hace falta revisarlo a mano.
-            raise RuntimeError(
-                f"No se pudo usar ni el tracking server ni el fallback local "
-                f"({db_path}). Revisa permisos del fichero/carpeta: "
-                f"`ls -la {db_path.parent}` y `chmod u+w {db_path}` si ya existe, "
-                f"o bórralo y deja que MLflow lo recree."
-            ) from e2
-
+    configurar_mlflow()
 
     trained = {}
     for name, model in models.items():
