@@ -241,4 +241,64 @@ sesgo poblacional, la LSTM da precisión poblacional-empírica española sobre l
 mismas variables meteorológicas de entrada, sirviendo de respaldo cuando el sesgo
 americano de la fórmula pueda subestimar o sobreestimar el riesgo real en España.
 
+### Estado de implementación (notebook 0-3)
+
+Implementada en `notebooks/0-3-LSTM-Ejecucion.ipynb`, con la lógica en
+`climasafeai/data/sequences.py` (secuencias 24h desde los .nc de ERA5, con
+caché en `data/processed/secuencias_24h.npz`) y
+`climasafeai/models/lstm_model.py` (red + entrenamiento + evaluación).
+Decisiones cerradas al implementar:
+
+- **Una única red multi-tarea**: tronco LSTM compartido (2 capas, hidden 64)
+  + dos cabezas de 3 clases (calor y frío). Un solo `.pt`
+  (`models/LSTM_multitask.pt`), ambas estimaciones en cada consulta.
+- **Input**: secuencias de 24 h de `t2m_c, rh, wind_speed_kmh, heat_index_c,
+  wind_chill_c` — la red ve el día completo (incluido el alivio nocturno),
+  no la hora pico. **Sin radiación UV por ahora**: los .nc de ERA5
+  descargados no la incluyen (la mención a UV del párrafo anterior queda
+  como pendiente hasta añadir una fuente de UV histórico/pronosticado).
+- **Sin embeddings personales** (grasa corporal, fototipo, sexo): se
+  evaluaron y descartaron — MoMo es mortalidad poblacional sin atributos
+  individuales, así que esos embeddings no recibirían ninguna señal de
+  entrenamiento. Reabrir solo cuando exista una fuente de datos individual.
+- Labels: las mismas clases por percentiles de MoMo de los parquets
+  etiquetados; split temporal por fecha (nunca aleatorio) con tramo de
+  validación para el early stopping; pesos de clase `balanced`; comparación
+  por `Rec_riesgo`, como el resto del proyecto.
+
+### Clasificación vs regresión (Parte C del notebook 0-3)
+
+Se planteó si la LSTM debería ser regresión para "dar el índice y
+multiplicarlo por los coeficientes" de las fórmulas NWS/OMS. **Aclaración
+de escala**: esos coeficientes (categorías por °C del Heat Index, minutos
+hasta eritema por fototipo) viven en unidades físicas, y una red entrenada
+con MoMo solo puede producir un **percentil de mortalidad poblacional
+0-1** — no existe label de "Heat Index corregido para España en °C", así
+que ese índice no es multiplicable por dichas tablas. La modulación
+individual sigue siendo la fórmula determinista, como estimación separada
+dentro del criterio más restrictivo.
+
+Lo que sí se hizo (Parte C del notebook): comparar con evidencia **tres
+variantes** — (1) clasificación (clases por argmax), (2) el **softmax del
+clasificador** como índice continuo gratis (`1 − P(seguro)`), y (3) una
+**regresión** con target el percentil continuo de mortalidad (`rank pct`
+por provincia, el paso previo al corte p75/p95 de `labels.py`), cuyas
+predicciones se convierten a clases con los mismos cortes para comparar
+`Rec_riesgo` en igualdad. La decisión (celda C.4) se toma por los números:
+`Rec_riesgo` recuperado y Spearman del índice contra el percentil real.
+El target continuo hereda el mismo caveat que las clases (percentil
+calculado sobre todo el histórico por provincia).
+
+**Resultado (2026-07-10): gana la clasificación.** La regresión colapsa
+como sistema de aviso (`Rec_riesgo` 0.08 calor / 0.00 frío — el MSE empuja
+las predicciones a la masa central del percentil y casi nunca supera el
+corte p75), mientras la clasificación mantiene 0.53 / 0.50. Como índice
+continuo, el softmax del clasificador empata con la regresión en calor
+(Spearman 0.347 vs 0.336) y solo pierde en frío (0.185 vs 0.271) — matiz
+que no compensa perder el aviso. **La cuarta estimación queda como LSTM de
+clasificación, con `indice_riesgo_softmax` (1 − P(seguro), 0-1) como
+índice continuo de producción.** El experimento de regresión queda
+documentado en la Parte C del notebook y su checkpoint conservado
+(`models/LSTM_multitask_reg.pt`).
+
 ---
