@@ -53,7 +53,7 @@ LOGCOLS: list = []
 # Índices meteorológicos derivados (Heat Index / WBGT / Wind Chill)
 # ---------------------------------------------------------------------------
 # Nombres de columna esperados tras la agregación ERA5 + GeoPandas (ver
-# climasafeai/data/make_dataset.py y documenatcion/diseño_modelo.md sección 3).
+# climasafeai/data/make_dataset.py y documentacion/diseño_modelo.md sección 3).
 # Ajusta estos tres nombres cuando se cierre el esquema final del dataset
 # agregado por provincia/día — add_weather_index_columns() avisa (no falla)
 # si alguna columna no existe todavía.
@@ -274,7 +274,7 @@ def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
       df['total_loans']   = df['housing'] + df['loan']
     """
     # Heat Index, WBGT y Wind Chill (ver climasafeai/features/weather_indices.py
-    # y documenatcion/diseño_modelo.md sección 1 — "features principales").
+    # y documentacion/diseño_modelo.md sección 1 — "features principales").
     # Se calculan sobre la fila ya seleccionada como hora de mayor riesgo del
     # día (ver diseño_modelo.md sección 2); aquí solo se derivan como features
     # del modelo, no se recalcula ninguna selección de hora.
