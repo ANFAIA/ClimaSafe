@@ -128,3 +128,14 @@
 - añadidos agentes y sus respectivas funciones
 - Estructura inicial creada
 
+## [Unreleased] — 2026-07-11
+
+### Añadido
+
+- personalización individual del índice de riesgo
+- LSTM multi-tarea con comparación clasificación vs regresión
+
+### Documentación
+
+- corrige el nombre de la carpeta a «documentacion»
+
