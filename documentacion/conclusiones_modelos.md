@@ -82,7 +82,23 @@ XGBoost de frío tiene mejor F1_macro (0.506) y accuracy (0.834), pero eso premi
 bajo la política de "mejor sobre-avisar", RF es el correcto. (El `XGBoost_frio.joblib` queda
 guardado por si algún día se prioriza balance sobre detección.)
 
-**KNN** se descartó en ambas: recall de riesgo ~0.02–0.23 (otro modelo que "no avisa").
+**KNN** se descartó en ambas: recall de riesgo ~0.02–0.26 (otro modelo que "no avisa").
+
+**LightGBM como candidato a sustituir a KNN** (baseline en `tuning/baseline_lightgbm.py`:
+`class_weight='balanced'`, mismos hiperparámetros base que el XGBoost, 27 features):
+
+| Clase | Modelo | **Rec_riesgo** | F1_macro |
+|---|---|---|---|
+| Calor | LightGBM | 0.6311 | **0.5681** |
+| Calor | XGBoost desplegado | **0.6331** | 0.5629 |
+| Frío | LightGBM | 0.4465 | **0.5208** |
+| Frío | RandomForest desplegado | **0.5256** | 0.5117 |
+
+En **calor** LightGBM queda a la par del XGBoost (algo menos de `Rec_riesgo`, algo más de
+`F1_macro`); en **frío** mejora el `F1_macro` pero pierde claramente en `Rec_riesgo`, que
+es la métrica de selección. Conclusión: como tercer modelo del leaderboard **aporta mucho
+más que KNN** (compite de verdad), pero **no desbanca a los desplegados** bajo la política
+de "mejor sobre-avisar".
 
 ## 5. Hiperparámetros finales
 
@@ -108,9 +124,15 @@ guardado por si algún día se prioriza balance sobre detección.)
 - Modelos guardados **namespaceados por clase** (`train_models` guarda
   `{modelo}_{clase}.joblib`, ya no se pisan calor↔frío).
 - ✅ **Datos regenerados con lags y modelos reentrenados**: en `models/` están los
-  6 modelos (`{RandomForest,XGBoost,KNN}_{calor,frio}.joblib`), todos con **19 features**
+  6 modelos (`{RandomForest,XGBoost,KNN}_{calor,frio}.joblib`), todos con **27 features**
   (`feature_names_{clase}.joblib` lo confirma). Los `.joblib` planos antiguos (sin clase,
   15 features) se eliminaron.
+- **Iteración a 27 features** (8 nuevas de persistencia, todas con `shift(1)` por
+  provincia, sin fuga: `heat_index_c_roll3/7`, `dias_consec_sobre_umbral`,
+  `grados_dia_calor_roll7/14`, `wind_chill_mean_roll14`, `grados_dia_frio_roll7/14`):
+  calor mejora (`Rec_riesgo` XGBoost 0.614 → **0.633**), frío queda igual (RF 0.527 →
+  0.526). Ojo con la atribución: en la misma iteración cambió también el label (suelo
+  de mortalidad ≥2 muertes para `peligro`), así que la mejora no es solo features.
 - **Desplegados** (elegidos por `Rec_riesgo`, política "mejor sobre-avisar"):
   `XGBoost_calor.joblib` y `RandomForest_frio.joblib`. El `XGBoost_frio.joblib` queda
   guardado como alternativa (mejor balance/accuracy, menos falsas alarmas) por si algún día

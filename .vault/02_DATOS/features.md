@@ -9,7 +9,7 @@ status: active
 
 # Features — Documentación completa
 
-19 features idénticas para ambos modelos (calor y frío). La diferencia está en el target y el modelo final.
+27 features idénticas para ambos modelos (calor y frío). La diferencia está en el target y el modelo final.
 
 ## Grupo A: Variables ERA5 crudas (4)
 
@@ -56,16 +56,24 @@ Calculadas sobre las 24h del día antes de colapsar a la hora pico.
 | 14 | `wind_chill_max` | Máximo (menos frío del día) |
 | 15 | `horas_bajo_umbral` | Horas con WC < 0°C — exposición a frío |
 
-## Grupo D: Persistencia temporal (4)
+## Grupo D: Persistencia temporal (12)
 
 Calculadas estrictamente sobre el pasado (shift(1) por provincia) — sin fuga.
 
 | # | Columna | Descripción |
 |---|---------|-------------|
 | 16 | `heat_index_c_lag1` | HI pico del día anterior |
-| 17 | `wind_chill_mean_roll3` | Media móvil WC de 3 días previos |
-| 18 | `wind_chill_mean_roll7` | Media móvil WC de 7 días previos |
-| 19 | `dias_consec_bajo_umbral` | Rachas de días fríos consecutivos |
+| 17 | `heat_index_c_roll3` | Media móvil del HI pico de 3 días previos |
+| 18 | `heat_index_c_roll7` | Media móvil del HI pico de 7 días previos |
+| 19 | `dias_consec_sobre_umbral` | Racha de días consecutivos con HI > 32°C |
+| 20 | `grados_dia_calor_roll7` | Grados-día de calor acumulados en 7 días |
+| 21 | `grados_dia_calor_roll14` | Grados-día de calor acumulados en 14 días |
+| 22 | `wind_chill_mean_roll3` | Media móvil WC de 3 días previos |
+| 23 | `wind_chill_mean_roll7` | Media móvil WC de 7 días previos |
+| 24 | `wind_chill_mean_roll14` | Media móvil WC de 14 días previos |
+| 25 | `grados_dia_frio_roll7` | Grados-día de frío acumulados en 7 días |
+| 26 | `grados_dia_frio_roll14` | Grados-día de frío acumulados en 14 días |
+| 27 | `dias_consec_bajo_umbral` | Rachas de días fríos consecutivos |
 
 **Nota:** Los lags fueron la mejora más importante (+12% F1 macro en calor, +7% en frío).
 
@@ -96,7 +104,10 @@ ERA5 horario → filtro 5pt/provincia → media espacial
 |-----------|----------|--------|
 | Base | 7 (solo hora pico) | — |
 | +Distribución diaria | +8 = 15 | Ayuda a calor |
-| +Persistencia (lags) | +4 = **19** | Mayor mejora, ambas clases |
+| +Persistencia (lags) | +4 = 19 | Mayor mejora, ambas clases |
+| +Persistencia ampliada | +8 = **27** | Calor mejora (Rec_riesgo XGB 0.614 → 0.633); frío queda igual (RF 0.527 → 0.526) |
+
+**Nota (iteración 27):** junto a las 8 features nuevas cambió también el label (suelo de mortalidad: ≥2 muertes para `PELIGRO`), así que la atribución de la mejora no es pura features.
 
 ## Ver también
 
