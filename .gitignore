@@ -69,6 +69,7 @@ reports/figures/*.png
 reports/figures/*.pdf
 reports/figures/*.svg
 reports/**/*.csv
+reports/**/*.npz
 *.html
 !docs/**/*.html
 

@@ -25,6 +25,54 @@ from climasafeai.utils.paths import FIGURES_DIR, MODELS_DIR, REPORTS_DIR
 # Umbral de decisión. Bajar (e.g. 0.3) aumenta recall de clase minoritaria.
 DECISION_THRESHOLD: float = 0.5
 
+# ---------------------------------------------------------------------------
+# Umbrales de decisión POR CLASE (modelos multiclase de riesgo:
+# 0=seguro, 1=precaución, 2=peligro)
+# ---------------------------------------------------------------------------
+# Calibrados con tuning/calibracion_umbrales.py sobre una validación temporal
+# interna de train (último 15% de fechas de train; test NUNCA se usa para
+# elegirlos) -- ver documentacion/calibracion_umbrales.md. Regla en cascada
+# por severidad (apply_class_thresholds):
+#     P(clase 2) >= t2          -> 2 (peligro)
+#     P(1) + P(2) >= t1         -> 1 (precaución)
+#     en otro caso              -> 0 (seguro)
+# Con class_thresholds=None todo sigue funcionando como siempre (argmax).
+CLASS_THRESHOLDS_RECOMENDADOS: dict = {
+    "calor": {"t1": 0.60, "t2": 0.42},
+    "frio":  {"t1": 0.70, "t2": 0.38},
+}
+
+
+def apply_class_thresholds(proba: np.ndarray, t1: float, t2: float) -> np.ndarray:
+    """
+    Decisión en cascada por severidad sobre probabilidades multiclase
+    (columnas = clases 0, 1, 2):
+
+        P(clase 2) >= t2    -> 2 (peligro)
+        P(1) + P(2) >= t1   -> 1 (precaución)
+        en otro caso        -> 0 (seguro)
+
+    "Peligro" exige evidencia directa de la clase 2; "precaución" solo
+    exige suficiente masa de probabilidad de riesgo total -- coherente con
+    la política del sistema (mejor sobre-avisar que no avisar). Es la
+    extensión a 3 clases ordinales del DECISION_THRESHOLD binario.
+
+    Parameters
+    ----------
+    proba : array (n_samples, 3) de predict_proba.
+    t1    : umbral sobre P(1)+P(2) para avisar al menos "precaución".
+    t2    : umbral sobre P(2) para escalar a "peligro".
+    """
+    proba = np.asarray(proba)
+    if proba.ndim != 2 or proba.shape[1] != 3:
+        raise ValueError(
+            f"apply_class_thresholds espera probabilidades (n, 3) de un "
+            f"modelo de 3 clases (0/1/2); recibido shape={proba.shape}."
+        )
+    p2 = proba[:, 2]
+    p_riesgo = proba[:, 1] + proba[:, 2]
+    return np.where(p2 >= t2, 2, np.where(p_riesgo >= t1, 1, 0))
+
 def evaluate_models(
     models: dict,
     X_train,
@@ -280,12 +328,42 @@ def _shap_beeswarm(shap_values, X_explain, feat_names, model_name, max_display):
 
 
 
-def predict_new(model_name: str, X_new) -> np.ndarray:
-    """Carga un modelo y predice sobre nuevas muestras (ya preprocesadas)."""
+def predict_new(model_name: str, X_new, class_thresholds=None) -> np.ndarray:
+    """Carga un modelo y predice sobre nuevas muestras (ya preprocesadas).
+
+    Parameters
+    ----------
+    class_thresholds : None | dict | str
+        - None (por defecto): comportamiento de siempre -- model.predict()
+          (argmax de las probabilidades).
+        - dict {"t1": float, "t2": float}: decisión en cascada por clase
+          sobre predict_proba -- ver apply_class_thresholds().
+        - "calor" | "frio": usa los umbrales calibrados de
+          CLASS_THRESHOLDS_RECOMENDADOS para ese modelo de riesgo.
+    """
     path = MODELS_DIR / f"{model_name}.joblib"
     if not path.exists():
         raise FileNotFoundError(f"Modelo no encontrado: {path}")
-    return joblib.load(path).predict(X_new)
+    model = joblib.load(path)
+    if class_thresholds is None:
+        return model.predict(X_new)
+
+    if isinstance(class_thresholds, str):
+        if class_thresholds not in CLASS_THRESHOLDS_RECOMENDADOS:
+            raise ValueError(
+                f"class_thresholds='{class_thresholds}' no reconocido -- usa "
+                f"una de {list(CLASS_THRESHOLDS_RECOMENDADOS)}, un dict "
+                "{'t1': ..., 't2': ...} o None."
+            )
+        class_thresholds = CLASS_THRESHOLDS_RECOMENDADOS[class_thresholds]
+    if not hasattr(model, "predict_proba"):
+        raise ValueError(
+            f"{model_name} no soporta predict_proba -- no se pueden aplicar "
+            "umbrales por clase; llama a predict_new sin class_thresholds."
+        )
+    return apply_class_thresholds(
+        model.predict_proba(X_new), class_thresholds["t1"], class_thresholds["t2"]
+    )
 
 
 
