@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased] — 2026-07-13
+
+### Añadido
+
+- calibración de umbrales de decisión por clase (cascada por severidad) sobre validación temporal, con puntos de operación recall/precisión y `predict_new(class_thresholds=...)` (default = argmax)
+
+### Documentación
+
+- documenta la frontera recall/precisión y la recomendación de umbrales (documentacion/calibracion_umbrales.md)
+
 ## [Unreleased] — 2026-07-03
 
 ### Añadido
