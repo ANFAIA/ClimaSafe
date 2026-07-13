@@ -12,6 +12,7 @@ def asignar_clase_riesgo_calor(
     q_precaucion: float = 0.75,
     q_peligro: float = 0.95,
     por_provincia: bool = True,
+    min_mortalidad_peligro: float | None = 2.0,
 ) -> pd.DataFrame:
     """
     Asigna la clase de riesgo (0=SEGURO, 1=PRECAUCION, 2=PELIGRO) a partir
@@ -41,6 +42,20 @@ def asignar_clase_riesgo_calor(
         todo lo de las provincias grandes como "peligro" y casi nada de
         las pequeñas, sin que refleje riesgo relativo real. Si False, se
         usa un único percentil global sobre todo el dataset.
+    min_mortalidad_peligro : float | None
+        Suelo ABSOLUTO de mortalidad para poder ser PELIGRO (clase 2). Si se
+        da (por defecto 2.0), un día que caería en PELIGRO solo por ser el
+        top percentil de su provincia PERO con mortalidad atribuida por
+        debajo de este suelo se DEGRADA a PRECAUCION (clase 1) -- no a
+        SEGURO: sigue siendo un aviso. Corrige el efecto colateral de
+        por_provincia=True: en provincias diminutas (Ceuta, Melilla, Teruel)
+        el "top 5%" puede ser un día de 0-1 muertes, y marcarlo como MÁXIMA
+        alerta es una falsa alarma que además ensucia la señal que aprende
+        el modelo. Solo toca el tramo PELIGRO; PRECAUCION se deja intacto
+        (cualquier mortalidad > 0 sigue avisando), así que no introduce
+        falsos negativos: los días degradados pasan a un aviso menor, no a
+        "sin riesgo". None desactiva el suelo (comportamiento anterior:
+        PELIGRO puramente por percentil).
 
     Returns
     -------
@@ -75,6 +90,21 @@ def asignar_clase_riesgo_calor(
     else:
         df["clase_riesgo_calor"] = _clasificar(df[col_mortalidad])
 
+    if min_mortalidad_peligro is not None:
+        # Suelo absoluto: PELIGRO por percentil pero con mortalidad por debajo
+        # del suelo -> se degrada a PRECAUCION (sigue siendo aviso, no SEGURO).
+        degradar = (
+            (df["clase_riesgo_calor"] == 2)
+            & (df[col_mortalidad] < min_mortalidad_peligro)
+        )
+        n_degradados = int(degradar.sum())
+        df.loc[degradar, "clase_riesgo_calor"] = 1
+        if n_degradados:
+            print(
+                f"    Suelo PELIGRO (>= {min_mortalidad_peligro} muertes): "
+                f"{n_degradados} días degradados a PRECAUCION"
+            )
+
     etiquetas = {0: "seguro", 1: "precaucion", 2: "peligro"}
     df["clase_riesgo_calor_label"] = df["clase_riesgo_calor"].map(etiquetas)
 
@@ -88,6 +118,7 @@ def asignar_clase_riesgo_frio(
     q_precaucion: float = 0.75,
     q_peligro: float = 0.95,
     por_provincia: bool = True,
+    min_mortalidad_peligro: float | None = 2.0,
 ) -> pd.DataFrame:
     """
     Asigna la clase de riesgo (0=SEGURO, 1=PRECAUCION, 2=PELIGRO) a partir
@@ -122,6 +153,12 @@ def asignar_clase_riesgo_frio(
     por_provincia : bool
         Igual que en asignar_clase_riesgo_calor(): True (recomendado)
         calcula los percentiles dentro de cada provincia por separado.
+    min_mortalidad_peligro : float | None
+        Suelo absoluto de mortalidad para PELIGRO -- ver la explicación
+        detallada en asignar_clase_riesgo_calor(). Por defecto 2.0: un día
+        que caería en PELIGRO solo por percentil pero con menos muertes
+        atribuidas que el suelo se degrada a PRECAUCION (sigue avisando).
+        None desactiva el suelo.
 
     Returns
     -------
@@ -155,6 +192,21 @@ def asignar_clase_riesgo_frio(
         )
     else:
         df["clase_riesgo_frio"] = _clasificar(df[col_mortalidad])
+
+    if min_mortalidad_peligro is not None:
+        # Suelo absoluto: PELIGRO por percentil pero con mortalidad por debajo
+        # del suelo -> se degrada a PRECAUCION (sigue siendo aviso, no SEGURO).
+        degradar = (
+            (df["clase_riesgo_frio"] == 2)
+            & (df[col_mortalidad] < min_mortalidad_peligro)
+        )
+        n_degradados = int(degradar.sum())
+        df.loc[degradar, "clase_riesgo_frio"] = 1
+        if n_degradados:
+            print(
+                f"    Suelo PELIGRO (>= {min_mortalidad_peligro} muertes): "
+                f"{n_degradados} días degradados a PRECAUCION"
+            )
 
     etiquetas = {0: "seguro", 1: "precaucion", 2: "peligro"}
     df["clase_riesgo_frio_label"] = df["clase_riesgo_frio"].map(etiquetas)

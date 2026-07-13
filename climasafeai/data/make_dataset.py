@@ -433,20 +433,37 @@ def _agregar_estadisticas_diarias(
     return stats
 
 
+def _racha_previa(col: pd.Series, activo_si_mayor_que: float = 0.0) -> pd.Series:
+    """
+    Nº de días consecutivos ANTERIORES (hasta ayer) con `col > activo_si_mayor_que`.
+
+    Cuenta la longitud de la racha vigente al COMIENZO del día actual: mira
+    solo el pasado (shift(1)), así que no hay fuga de datos. Sirve tanto para
+    rachas de frío (sobre horas_bajo_umbral) como de calor (sobre
+    horas_sobre_umbral).
+    """
+    activo = (col > activo_si_mayor_que).astype(int)
+    bloques = (activo != activo.shift()).cumsum()               # id de racha
+    incl = activo.groupby(bloques).cumcount().add(1).where(activo == 1, 0)
+    return incl.shift(1).fillna(0)                              # racha hasta AYER
+
+
 def _agregar_rezagos_temporales(
     df_dia: pd.DataFrame,
     group_col: str = "provincia",
     date_col: str = "fecha",
+    umbral_calor: float = HEAT_INDEX_UMBRAL_C,
+    umbral_frio: float = WIND_CHILL_UMBRAL_C,
 ) -> pd.DataFrame:
     """
     Features de PERSISTENCIA entre días (no dentro del día): capturan que el
-    riesgo depende de la racha, no solo del día actual.
+    riesgo depende de la racha y de la CARGA ACUMULADA, no solo del día actual.
 
-    Motivación: el efecto del frío sobre la mortalidad es RETARDADO y
-    ACUMULATIVO (una racha de días fríos mata más que un día suelto), mientras
-    que el del calor es de lag corto (mismo día / día siguiente). Por eso el
-    frío lleva medias móviles de varios días y una racha, y el calor solo el
-    día anterior.
+    Motivación: el efecto de la temperatura sobre la mortalidad es RETARDADO y
+    ACUMULATIVO -- una ola sostenida (calor o frío) mata más que un día suelto
+    con el mismo pico, porque el cuerpo no se recupera de noche. Antes solo el
+    frío llevaba histórico de varios días; ahora ambos llevan medias móviles,
+    rachas y grados-día acumulados sobre varias ventanas.
 
     Estrictamente PASADO (shift positivo) -> no hay fuga de datos aunque el
     split train/test sea temporal: cada día solo mira sus propios días
@@ -454,39 +471,82 @@ def _agregar_rezagos_temporales(
     de calendario.
 
     Columnas nuevas (una fila por (provincia, fecha)):
-      Calor (lag corto):
-        heat_index_c_lag1        Heat Index (pico) del día anterior
-      Frío (acumulativo):
-        wind_chill_mean_roll3    media de wind_chill_mean de los 3 días previos
-        wind_chill_mean_roll7    ... de los 7 días previos
-        dias_consec_bajo_umbral  nº de días consecutivos ANTERIORES con
-                                 horas_bajo_umbral > 0 (racha de frío sin tregua)
+      Calor:
+        heat_index_c_lag1          Heat Index (pico) del día anterior
+        heat_index_c_roll3/roll7   media del HI pico de los 3 / 7 días previos
+                                   (calor sostenido de corto y medio plazo)
+        dias_consec_sobre_umbral   nº de días consecutivos ANTERIORES con
+                                   horas_sobre_umbral > 0 (ola de calor sin tregua)
+        grados_dia_calor_roll7/14  grados-día de calor acumulados en los 7 / 14
+                                   días previos: suma de max(heat_index_mean -
+                                   umbral_calor, 0). Carga térmica acumulada.
+      Frío:
+        wind_chill_mean_roll3/7/14 media de wind_chill_mean de los 3 / 7 / 14
+                                   días previos
+        dias_consec_bajo_umbral    nº de días consecutivos ANTERIORES con
+                                   horas_bajo_umbral > 0 (racha de frío sin tregua)
+        grados_dia_frio_roll7/14   grados-día de frío acumulados en los 7 / 14
+                                   días previos: suma de max(umbral_frio -
+                                   wind_chill_mean, 0). Carga de frío acumulada.
 
-    NaN en el primer día de cada provincia (sin histórico) -> preprocess_data
+    NaN en los primeros días de cada provincia (sin histórico) -> preprocess_data
     los rellena con la media, igual que el resto de features.
     """
     df = df_dia.sort_values([group_col, date_col]).copy()
     g = df.groupby(group_col, sort=False)
 
+    # --- Calor ---
     if "heat_index_c" in df.columns:
         df["heat_index_c_lag1"] = g["heat_index_c"].shift(1)
-
-    if "wind_chill_mean" in df.columns:
         # shift(1) primero -> el día actual NO entra en su propia media (solo pasado)
+        df["heat_index_c_roll3"] = g["heat_index_c"].transform(
+            lambda s: s.shift(1).rolling(3, min_periods=1).mean()
+        )
+        df["heat_index_c_roll7"] = g["heat_index_c"].transform(
+            lambda s: s.shift(1).rolling(7, min_periods=1).mean()
+        )
+
+    if "horas_sobre_umbral" in df.columns:
+        df["dias_consec_sobre_umbral"] = g["horas_sobre_umbral"].transform(_racha_previa)
+
+    if "heat_index_mean" in df.columns:
+        # Grados-día de calor: exceso del HI medio diario sobre el umbral,
+        # acumulado sobre los N días PREVIOS (shift(1) -> solo pasado).
+        exceso_calor = (df["heat_index_mean"] - umbral_calor).clip(lower=0)
+        df["_exceso_calor"] = exceso_calor
+        df["grados_dia_calor_roll7"] = df.groupby(group_col, sort=False)["_exceso_calor"].transform(
+            lambda s: s.shift(1).rolling(7, min_periods=1).sum()
+        )
+        df["grados_dia_calor_roll14"] = df.groupby(group_col, sort=False)["_exceso_calor"].transform(
+            lambda s: s.shift(1).rolling(14, min_periods=1).sum()
+        )
+        df.drop(columns="_exceso_calor", inplace=True)
+
+    # --- Frío ---
+    if "wind_chill_mean" in df.columns:
         df["wind_chill_mean_roll3"] = g["wind_chill_mean"].transform(
             lambda s: s.shift(1).rolling(3, min_periods=1).mean()
         )
         df["wind_chill_mean_roll7"] = g["wind_chill_mean"].transform(
             lambda s: s.shift(1).rolling(7, min_periods=1).mean()
         )
+        df["wind_chill_mean_roll14"] = g["wind_chill_mean"].transform(
+            lambda s: s.shift(1).rolling(14, min_periods=1).mean()
+        )
+        # Grados-día de frío: déficit del wind chill medio bajo el umbral,
+        # acumulado sobre los N días PREVIOS.
+        deficit_frio = (umbral_frio - df["wind_chill_mean"]).clip(lower=0)
+        df["_deficit_frio"] = deficit_frio
+        df["grados_dia_frio_roll7"] = df.groupby(group_col, sort=False)["_deficit_frio"].transform(
+            lambda s: s.shift(1).rolling(7, min_periods=1).sum()
+        )
+        df["grados_dia_frio_roll14"] = df.groupby(group_col, sort=False)["_deficit_frio"].transform(
+            lambda s: s.shift(1).rolling(14, min_periods=1).sum()
+        )
+        df.drop(columns="_deficit_frio", inplace=True)
 
     if "horas_bajo_umbral" in df.columns:
-        def _racha_frio_previa(col: pd.Series) -> pd.Series:
-            frio = (col > 0).astype(int)
-            bloques = (frio != frio.shift()).cumsum()            # id de racha
-            incl = frio.groupby(bloques).cumcount().add(1).where(frio == 1, 0)
-            return incl.shift(1).fillna(0)                        # racha hasta AYER
-        df["dias_consec_bajo_umbral"] = g["horas_bajo_umbral"].transform(_racha_frio_previa)
+        df["dias_consec_bajo_umbral"] = g["horas_bajo_umbral"].transform(_racha_previa)
 
     return df
 
