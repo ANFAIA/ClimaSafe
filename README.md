@@ -11,7 +11,7 @@
 
 **Tipo de ML:** `supervisado`  
 **Autor:** Alejandro Cancelas Chapela  
-**Versión:** 0.0.1 · dos modelos por clase — XGBoost (calor) / RandomForest (frío)
+**Versión:** 0.0.1 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
 
 
 ClimaSafe estima, para cada **provincia y día**, el nivel de riesgo por temperatura
@@ -30,10 +30,12 @@ que un aviso de menos. (La radiación UV queda como línea futura; hoy cubre cal
   `wind_chill_mean_roll7`, `dias_consec_bajo_umbral`) — el frío es acumulativo, así que la
   *racha* de días fríos pesa más que el día suelto.
 - **Split por fecha** (no aleatorio) para no filtrar días de la misma ola entre train y test.
-- **Dos modelos, uno por clase**, elegidos por **recall de las clases de riesgo**
-  (`Rec_riesgo`), no por accuracy: **XGBoost (con pesos de clase) para calor** y
-  **RandomForest para frío**. Seguimiento con **MLflow** y validación cruzada **temporal
-  por años**.
+- **Tres modelos**: **XGBoost (calor)**, **RandomForest (frío)** y **LSTM province_hybrid**
+  (LSTM + embedding provincia + INE + features diarias, tarea multi-tarea calor/frío).
+  Elegidos por **recall de las clases de riesgo** (`Rec_riesgo`), no por accuracy.
+- Seguimiento con **MLflow** y validación cruzada **temporal por años**.
+- Rec_riesgo actual (con umbrales calibrados): XGBoost **0.668** (calor), RF **0.612** (frío),
+  LSTM **0.737** calor / **0.708** frío.
 - Detalle y justificación de cada decisión en
   [`documentacion/conclusiones_modelos.md`](documentacion/conclusiones_modelos.md).
 
@@ -140,3 +142,9 @@ Consulta el archivo `documentacion` para más detalles.
 ---
 
 Template generado con https://github.com/cacelass/dskit
+
+---
+
+> **Early-stage project.** Architecture, stack and scope may evolve during development.
+>
+> Built as part of the **ANFAIA Summer Grants 2026**.

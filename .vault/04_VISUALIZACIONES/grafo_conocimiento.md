@@ -14,14 +14,14 @@ Generado el 2026-07-09 con Graphify + Gemini sobre todo el proyecto.
 
 ## Métricas
 
-| Métrica | Valor |
-|---------|-------|
-| Nodos | 1077 |
-| Aristas | 2216 |
-| Comunidades | 71 |
-| Extracción | 95% AST, 5% inferida (Gemini) |
-| Coste | ~$0.02 |
-| Commit | `4c5415f4` |
+| Métrica     | Valor                         |
+| ----------- | ----------------------------- |
+| Nodos       | 1077                          |
+| Aristas     | 2216                          |
+| Comunidades | 71                            |
+| Extracción  | 95% AST, 5% inferida (Gemini) |
+| Coste       | ~$0.0                         |
+| Commit      | `4c5415f4`                    |
 
 ## God Nodes (mayor centralidad)
 

@@ -138,6 +138,46 @@
 - añadidos agentes y sus respectivas funciones
 - Estructura inicial creada
 
+## [Unreleased] — 2026-07-14
+
+### Añadido
+
+- features nocturnas (`t2m_min_noche`) y rachas severas (`horas_wc_severo`) para frío (+0.026 Rec_riesgo en RF)
+- per-class feature selection: 27 features para calor, 19 para frío (ablación 27v19)
+- pipeline completo en `main.py` reemplaza notebooks: XGBoost calor + RF frío inline + LSTM híbrida
+- evaluación dual (argmax + umbrales calibrados) en main.py
+- recalibración de umbrales: calor t1=0.40/t2=0.35, frío t1=0.45/t2=0.40
+
+- LSTM híbrida con contexto de ola (secuencia 24h + features diarias INE + provincia)
+- LSTM con embedding de provincia (LSTMProvince) y mecanismos de atención/gating
+- HPO de atención LSTM (4 configs emb/fusión/lr probadas)
+- calibración de umbrales de decisión por clase (cascada por severidad) sobre validación temporal
+- baseline LightGBM como candidato a KNN
+- ablación features 27 vs 19 con label fijo
+- features de frío con retardo largo
+- dataset a 27 features y suelo de mortalidad en labels
+- `external_features.py` — datos INE por provincia para modelos híbridos
+- `main.py` reescrito: pipeline de 9 pasos con verificaciones de existencia y skip automático
+
+### Eliminado
+
+- `experimento_label_sin_fuga.py` — script huérfano sin referencias
+
+### Cambiado
+
+- notebooks 0-2 (calor/frío): actualizados con modelo desplegado por clase
+- notebook 0-3-LSTM: añadida Part D con experimentos province, hybrid, gated, attention HPO, ensemble
+- `.vault/` actualizado: nuevo `03_MODELOS/LSTM.md`, notas de arquitectura, modelos y roadmap
+
+### Documentación
+
+- documenta la frontera recall/precisión y la recomendación de umbrales (`documentacion/calibracion_umbrales.md`)
+- documenta eliminación de fuga temporal train-test del label (`documentacion/label_sin_fuga.md`)
+- documenta la ablación de features (`documentacion/ablacion_features_27v19.md`)
+- documenta features de frío con retardo (`documentacion/features_frio_retardo.md`)
+- documenta LSTM híbrida (`documentacion/lstm_hibrida.md`)
+- conclusiones de modelos actualizadas (`documentacion/conclusiones_modelos.md`)
+
 ## [Unreleased] — 2026-07-11
 
 ### Añadido

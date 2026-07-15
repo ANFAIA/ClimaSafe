@@ -1,0 +1,217 @@
+{
+  "main": {
+    "id": "a8d2cc1e82bcc4cb",
+    "type": "split",
+    "children": [
+      {
+        "id": "07e10e2bb163d6b5",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "09c916f33ac7b60e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "04_VISUALIZACIONES/grafo_conocimiento.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "grafo_conocimiento"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "106d528e9527ed35",
+    "type": "split",
+    "children": [
+      {
+        "id": "2096d91336610dd8",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6b5aceb6ae7c2814",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorador de archivos"
+            }
+          },
+          {
+            "id": "34fd614f9faa0e92",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Buscar"
+            }
+          },
+          {
+            "id": "f462ccbde0e45519",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Marcadores"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "936283c498e2746c",
+    "type": "split",
+    "children": [
+      {
+        "id": "ba8afdd44a614596",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8680d301f8a6c359",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "05_AGENTES/DependencyAgent.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Enlaces entrantes de DependencyAgent"
+            }
+          },
+          {
+            "id": "934f77b9f931a493",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "05_AGENTES/DependencyAgent.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Enlaces salientes de DependencyAgent"
+            }
+          },
+          {
+            "id": "8893e4da95d7b0df",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Etiquetas"
+            }
+          },
+          {
+            "id": "1ecf65b02132f75e",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Todas las propiedades"
+            }
+          },
+          {
+            "id": "11bdb056d0afc133",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "05_AGENTES/DependencyAgent.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Esquema de DependencyAgent"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Abrir selector rápido": false,
+      "graph:Abrir vista gráfica": false,
+      "canvas:Crear nuevo lienzo": false,
+      "daily-notes:Abrir la nota de hoy": false,
+      "templates:Insertar plantilla": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "bases:Crear nueva base": false
+    }
+  },
+  "active": "09c916f33ac7b60e",
+  "lastOpenFiles": [
+    "06_OBSERVACIONES/2026-07-15_optimizacion_lstm.md",
+    "05_AGENTES.md",
+    "05_AGENTES/_index.md",
+    "05_AGENTES/CICDAgent.md",
+    "00_META/templates/agente.md",
+    "00_META/templates/modelo.md",
+    "00_META/templates/nota_base.md",
+    "06_OBSERVACIONES/2026-07-14_actualizacion_pipeline.md",
+    "06_OBSERVACIONES/2026-07-09_inicio_vault.md",
+    "05_AGENTES/SecretsAgent.md",
+    "05_AGENTES/GraphAgent.md",
+    "05_AGENTES/DockerAgent.md",
+    "05_AGENTES/APIAgent.md",
+    "04_VISUALIZACIONES/grafo_conocimiento.md",
+    "03_MODELOS/RandomForest_calor.md",
+    "03_MODELOS/LSTM.md",
+    "03_MODELOS/KNN.md",
+    "03_MODELOS/hiperparametros.md",
+    "02_DATOS/fuentes.md",
+    "02_DATOS/features.md",
+    "01_PROYECTO/roadmap.md",
+    "01_PROYECTO/modelos.md",
+    "01_PROYECTO/arquitectura.md",
+    "01_PROYECTO/agentes.md",
+    "00_META/IA_index.md",
+    "07_REFERENCIAS/papers.md",
+    "documenatcion"
+  ]
+}
