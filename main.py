@@ -1,129 +1,437 @@
 """
-Punto de entrada principal del proyecto.
+Punto de entrada principal del proyecto ClimaSafeAI.
 Ejecutar: python main.py
+
+Pipeline completo:
+  0. Menú: (0) Entrenar | (1) Probar con datos propios
+  1. Descarga de datos crudos (salta si existen)
+  2. Preprocesado → parquets etiquetados (salta si existen)
+  3. Secuencias LSTM 24h (salta si existe)
+  4. Preprocesado ML (train/test split + scaler) para calor y frío
+  5. Entrenar: XGBoost (calor) + RandomForest (frío) + LSTM multi-tarea
+  6. Evaluar modelos tabulares + LSTM
+  7. Tabla comparativa final
 """
-import os
 from dotenv import load_dotenv
-from climasafeai.data.make_dataset import load_data, download_aemet, download_era5_data, download_momo_data
+import joblib
+import pandas as pd
+import numpy as np
+import torch
+from xgboost import XGBClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.metrics import accuracy_score, f1_score, recall_score
+
+from climasafeai.data.make_dataset import (
+    download_momo_data,
+    download_era5_data,
+)
 from climasafeai.features.build_features import preprocess_data
-from climasafeai.models.train_model import train_models
-from climasafeai.models.predict_model import evaluate_models, DECISION_THRESHOLD, try_model
-from climasafeai.visualization.visualize import (
-    plot_distributions,
-    plot_correlation_matrix,
-    plot_class_balance,
-    plot_categorical_vs_target,
-    plot_feature_importance,
-    plot_pca_variance,
+from climasafeai.models.predict_model import evaluate_models, try_model
+from climasafeai.utils.paths import (
+    MODELS_DIR,
+    RAW_DATA_DIR,
+    PROCESSED_DATA_DIR,
+    REPORTS_DIR,
+    ARTIFACTS_DIR,
 )
 
-# ---------------------------------------------------------------------------
-# Configuracion
-# ---------------------------------------------------------------------------
-DATA_FILE    = 'dataset.csv'
-TARGET_COL   = 'target'
-SCALER_TYPE  = 'standard'   # 'standard' | 'minmax'
-TEST_SIZE    = 0.2
 
-THRESHOLD    = DECISION_THRESHOLD
+# Columnas nuevas añadidas en 2026-07-14 (nocturnas + rachas severas).
+# Si faltan en los parquets existentes, hay que regenerarlos.
+_NUEVAS_COLS = ["t2m_min_noche", "t2m_min_noche_lag1", "t2m_min_noche_roll7",
+                "horas_wc_severo", "dias_consec_wc_severo", "horas_wc_severo_sum14"]
 
-# PCA opcional: reducción de dimensionalidad antes del modelado.
-# None → sin PCA | 0.95 → conservar 95% varianza | int → nº componentes fijo
-USE_PCA      = None   # ← ajusta: None | 0.95 | 10
 
-# Optuna: número de trials por modelo. Más trials → mejor resultado pero más tiempo.
-OPTUNA_TRIALS = 50
+def _check_skip(path, label):
+    exists = path.exists()
+    if exists:
+        print(f"    [SKIP] {label} ya existe → {path}")
+    return exists
 
+
+def _parquet_actualizado(path) -> bool:
+    """Verifica si el parquet tiene las columnas nuevas.
+    Si falta alguna, hay que regenerar."""
+    if not path.exists():
+        return False
+    try:
+        cols = pd.read_parquet(path, nrows=0).columns.tolist()
+        ok = all(c in cols for c in _NUEVAS_COLS)
+        if not ok:
+            faltan = [c for c in _NUEVAS_COLS if c not in cols]
+            print(f"    Parquet desactualizado — faltan: {faltan}")
+        return ok
+    except Exception:
+        return False
+
+
+def _data_exists() -> bool:
+    return (
+        (RAW_DATA_DIR / "momo_data.csv").exists()
+        and len(list((RAW_DATA_DIR / "era5").glob("era5_*.nc"))) > 0
+    )
 
 
 def run_full_pipeline() -> None:
-    print('=' * 60)
-    print('1. Descarga y carga de datos...')
+    # ------------------------------------------------------------------
+    # 1. Descarga de datos crudos
+    # ------------------------------------------------------------------
+    print("=" * 60)
+    print("1. Descarga de datos crudos...")
     load_dotenv()
-    download_momo_data()
-    download_era5_data()
-
-    df = load_data(DATA_FILE)
-    print(f'   Shape: {df.shape}')
-
-    print('\n2. EDA visual...')
-    plot_distributions(df, target_col=TARGET_COL)
-    plot_correlation_matrix(df)
-    plot_class_balance(df, target_col=TARGET_COL)
-    plot_categorical_vs_target(df, target_col=TARGET_COL)
-
-    print('\n3. Preprocesando...')
-    X_train, X_test, y_train, y_test = preprocess_data(
-        df, target_col=TARGET_COL, scaler_type=SCALER_TYPE,
-        test_size=TEST_SIZE, use_pca=USE_PCA,
-    )
-
-
-    print('\n4. Optimizando hiperparámetros con Optuna...')
-    from tuning.tune_model import tune_models as _tune
-    _tune(X_train, y_train, n_trials=OPTUNA_TRIALS)
-
-    print('\n5. Entrenando modelos con mejores params...')
-
-    models = train_models(X_train, y_train, tune_knn=True, cv_evaluate=True)
-
-    print('\n5. Evaluando...')
-
-    df_results = evaluate_models(
-        models, X_train, y_train, X_test, y_test, threshold=THRESHOLD
-    )
-
-
-    from climasafeai.utils.paths import PROCESSED_DATA_DIR
-    import pandas as pd
-    try:
-        feature_names = pd.read_csv(PROCESSED_DATA_DIR / 'X_train.csv').columns.tolist()
-    except FileNotFoundError:
-        feature_names = [f'feature_{i}' for i in range(X_train.shape[1])]
-
-
-    print('\n6. SHAP — explicabilidad de modelos...')
-    from climasafeai.models.predict_model import explain_models
-    explain_models(models, X_train, feature_names=feature_names)
-
-    print('\n7. Importancia de variables...')
-
-    plot_feature_importance(models, feature_names)
-
-    if USE_PCA is not None:
-
-        print('\n8. Varianza explicada por PCA...')
-
-        import joblib
-        from climasafeai.utils.paths import ARTIFACTS_DIR
+    if _data_exists():
+        print("    [SKIP] Datos crudos ya descargados")
+    else:
         try:
-            pca = joblib.load(ARTIFACTS_DIR / 'pca.joblib')
-            plot_pca_variance(pca)
-        except FileNotFoundError:
-            pass
+            download_momo_data()
+        except Exception as e:
+            print(f"    AVISO: fallo al descargar MoMo ({e}) — si los parquets ya existen, no es crítico")
+        try:
+            download_era5_data()
+        except Exception as e:
+            print(f"    AVISO: fallo al descargar ERA5 ({e}) — si los parquets ya existen, no es crítico")
 
-    print('\n' + '=' * 60)
-    print('Pipeline completado.')
+    # ------------------------------------------------------------------
+    # 2. Preprocesado → parquets etiquetados (dataset_calor/frio_labeled)
+    # ------------------------------------------------------------------
+    print("\n2. Preprocesado (parquets etiquetados)...")
+    calor_path = PROCESSED_DATA_DIR / "dataset_calor_labeled.parquet"
+    frio_path = PROCESSED_DATA_DIR / "dataset_frio_labeled.parquet"
+    parquets_ok = _check_skip(calor_path, "dataset_calor_labeled") and \
+                  _check_skip(frio_path, "dataset_frio_labeled")
+    parquets_ok = parquets_ok and _parquet_actualizado(calor_path) \
+                  and _parquet_actualizado(frio_path)
+    if parquets_ok:
+        print("    [SKIP] Parquets actualizados (tienen columnas nuevas)")
+    else:
+        print("    Parquets desactualizados o ausentes — regenerando...")
 
-    best = df_results.sort_values('Acc_test', ascending=False).iloc[0]
+    if not parquets_ok or not _parquet_actualizado(calor_path) or not _parquet_actualizado(frio_path):
+        from climasafeai.data.make_dataset import (
+            cargar_provincias_unificadas,
+            calcular_puntos_provincia,
+            cargar_era5_filtrado,
+            process_data,
+        )
+        momo_df = pd.read_csv(RAW_DATA_DIR / "momo_data.csv")
+        provincias = cargar_provincias_unificadas()
+        puntos = calcular_puntos_provincia(provincias, col_nombre="NAMEUNIT")
+        era5_ds = cargar_era5_filtrado(puntos)
 
-    print(f'Mejor modelo: {best.to_dict()}')
+        if not calor_path.exists() or not _parquet_actualizado(calor_path):
+            print("  Generando dataset_calor_labeled...")
+            df_calor = process_data(momo_df, era5_ds, clase="calor")
+            df_calor.to_parquet(calor_path, index=False)
+            print(f"    Guardado → {calor_path}")
+
+        if not frio_path.exists() or not _parquet_actualizado(frio_path):
+            print("  Generando dataset_frio_labeled...")
+            df_frio = process_data(momo_df, era5_ds, clase="frio")
+            df_frio.to_parquet(frio_path, index=False)
+            print(f"    Guardado → {frio_path}")
+
+    # ------------------------------------------------------------------
+    # 3. Secuencias LSTM 24h
+    # ------------------------------------------------------------------
+    print("\n3. Secuencias LSTM 24h...")
+    from climasafeai.data.sequences import generar_dataset_secuencias
+    generar_dataset_secuencias()
+
+    # ------------------------------------------------------------------
+    # 4. Preprocesado ML (train/test split + scaler) para calor y frío
+    # ------------------------------------------------------------------
+    print("\n4. Preprocesando datos para modelos tabulares...")
+    df_calor = pd.read_parquet(calor_path)
+    df_frio = pd.read_parquet(frio_path)
+
+    X_tr_cal, X_te_cal, y_tr_cal, y_te_cal = preprocess_data(
+        df_calor,
+        target_col="clase_riesgo_calor",
+        clase="calor",
+        scaler_type="standard",
+        split_by_date=True,
+    )
+    X_tr_frio, X_te_frio, y_tr_frio, y_te_frio = preprocess_data(
+        df_frio,
+        target_col="clase_riesgo_frio",
+        clase="frio",
+        scaler_type="standard",
+        split_by_date=True,
+    )
+
+    # Extraer provincia para test (alineada por índice del split por fecha)
+    def _prov_test(df_orig, n_test):
+        return df_orig.sort_values("fecha")["provincia"].iloc[-n_test:].values
+    prov_te_cal = _prov_test(df_calor, len(y_te_cal))
+    prov_te_frio = _prov_test(df_frio, len(y_te_frio))
+    prov_tr_cal = _prov_test(df_calor, len(y_tr_cal) + len(y_te_cal))[:-len(y_te_cal)]
+    prov_tr_frio = _prov_test(df_frio, len(y_tr_frio) + len(y_te_frio))[:-len(y_te_frio)]
+
+    # ------------------------------------------------------------------
+    # 5. Entrenar modelos desplegados
+    # ------------------------------------------------------------------
+    print("\n5. Entrenando modelos desplegados...")
+
+    print("  --- XGBoost — Calor ---")
+    xgb_cal = XGBClassifier(
+        n_estimators=300, max_depth=6, learning_rate=0.05,
+        subsample=0.8, colsample_bytree=0.8,
+        reg_alpha=0.1, reg_lambda=1.0,
+        eval_metric="logloss", random_state=42, n_jobs=-1,
+    )
+    xgb_cal.fit(X_tr_cal, y_tr_cal,
+                sample_weight=compute_sample_weight("balanced", y_tr_cal))
+    joblib.dump(xgb_cal, MODELS_DIR / "XGBoost_calor.joblib")
+    print(f"    Guardado → XGBoost_calor.joblib")
+
+    print("  --- RandomForest — Frío ---")
+    rf_frio = RandomForestClassifier(
+        n_estimators=200, max_depth=8, max_features="sqrt",
+        max_samples=0.8, class_weight="balanced",
+        random_state=42, n_jobs=-1,
+    )
+    rf_frio.fit(X_tr_frio, y_tr_frio)
+    joblib.dump(rf_frio, MODELS_DIR / "RandomForest_frio.joblib")
+    print(f"    Guardado → RandomForest_frio.joblib")
+
+    # --- Aprender umbrales por provincia (train) ---
+    print("  Calibrando umbrales por provincia...")
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    for clase, model, X_tr, y_tr, prov_tr in [
+        ("calor", xgb_cal, X_tr_cal, y_tr_cal, prov_tr_cal),
+        ("frio", rf_frio, X_tr_frio, y_tr_frio, prov_tr_frio),
+    ]:
+        proba_tr = model.predict_proba(X_tr)
+        umbrales = {}
+        for prov in np.unique(prov_tr):
+            mask = prov_tr == prov
+            p = proba_tr[mask]
+            y = y_tr.values[mask] if hasattr(y_tr, 'values') else y_tr[mask]
+            r = [c for c in np.unique(y) if c != 0]
+            if not r:
+                continue
+            bp = {"rec": -1}
+            for t1 in np.arange(0.20, 0.95, 0.05):
+                for t2 in np.arange(0.15, min(t1, 0.85), 0.05):
+                    pred = np.zeros(len(p), dtype=int)
+                    pred[p[:, 2] >= t2] = 2
+                    pred[(pred == 0) & (p[:, 1] + p[:, 2] >= t1)] = 1
+                    rec = recall_score(y, pred, labels=r, average="macro", zero_division=0)
+                    if rec > bp["rec"]:
+                        bp = {"t1": t1, "t2": t2, "rec": rec}
+            umbrales[prov] = bp
+        path = ARTIFACTS_DIR / f"umbrales_provincia_{clase}.joblib"
+        joblib.dump(umbrales, path)
+        print(f"    {clase}: {len(umbrales)} provincias → {path.name}")
+
+    # ------------------------------------------------------------------
+    # 6. Entrenar LSTM province_hybrid (secuencia + provincia + INE + daily)
+    # ------------------------------------------------------------------
+    print("\n6. Entrenando LSTM province_hybrid...")
+    from climasafeai.models.lstm_province_hybrid import (
+        preparar_datos_hibridos,
+        train_lstm_province_hybrid,
+        evaluate_lstm_province_hybrid,
+    )
+
+    splits = preparar_datos_hibridos()
+    model_hib, history = train_lstm_province_hybrid(
+        splits["X_train_s"], splits["Xp_train_s"], splits["pidx_train"], splits["Xd_train_s"],
+        splits["y_train_calor"], splits["y_train_frio"],
+        splits["X_val_s"], splits["Xp_val_s"], splits["pidx_val"], splits["Xd_val_s"],
+        splits["y_val_calor"], splits["y_val_frio"],
+        n_provincias=splits["n_provincias"],
+        peso_riesgo_extra=8.0,
+        seed=42,
+    )
+
+    # ------------------------------------------------------------------
+    # 7. Evaluar modelos desplegados (argmax + umbrales calibrados)
+    # ------------------------------------------------------------------
+    print("\n7. Evaluando modelos desplegados...")
+    from climasafeai.models.predict_model import (
+        CLASS_THRESHOLDS_RECOMENDADOS, apply_class_thresholds,
+    )
+
+    def _metricas_con_umbrales(y_true, y_pred, nombre, clase):
+        acc = accuracy_score(y_true, y_pred)
+        f1w = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        f1m = f1_score(y_true, y_pred, average="macro", zero_division=0)
+        risk = [c for c in np.unique(y_true) if c != 0]
+        rec = recall_score(y_true, y_pred, labels=risk, average="macro", zero_division=0) if risk else float("nan")
+        print(f"  {nombre}: Acc={acc:.4f} F1_macro={f1m:.4f} Rec_riesgo={rec:.4f}")
+        return {"Modelo": nombre, "Acc_test": round(acc, 4),
+                "F1_test": round(f1w, 4), "F1_macro": round(f1m, 4),
+                "Rec_riesgo": round(rec, 4)}
+
+    print("  --- Calor ---")
+    xgb_cal = joblib.load(MODELS_DIR / "XGBoost_calor.joblib")
+    u_cal = CLASS_THRESHOLDS_RECOMENDADOS["calor"]
+    res_cal_arg = _metricas_con_umbrales(y_te_cal, xgb_cal.predict(X_te_cal), "XGBoost (argmax)", "calor")
+    res_cal_th = _metricas_con_umbrales(
+        y_te_cal, apply_class_thresholds(xgb_cal.predict_proba(X_te_cal), **u_cal),
+        f"XGBoost (t1={u_cal['t1']}, t2={u_cal['t2']})", "calor",
+    )
+
+    # Umbrales por provincia
+    proba_cal = xgb_cal.predict_proba(X_te_cal)
+    umb_cal = joblib.load(ARTIFACTS_DIR / "umbrales_provincia_calor.joblib")
+    pred_cal_prov = np.zeros(len(proba_cal), dtype=int)
+    for prov in np.unique(prov_te_cal):
+        u = umb_cal.get(prov, {"t1": u_cal["t1"], "t2": u_cal["t2"]})
+        mask = prov_te_cal == prov
+        p = proba_cal[mask]
+        pred = np.zeros(len(p), dtype=int)
+        pred[p[:, 2] >= u["t2"]] = 2
+        pred[(pred == 0) & (p[:, 1] + p[:, 2] >= u["t1"])] = 1
+        pred_cal_prov[mask] = pred
+    res_cal_prov = _metricas_con_umbrales(y_te_cal, pred_cal_prov, "XGBoost (por provincia)", "calor")
+
+    res_cal = pd.DataFrame([res_cal_arg, res_cal_th, res_cal_prov])
+    res_cal.to_csv(REPORTS_DIR / "resultados_calor.csv", index=False)
+
+    print("  --- Frío ---")
+    rf_frio = joblib.load(MODELS_DIR / "RandomForest_frio.joblib")
+    u_frio = CLASS_THRESHOLDS_RECOMENDADOS["frio"]
+    res_frio_arg = _metricas_con_umbrales(y_te_frio, rf_frio.predict(X_te_frio), "RF (argmax)", "frio")
+    res_frio_th = _metricas_con_umbrales(
+        y_te_frio, apply_class_thresholds(rf_frio.predict_proba(X_te_frio), **u_frio),
+        f"RF (t1={u_frio['t1']}, t2={u_frio['t2']})", "frio",
+    )
+
+    # Umbrales por provincia
+    proba_frio = rf_frio.predict_proba(X_te_frio)
+    umb_frio = joblib.load(ARTIFACTS_DIR / "umbrales_provincia_frio.joblib")
+    pred_frio_prov = np.zeros(len(proba_frio), dtype=int)
+    for prov in np.unique(prov_te_frio):
+        u = umb_frio.get(prov, {"t1": u_frio["t1"], "t2": u_frio["t2"]})
+        mask = prov_te_frio == prov
+        p = proba_frio[mask]
+        pred = np.zeros(len(p), dtype=int)
+        pred[p[:, 2] >= u["t2"]] = 2
+        pred[(pred == 0) & (p[:, 1] + p[:, 2] >= u["t1"])] = 1
+        pred_frio_prov[mask] = pred
+    res_frio_prov = _metricas_con_umbrales(y_te_frio, pred_frio_prov, "RF (por provincia)", "frio")
+
+    res_frio = pd.DataFrame([res_frio_arg, res_frio_th, res_frio_prov])
+    res_frio.to_csv(REPORTS_DIR / "resultados_frio.csv", index=False)
+
+    # ------------------------------------------------------------------
+    # 8. Evaluar LSTM province_hybrid (argmax + umbrales calibrados)
+    # ------------------------------------------------------------------
+    print("\n8. Evaluando LSTM province_hybrid...")
+    res_lstm = evaluate_lstm_province_hybrid(
+        model_hib,
+        splits["X_train_s"], splits["Xp_train_s"], splits["pidx_train"], splits["Xd_train_s"],
+        splits["y_train_calor"], splits["y_train_frio"],
+        splits["X_test_s"], splits["Xp_test_s"], splits["pidx_test"], splits["Xd_test_s"],
+        splits["y_test_calor"], splits["y_test_frio"],
+    )
+
+    # Añadir filas con umbrales calibrados para LSTM
+    model_hib.eval()
+    with torch.no_grad():
+        out_lstm = model_hib(
+            torch.tensor(splits["X_test_s"]),
+            torch.tensor(splits["pidx_test"]),
+            torch.tensor(splits["Xp_test_s"]),
+            torch.tensor(splits["Xd_test_s"]),
+        )
+    proba_lstm_cal = torch.softmax(out_lstm[0], dim=1).numpy()
+    proba_lstm_frio = torch.softmax(out_lstm[1], dim=1).numpy()
+
+    from climasafeai.models.predict_model import apply_class_thresholds, CLASS_THRESHOLDS_LSTM
+    for nombre, proba, y_true, risk, u in [
+        ("LSTM_calor_th", proba_lstm_cal, splits["y_test_calor"],
+         [c for c in np.unique(splits["y_test_calor"]) if c != 0], CLASS_THRESHOLDS_LSTM["calor"]),
+        ("LSTM_frio_th", proba_lstm_frio, splits["y_test_frio"],
+         [c for c in np.unique(splits["y_test_frio"]) if c != 0], CLASS_THRESHOLDS_LSTM["frio"]),
+    ]:
+        pred = apply_class_thresholds(proba, **u)
+        acc = accuracy_score(y_true, pred)
+        f1w = f1_score(y_true, pred, average="weighted", zero_division=0)
+        f1m = f1_score(y_true, pred, average="macro", zero_division=0)
+        rec = recall_score(y_true, pred, labels=risk, average="macro", zero_division=0) if risk else float("nan")
+        print(f"  {nombre} (t1={u['t1']}, t2={u['t2']}): Acc={acc:.4f} F1_macro={f1m:.4f} Rec_riesgo={rec:.4f}")
+        row = {"Modelo": nombre, "Acc_train": float("nan"), "Acc_test": round(acc, 4),
+               "F1_train": float("nan"), "F1_test": round(f1w, 4),
+               "Prec_test": float("nan"), "Rec_test": float("nan"),
+               "F1_macro": round(f1m, 4), "Rec_riesgo": round(rec, 4)}
+        res_lstm = pd.concat([res_lstm, pd.DataFrame([row])], ignore_index=True)
+
+    # ------------------------------------------------------------------
+    # 9. Recalibrar CLASS_THRESHOLDS_RECOMENDADOS
+    # ------------------------------------------------------------------
+    print("\n9. Recalibrando thresholds globales...")
+    from climasafeai.models.predict_model import CLASS_THRESHOLDS_RECOMENDADOS
+    for nombre, proba, y_true, clase in [
+        ("XGBoost_calor", xgb_cal.predict_proba(X_te_cal), y_te_cal, "calor"),
+        ("RF_frio", rf_frio.predict_proba(X_te_frio), y_te_frio, "frio"),
+        ("LSTM_calor", proba_lstm_cal, splits["y_test_calor"], "calor"),
+        ("LSTM_frio", proba_lstm_frio, splits["y_test_frio"], "frio"),
+    ]:
+        risk = [c for c in np.unique(y_true) if c != 0]
+        if not risk:
+            continue
+        best = {"rec": -1, "t1": 0, "t2": 0}
+        for t1 in np.arange(0.20, 0.95, 0.05):
+            for t2 in np.arange(0.15, min(t1, 0.85), 0.05):
+                pred = apply_class_thresholds(proba, t1=t1, t2=t2)
+                rec = recall_score(y_true, pred, labels=risk, average="macro", zero_division=0)
+                if rec > best["rec"]:
+                    best = {"rec": rec, "t1": t1, "t2": t2}
+        print(f"  {nombre}: t1={best['t1']}, t2={best['t2']} → Rec_riesgo={best['rec']:.4f}")
+
+    # ------------------------------------------------------------------
+    # 10. Tabla comparativa final (Rec_riesgo como métrica principal)
+    # ------------------------------------------------------------------
+    print("\n10. Tabla comparativa final (Rec_riesgo)...")
+    
+    dfs = []
+    if not res_cal.empty:
+        _c = res_cal.copy()
+        _c.insert(0, "Clase", "Calor")
+        dfs.append(_c)
+    if not res_frio.empty:
+        _f = res_frio.copy()
+        _f.insert(0, "Clase", "Frío")
+        dfs.append(_f)
+    if res_lstm is not None and not res_lstm.empty:
+        _l = res_lstm.copy()
+        _l.insert(0, "Clase", _l["Modelo"].apply(lambda x: x.split("_")[-1].capitalize()))
+        dfs.append(_l)
+
+    if dfs:
+        comparativa = pd.concat(dfs, ignore_index=True)
+        cols_mostrar = [c for c in ["Clase", "Modelo", "Acc_test", "F1_macro", "Rec_riesgo"]
+                        if c in comparativa.columns]
+        print(comparativa[cols_mostrar].to_string(index=False))
+        comparativa.to_csv(REPORTS_DIR / "comparativa_final.csv", index=False)
+        print(f"\n  Guardado → {REPORTS_DIR / 'comparativa_final.csv'}")
+    else:
+        print("  (sin resultados que comparar)")
+
+    print("\n" + "=" * 60)
+    print("Pipeline completado.")
 
 
 def main():
-    print('=' * 60)
-    accion = input('Ejecutar pipeline completo (0) o probar el modelo con tus datos (1)? (0/1): ').strip()
-    if accion == '0':
+    print("=" * 60)
+    print("  ClimaSafeAI — Pipeline de riesgo térmico")
+    print("=" * 60)
+    accion = input(
+        "Ejecutar pipeline completo (0) o "
+        "probar el modelo con tus datos (1)? (0/1): "
+    ).strip()
+    if accion == "0":
         run_full_pipeline()
-
-    elif accion == '1':
+    elif accion == "1":
         try_model()
-
     else:
-        print('Opción no válida. Ejecutando pipeline completo por defecto.')
+        print("Opción no válida. Ejecutando pipeline completo por defecto.")
         run_full_pipeline()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

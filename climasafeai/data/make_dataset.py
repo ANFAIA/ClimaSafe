@@ -412,10 +412,18 @@ def _agregar_estadisticas_diarias(
 
     Estas columnas son features meteorológicas legítimas (no hay fuga de datos):
     se calculan solo a partir de variables de ERA5.
+
+    Añadidas en 2026-07-14 (experimento nocturnas + rachas severas):
+        t2m_min_noche      temperatura mínima en madrugada (horas 0-8)
+        horas_wc_severo    horas con wind_chill < -5°C (frío severo)
+    Ver tuning/features_frio.py y documentacion/features_frio_retardo.md.
     """
     df = df_hora.copy()
+    df["_hour"] = pd.to_datetime(df["datetime"]).dt.hour
+    df["_noche"] = df["_hour"].between(0, 8)
     df["_over"] = df[heat_col] > umbral_calor
     df["_under"] = df[cold_col] < umbral_frio
+    df["_severe"] = df[cold_col] < -5.0
     stats = (
         df.groupby(group_cols)
         .agg(
@@ -427,6 +435,8 @@ def _agregar_estadisticas_diarias(
             wind_chill_std=(cold_col, "std"),
             wind_chill_max=(cold_col, "max"),
             horas_bajo_umbral=("_under", "sum"),
+            t2m_min_noche=("t2m_c", lambda x: x.loc[df.loc[x.index, "_noche"]].min()),
+            horas_wc_severo=("_severe", "sum"),
         )
         .reset_index()
     )
@@ -547,6 +557,23 @@ def _agregar_rezagos_temporales(
 
     if "horas_bajo_umbral" in df.columns:
         df["dias_consec_bajo_umbral"] = g["horas_bajo_umbral"].transform(_racha_previa)
+
+    # --- Nocturnas y rachas severas (2026-07-14, ver tuning/features_frio.py) ---
+    # Mínima nocturna de temperatura (madrugada 0-8h): la mortalidad por frío
+    # se asocia más a noches frías sostenidas que al wind chill del pico diurno.
+    if "t2m_min_noche" in df.columns:
+        tn = df.groupby(group_col, sort=False)["t2m_min_noche"]
+        df["t2m_min_noche_lag1"] = tn.shift(1)
+        df["t2m_min_noche_roll7"] = tn.transform(
+            lambda s: s.shift(1).rolling(7, min_periods=1).mean()
+        )
+
+    if "horas_wc_severo" in df.columns:
+        hs = df.groupby(group_col, sort=False)["horas_wc_severo"]
+        df["dias_consec_wc_severo"] = hs.transform(_racha_previa)
+        df["horas_wc_severo_sum14"] = hs.transform(
+            lambda s: s.shift(1).rolling(14, min_periods=1).sum()
+        )
 
     return df
 

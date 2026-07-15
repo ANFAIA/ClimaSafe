@@ -1,0 +1,378 @@
+"""
+climasafeai.models.lstm_province_hybrid — LSTM multi-tarea con embedding de
+provincia + features INE + features diarias de contexto de ola.
+
+Unifica lstm_province (embedding geográfico-demográfico) y lstm_hybrid
+(contexto de ola: persistencia, medias rodantes) en un solo modelo. El tronco
+LSTM resume la secuencia horaria; su último estado oculto se concatena con el
+embedding de provincia, 4 features demográficas INE y 27 features diarias de
+contexto de ola, todo ello pasado por una capa de fusión y dos cabezas.
+"""
+
+from __future__ import annotations
+
+import copy
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader, TensorDataset
+
+import mlflow
+import mlflow.pytorch
+
+from climasafeai.data.sequences import (
+    cargar_dataset_secuencias,
+    split_secuencias_por_fecha,
+)
+from climasafeai.features.external_features import (
+    N_FEATURES_PROVINCIA,
+    crear_mapping_provincias,
+    fetch_ine_features,
+    alinear_features_provincia,
+    escalar_features_provincia,
+)
+from climasafeai.models.lstm_hybrid import (
+    DAILY_FEATURE_COLS,
+    alinear_features_diarias,
+    escalar_diarias,
+    LSTM_HYBRID_SCALER_DIARIAS_PATH,
+)
+from climasafeai.models.lstm_model import (
+    SEED,
+    _pesos_de_clase,
+    escalar_secuencias,
+)
+from climasafeai.models.predict_model import _plot_confusion_matrix
+from climasafeai.models.train_model import configurar_mlflow
+from climasafeai.utils.paths import MODELS_DIR, REPORTS_DIR, ARTIFACTS_DIR
+
+LSTM_PROVINCE_HYBRID_MODEL_PATH = MODELS_DIR / "LSTM_province_hybrid.pt"
+
+
+class LSTMProvinceHybridMultiTask(nn.Module):
+    """
+    Tronco LSTM + embedding provincia + INE + features diarias -> fusion -> 2 cabezas.
+    """
+
+    def __init__(
+        self,
+        n_features: int = 5,
+        n_provincias: int = 45,
+        emb_dim_provincia: int = 16,
+        n_features_provincia: int = N_FEATURES_PROVINCIA,
+        n_features_diarias: int = 27,
+        hidden_size: int = 64,
+        num_layers: int = 2,
+        dropout: float = 0.3,
+        fusion_size: int = 128,
+        n_clases: int = 3,
+    ):
+        super().__init__()
+        self.hparams = {
+            "n_features": n_features,
+            "n_provincias": n_provincias,
+            "emb_dim_provincia": emb_dim_provincia,
+            "n_features_provincia": n_features_provincia,
+            "n_features_diarias": n_features_diarias,
+            "hidden_size": hidden_size,
+            "num_layers": num_layers,
+            "dropout": dropout,
+            "fusion_size": fusion_size,
+            "n_clases": n_clases,
+        }
+        self.embedding = nn.Embedding(n_provincias, emb_dim_provincia)
+        self.lstm = nn.LSTM(
+            input_size=n_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout if num_layers > 1 else 0.0,
+            batch_first=True,
+        )
+        self.dropout = nn.Dropout(dropout)
+        fusion_in = hidden_size + emb_dim_provincia + n_features_provincia + n_features_diarias
+        self.fusion = nn.Sequential(
+            nn.Linear(fusion_in, fusion_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
+        self.head_calor = nn.Linear(fusion_size, n_clases)
+        self.head_frio = nn.Linear(fusion_size, n_clases)
+
+    def forward(self, x_seq, provincia_idx, x_ine, x_diarias):
+        _, (h_n, _) = self.lstm(x_seq)
+        h_t = self.dropout(h_n[-1])
+        emb = self.embedding(provincia_idx)
+        z = self.fusion(torch.cat([h_t, emb, x_ine, x_diarias], dim=1))
+        return self.head_calor(z), self.head_frio(z)
+
+    @property
+    def n_params(self):
+        return sum(p.numel() for p in self.parameters())
+
+
+def preparar_datos_hibridos():
+    """Prepara datos para el modelo híbrido: secuencias + INE + daily features."""
+    from climasafeai.models.lstm_province import preparar_datos as _prep_prov
+
+    splits = _prep_prov()
+    data = cargar_dataset_secuencias()
+
+    Xd = alinear_features_diarias(data["fechas"], data["provincias"])
+
+    fechas = data["fechas"]
+    mask_val = (fechas >= splits["fecha_corte_val"]) & (fechas < splits["fecha_corte_test"])
+    mask_test = fechas >= splits["fecha_corte_test"]
+    mask_train = ~(mask_val | mask_test)
+
+    _, Xd_train_s, Xd_val_s, Xd_test_s = escalar_diarias(
+        Xd[mask_train], Xd[mask_val], Xd[mask_test]
+    )
+
+    splits["Xd_train_s"] = Xd_train_s
+    splits["Xd_val_s"] = Xd_val_s
+    splits["Xd_test_s"] = Xd_test_s
+    splits["daily_feature_cols"] = DAILY_FEATURE_COLS
+    return splits
+
+
+def train_lstm_province_hybrid(
+    X_train, Xp_train, pidx_train, Xd_train,
+    y_train_calor, y_train_frio,
+    X_val, Xp_val, pidx_val, Xd_val,
+    y_val_calor, y_val_frio,
+    n_provincias=45,
+    emb_dim_provincia=16,
+    fusion_size=128,
+    hidden_size=64,
+    num_layers=2,
+    dropout=0.3,
+    lr=1e-3,
+    batch_size=256,
+    max_epochs=50,
+    patience=5,
+    device=None,
+    run_name="LSTM_province_hybrid",
+    feature_cols=None,
+    peso_riesgo_extra: float = 1.0,
+    seed: int | None = None,
+):
+    _seed = seed if seed is not None else SEED
+    torch.manual_seed(_seed)
+    np.random.seed(_seed)
+    device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+
+    model = LSTMProvinceHybridMultiTask(
+        n_features=X_train.shape[2],
+        n_provincias=n_provincias,
+        emb_dim_provincia=emb_dim_provincia,
+        n_features_provincia=Xp_train.shape[1],
+        n_features_diarias=Xd_train.shape[1],
+        hidden_size=hidden_size,
+        num_layers=num_layers,
+        dropout=dropout,
+        fusion_size=fusion_size,
+    ).to(device)
+
+    def _pesos(y):
+        w = _pesos_de_clase(y, device)
+        if peso_riesgo_extra != 1.0:
+            w = w.clone()
+            w[1:] *= peso_riesgo_extra
+        return w
+    loss_calor = nn.CrossEntropyLoss(weight=_pesos(y_train_calor))
+    loss_frio = nn.CrossEntropyLoss(weight=_pesos(y_train_frio))
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    train_dl = DataLoader(
+        TensorDataset(
+            torch.tensor(X_train), torch.tensor(Xp_train),
+            torch.tensor(pidx_train), torch.tensor(Xd_train),
+            torch.tensor(y_train_calor), torch.tensor(y_train_frio),
+        ),
+        batch_size=batch_size, shuffle=True,
+        generator=torch.Generator().manual_seed(_seed),
+    )
+    X_val_t = [torch.tensor(t, device=device) for t in [X_val, Xp_val, Xd_val]]
+    pidx_val_t = torch.tensor(pidx_val, device=device)
+    y_val_calor_t = torch.tensor(y_val_calor, device=device)
+    y_val_frio_t = torch.tensor(y_val_frio, device=device)
+
+    def _rec_riesgo(y_true, y_pred):
+        risk = [c for c in np.unique(y_true) if c != 0]
+        return recall_score(y_true, y_pred, labels=risk, average="macro", zero_division=0) if risk else float("nan")
+
+    configurar_mlflow()
+    mlflow.end_run()
+
+    history = []
+    best_val_loss = float("inf")
+    best_state = None
+    sin_mejora = 0
+
+    print(f"--> {run_name} en {device} ({model.n_params} parametros)...")
+
+    with mlflow.start_run(run_name=run_name):
+        mlflow.log_params({**model.hparams, "lr": lr, "batch_size": batch_size,
+                           "max_epochs": max_epochs, "patience": patience, "seed": _seed,
+                           "peso_riesgo_extra": peso_riesgo_extra})
+
+        for epoch in range(1, max_epochs + 1):
+            model.train()
+            train_loss = 0.0
+            for xb, xpb, pidxb, xdb, yb_c, yb_f in train_dl:
+                xb, xpb, pidxb, xdb = [t.to(device) for t in [xb, xpb, pidxb, xdb]]
+                optimizer.zero_grad()
+                logits_c, logits_f = model(xb, pidxb, xpb, xdb)
+                loss = loss_calor(logits_c, yb_c.to(device)) + loss_frio(logits_f, yb_f.to(device))
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item() * len(xb)
+            train_loss /= len(train_dl.dataset)
+
+            model.eval()
+            with torch.no_grad():
+                Xv, Xpv, Xdv = [t.to(device) for t in X_val_t]
+                out_c, out_f = model(Xv, pidx_val_t, Xpv, Xdv)
+                val_loss = (loss_calor(out_c, y_val_calor_t) + loss_frio(out_f, y_val_frio_t)).item()
+                pred_c = out_c.argmax(1).cpu().numpy()
+                pred_f = out_f.argmax(1).cpu().numpy()
+                rr_c = _rec_riesgo(y_val_calor, pred_c)
+                rr_f = _rec_riesgo(y_val_frio, pred_f)
+
+            history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss,
+                            "val_rec_riesgo_calor": rr_c, "val_rec_riesgo_frio": rr_f})
+            mlflow.log_metrics({"train_loss": train_loss, "val_loss": val_loss,
+                                "val_rec_riesgo_calor": rr_c, "val_rec_riesgo_frio": rr_f}, step=epoch)
+            print(f"    epoca {epoch:3d} | train_loss {train_loss:.4f} | val_loss {val_loss:.4f} | Rec_riesgo calor {rr_c:.3f} frio {rr_f:.3f}")
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_state = copy.deepcopy(model.state_dict())
+                sin_mejora = 0
+            else:
+                sin_mejora += 1
+                if sin_mejora >= patience:
+                    print(f"    Early stopping en epoca {epoch} (mejor val_loss={best_val_loss:.4f})")
+                    break
+
+        model.load_state_dict(best_state)
+        mlflow.log_metric("best_val_loss", best_val_loss)
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        ckpt_path = MODELS_DIR / f"LSTM_province_hybrid_seed{_seed}.pt"
+        torch.save({"state_dict": model.state_dict(), "hparams": model.hparams, "feature_cols": feature_cols},
+                   ckpt_path)
+        print(f"    Modelo guardado -> {ckpt_path.name}")
+
+        mlflow.pytorch.log_model(model.cpu(), name=run_name, serialization_format="pickle")
+
+    return model.cpu().eval(), pd.DataFrame(history)
+
+
+def evaluate_lstm_province_hybrid(model, X_train_s, Xp_train_s, pidx_train, Xd_train_s,
+                                   y_train_calor, y_train_frio, X_test_s, Xp_test_s,
+                                   pidx_test, Xd_test_s, y_test_calor, y_test_frio,
+                                   run_name="LSTM_province_hybrid_eval"):
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    model = model.eval()
+    with torch.no_grad():
+        pred_train = [t.argmax(1).numpy() for t in model(
+            torch.tensor(X_train_s), torch.tensor(pidx_train),
+            torch.tensor(Xp_train_s), torch.tensor(Xd_train_s))]
+        pred_test = [t.argmax(1).numpy() for t in model(
+            torch.tensor(X_test_s), torch.tensor(pidx_test),
+            torch.tensor(Xp_test_s), torch.tensor(Xd_test_s))]
+
+    cabezas = [(f"{run_name}_calor", y_train_calor, y_test_calor, pred_train[0], pred_test[0]),
+               (f"{run_name}_frio", y_train_frio, y_test_frio, pred_train[1], pred_test[1])]
+
+    configurar_mlflow()
+    mlflow.end_run()
+    results = []
+    with mlflow.start_run(run_name=run_name):
+        for name, y_tr, y_te, p_tr, p_te in cabezas:
+            print(f"\n--- {name} ---")
+            acc_test = accuracy_score(y_te, p_te)
+            f1_macro = f1_score(y_te, p_te, average="macro", zero_division=0)
+            risk_labels = [c for c in np.unique(y_te) if c != 0]
+            rec_riesgo = recall_score(y_te, p_te, labels=risk_labels, average="macro", zero_division=0) if risk_labels else float("nan")
+            print(f"  Acc_test: {acc_test:.4f} | F1_macro: {f1_macro:.4f} | Rec_riesgo: {rec_riesgo:.4f}")
+            print(classification_report(y_te, p_te, zero_division=0))
+            _plot_confusion_matrix(y_te, p_te, name)
+            sufijo = name.split("_")[-1]
+            mlflow.log_metrics({f"acc_test_{sufijo}": acc_test, f"f1_macro_{sufijo}": f1_macro, f"rec_riesgo_{sufijo}": rec_riesgo})
+            results.append({"Modelo": name, "Acc_test": round(acc_test, 4), "F1_macro": round(f1_macro, 4), "Rec_riesgo": round(rec_riesgo, 4)})
+
+    df_results = pd.DataFrame(results)
+    out_csv = REPORTS_DIR / "resultados_lstm_province_hybrid.csv"
+    df_results.to_csv(out_csv, index=False)
+    print(f"\n{df_results.to_string(index=False)}\nGuardado -> {out_csv}")
+    return df_results
+
+
+def load_lstm_province_hybrid(
+    path: Path = LSTM_PROVINCE_HYBRID_MODEL_PATH,
+    device: str = "cpu",
+) -> LSTMProvinceHybridMultiTask:
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    model = LSTMProvinceHybridMultiTask(**ckpt["hparams"])
+    model.load_state_dict(ckpt["state_dict"])
+    return model.eval()
+
+
+def load_by_seed(seed: int, device: str = "cpu") -> LSTMProvinceHybridMultiTask:
+    path = MODELS_DIR / f"LSTM_province_hybrid_seed{seed}.pt"
+    return load_lstm_province_hybrid(path, device)
+
+
+class EnsembleLSTM:
+    """Averigua logits de N modelos LSTM province_hybrid entrenados con distintas seeds."""
+    def __init__(self, models: list[LSTMProvinceHybridMultiTask]):
+        self.models = models
+
+    def eval(self):
+        for m in self.models:
+            m.eval()
+        return self
+
+    def __call__(self, x_seq, pidx, xp, xd):
+        logits_c, logits_f = None, None
+        for m in self.models:
+            c, f = m(x_seq, pidx, xp, xd)
+            if logits_c is None:
+                logits_c, logits_f = c, f
+            else:
+                logits_c += c
+                logits_f += f
+        return logits_c / len(self.models), logits_f / len(self.models)
+
+
+def main(tag="LSTM_province_hybrid"):
+    torch.set_num_threads(2)
+    splits = preparar_datos_hibridos()
+    model, history = train_lstm_province_hybrid(
+        splits["X_train_s"], splits["Xp_train_s"], splits["pidx_train"], splits["Xd_train_s"],
+        splits["y_train_calor"], splits["y_train_frio"],
+        splits["X_val_s"], splits["Xp_val_s"], splits["pidx_val"], splits["Xd_val_s"],
+        splits["y_val_calor"], splits["y_val_frio"],
+        n_provincias=splits["n_provincias"], run_name=tag)
+    return evaluate_lstm_province_hybrid(
+        model, splits["X_train_s"], splits["Xp_train_s"], splits["pidx_train"], splits["Xd_train_s"],
+        splits["y_train_calor"], splits["y_train_frio"],
+        splits["X_test_s"], splits["Xp_test_s"], splits["pidx_test"], splits["Xd_test_s"],
+        splits["y_test_calor"], splits["y_test_frio"], run_name=f"{tag}_eval")
+
+
+if __name__ == "__main__":
+    main()

@@ -9,6 +9,28 @@ from climasafeai.features.weather_indices import add_weather_index_columns
 
 
 # ---------------------------------------------------------------------------
+# Features adicionales a excluir por clase (resultados de ablación 27v19)
+# ---------------------------------------------------------------------------
+# La ablación demostró que las 8 features de persistencia avanzada (Grupo D,
+# features 20-27) benefician a calor (+0.007 Rec_riesgo) pero dañan a frío
+# (-0.020 Rec_riesgo). Para frío se eliminan, quedando 19 features base.
+# Ver documentacion/ablacion_features_27v19.md y tuning/ablacion_27v19.py.
+FRIO_EXTRA_COLS: list = [
+    "grados_dia_calor_roll7", "grados_dia_calor_roll14",
+    "wind_chill_mean_roll3", "wind_chill_mean_roll7", "wind_chill_mean_roll14",
+    "grados_dia_frio_roll7", "grados_dia_frio_roll14",
+    "dias_consec_bajo_umbral",
+]
+COLS_TO_DROP_BY_CLASE: dict = {
+    "calor": [
+        # Nocturnas y rachas severas (solo relevantes para frío)
+        "t2m_min_noche_lag1", "t2m_min_noche_roll7",
+        "dias_consec_wc_severo", "horas_wc_severo_sum14",
+    ],
+    "frio": FRIO_EXTRA_COLS,
+}
+
+# ---------------------------------------------------------------------------
 # Configuración de codificación ordinal
 # ---------------------------------------------------------------------------
 ORDINAL_MAPPINGS: dict = {
@@ -42,6 +64,10 @@ COLS_TO_DROP: list = [
     # por fila puede actuar como clave de memorización en vez de feature
     # meteorológica.
     "provincia", "fecha", "datetime",
+    # Columnas brutas de nocturnas/frío severo (solo se usan sus versiones
+    # con lag. La columna del mismo día miraría horas 0-8 del día actual,
+    # que no debe ser feature — solo el rezago del día anterior importa).
+    "t2m_min_noche", "horas_wc_severo",
 ]
 
 # Columnas a las que aplicar transformación logarítmica (np.log1p).
@@ -172,12 +198,16 @@ def preprocess_data(
             )
         fechas_para_split = pd.to_datetime(df["fecha"]).copy()
 
-    # 4. Eliminar columnas (generales + fuga de datos específica de `clase`)
-    cols_a_eliminar = list(COLS_TO_DROP) + LEAKAGE_COLS_BY_CLASE[clase]
+    # 4. Eliminar columnas (generales + fuga de datos + extra por clase)
+    cols_a_eliminar = (
+        list(COLS_TO_DROP)
+        + LEAKAGE_COLS_BY_CLASE[clase]
+        + COLS_TO_DROP_BY_CLASE.get(clase, [])
+    )
     cols_presentes = [c for c in cols_a_eliminar if c in df.columns and c != target_col]
     if cols_presentes:
         df.drop(columns=cols_presentes, inplace=True)
-        print(f"    Columnas eliminadas: {cols_presentes}")
+        print(f"    Columnas eliminadas ({clase}): {cols_presentes}")
 
     # 5. X / y
     X = df.drop(columns=[target_col])

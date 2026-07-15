@@ -38,8 +38,15 @@ DECISION_THRESHOLD: float = 0.5
 #     en otro caso              -> 0 (seguro)
 # Con class_thresholds=None todo sigue funcionando como siempre (argmax).
 CLASS_THRESHOLDS_RECOMENDADOS: dict = {
-    "calor": {"t1": 0.60, "t2": 0.42},
-    "frio":  {"t1": 0.70, "t2": 0.38},
+    "calor": {"t1": 0.50, "t2": 0.45},
+    "frio":  {"t1": 0.45, "t2": 0.40},
+}
+
+# Thresholds óptimos para LSTM province_hybrid (con peso_riesgo_extra=8.0).
+# Calibrados independientemente de los de los modelos tabulares.
+CLASS_THRESHOLDS_LSTM: dict = {
+    "calor": {"t1": 0.60, "t2": 0.55},
+    "frio":  {"t1": 0.40, "t2": 0.35},
 }
 
 

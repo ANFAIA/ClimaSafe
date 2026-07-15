@@ -54,10 +54,11 @@ from climasafeai.utils.paths import (
 LSTM_HYBRID_MODEL_PATH = MODELS_DIR / "LSTM_hybrid.pt"
 LSTM_HYBRID_SCALER_DIARIAS_PATH = ARTIFACTS_DIR / "scaler_diarias_lstm_hybrid.joblib"
 
-# Las 27 features tabulares diarias de dataset_calor_labeled.parquet (mismo
+# Las features tabulares diarias de dataset_calor_labeled.parquet (mismo
 # conjunto que ven XGBoost/RF, sin fecha/provincia/target/label). Incluyen
 # las de persistencia que motivan la variante híbrida: dias_consec_*,
-# grados_dia_*_roll7/14, heat_index_c_roll3/7, wind_chill_mean_roll3/7/14.
+# grados_dia_*_roll7/14, heat_index_c_roll3/7, wind_chill_mean_roll3/7/14,
+# más nocturnas y rachas severas (2026-07-14).
 DAILY_FEATURE_COLS: list = [
     "t2m_c", "rh", "wind_speed_kmh", "sp",
     "heat_index_c", "wbgt_c", "wind_chill_c",
@@ -67,6 +68,9 @@ DAILY_FEATURE_COLS: list = [
     "dias_consec_sobre_umbral", "grados_dia_calor_roll7", "grados_dia_calor_roll14",
     "wind_chill_mean_roll3", "wind_chill_mean_roll7", "wind_chill_mean_roll14",
     "grados_dia_frio_roll7", "grados_dia_frio_roll14", "dias_consec_bajo_umbral",
+    # Nocturnas y rachas severas (2026-07-14)
+    "t2m_min_noche_lag1", "t2m_min_noche_roll7",
+    "dias_consec_wc_severo", "horas_wc_severo_sum14",
 ]
 
 DAILY_PARQUET_PATH = PROCESSED_DATA_DIR / "dataset_calor_labeled.parquet"
