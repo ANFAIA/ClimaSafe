@@ -84,8 +84,23 @@ riesgos relativos / odds ratios publicados (columna RR/OR con su intervalo).
 | **Aislamiento / dependencia** | vive solo / no sale de casa / encamado | ×2.0 | OR 2.3 vive solo; 5.5 encamado; 6.7 no sale | Semenza 1996 (Chicago, NEJM) | Alta (pero situacional) |
 | **Obesidad** | IMC ≥30 | ×1.2 † | ver nota  abajo | mixta | **Baja** |
 | **Fragilidad** | IMC <18.5 | ×1.3 | IMC bajo en ancianos = fragilidad/desnutrición | Semenza 1996 (Chicago) | Media |
+| **Fatiga acumulada** | ≥4h trabajo al llegar a HI≥27°C, actividad ≥moderada | ×1.2 / ×1.3 | NIOSH work/rest schedules: trabajo continuo sin recuperación acumula estrés; a 6h+ el riesgo sube | NIOSH 2017-127; Lancet Planetary Health 2018 (Flouris: 4× más riesgo en turno con calor) | **Media** |
 
 † El ×1.2 de obesidad **solo se aplica si `nivel_actividad` ≥ moderada** (ver nota).
+
+### Fatiga acumulada — fundamento
+
+Este factor captura la interacción entre duración de la jornada y hora del día. Se activa solo si:
+
+1. La actividad es ≥ moderada (la carga metabólica es relevante).
+2. Dentro de la ventana de actividad, el HI alcanza ≥27°C.
+3. Lleva ≥4h trabajadas cuando se alcanza ese pico de calor.
+
+El fundamento es que el estrés térmico no es instantáneo: el calor metabólico se acumula hora tras hora, y la capacidad de termorregulación se degrada con la fatiga. NIOSH prescribe ciclos trabajo/descanso que aumentan las pausas cuanto más calor hace y más tiempo se lleva trabajando (NIOSH 2017-127). El meta-análisis de Flouris (Lancet Planetary Health 2018) estima que un solo turno bajo estrés térmico aumenta la temperatura central 0.7°C y multiplica por 4 el riesgo de heat strain.
+
+El factor se gradúa:
+- **4–5h acumuladas al llegar al pico**: ×1.2
+- **≥6h acumuladas al llegar al pico**: ×1.3 (mayor desgaste fisiológico)
 
 ### Nivel y duración de la actividad — base fisiológica
 

@@ -78,6 +78,65 @@ def _factor_duracion_calor(horas: float) -> float:
     return 1.0
 
 
+def _solapamiento_horas(inicio: float, duracion: float, ventana_inicio: float, ventana_fin: float) -> float:
+    fin = inicio + duracion
+    overlap_start = max(inicio, ventana_inicio)
+    overlap_end = min(fin, ventana_fin)
+    overlap_h = max(0.0, overlap_end - overlap_start)
+    return overlap_h / duracion if duracion > 0 else 0.0
+
+
+def _factor_hora_calor(hora_inicio: float | None, duracion: float | None) -> float:
+    if hora_inicio is None or duracion is None:
+        return 1.0
+    overlap = _solapamiento_horas(hora_inicio, duracion, 12, 18)
+    if overlap >= 0.75:
+        return 1.3
+    if overlap >= 0.5:
+        return 1.2
+    if overlap > 0.0:
+        return 1.1
+    return 1.0
+
+
+def _factor_hora_frio(hora_inicio: float | None, duracion: float | None) -> float:
+    if hora_inicio is None or duracion is None:
+        return 1.0
+    overlap = _solapamiento_horas(hora_inicio, duracion, 4, 8)
+    if overlap >= 0.75:
+        return 1.3
+    if overlap >= 0.5:
+        return 1.2
+    if overlap > 0.0:
+        return 1.1
+    return 1.0
+
+
+def _factor_fatiga_acumulada(perfil: dict) -> tuple[str, float] | None:
+    hora_inicio = perfil.get("hora_inicio")
+    duracion = perfil.get("duracion_actividad_h")
+    actividad = perfil.get("nivel_actividad", "reposo")
+    perfil_horario = perfil.get("_perfil_horario")
+    if any(v is None for v in (hora_inicio, duracion, perfil_horario)):
+        return None
+    if actividad not in _ACTIVIDADES_ESFUERZO:
+        return None
+    fin = hora_inicio + duracion
+    window = [h for h in perfil_horario if hora_inicio <= h["hora"] < fin]
+    if not window:
+        return None
+    peak = max(window, key=lambda x: x["HI"])
+    peak_HI = peak["HI"]
+    if peak_HI < 27:
+        return None
+    horas_hasta_pico = peak["hora"] - hora_inicio
+    if horas_hasta_pico < 4:
+        return None
+    label = f"fatiga acumulada ({horas_hasta_pico:.0f}h trabajo al llegar a {peak_HI:.1f}C)"
+    factor = 1.3 if horas_hasta_pico >= 6 else 1.2
+    return (label, factor)
+
+
 # Social: valores TEMPLADOS respecto a los OR univariantes de Chicago (2.3-6.7),
 # que se solapan entre sí — se toma el MÁXIMO de los presentes, no el producto,
 # para no contar la misma vulnerabilidad varias veces.
@@ -106,14 +165,17 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
         if v != 1.0:
             f.append((f"duración {horas} h", "fisiologico", v))
 
-    # Obesidad: SOLO cuenta en esfuerzo (el OR alto es de estudios de esfuerzo;
-    # en reposo/población general no hay señal — ver nota en la doc).
-    imc = perfil.get("imc")
-    if imc is not None:
-        if imc >= 30 and actividad in _ACTIVIDADES_ESFUERZO:
-            f.append(("obesidad (IMC≥30, en esfuerzo)", "fisiologico", 1.2))
-        elif imc < 18.5:
-            f.append(("fragilidad (IMC<18.5)", "fisiologico", 1.3))
+    v = _factor_hora_calor(perfil.get("hora_inicio"), horas)
+    if v != 1.0 and horas is not None:
+        inicio = perfil["hora_inicio"]
+        f.append((f"hora inicio {inicio:.0f}:00 (solapa pico calor)", "fisiologico", v))
+
+    grasa = perfil.get("porcentaje_grasa")
+    sexo = perfil.get("sexo")
+    if grasa is not None:
+        umbral_alto = 25 if sexo == "hombre" else 32
+        if grasa >= umbral_alto and actividad in _ACTIVIDADES_ESFUERZO:
+            f.append((f"grasa corporal alta ({grasa}%, en esfuerzo)", "fisiologico", 1.2))
 
     if perfil.get("aclimatado") is False:
         f.append(("no aclimatado", "fisiologico", 1.6))
@@ -131,6 +193,10 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
         f.append(("salud mental / antipsicóticos", "medico", 1.8))
     if "diureticos_asa" in farmacos:
         f.append(("diuréticos de asa", "medico", 1.3))
+
+    fatiga = _factor_fatiga_acumulada(perfil)
+    if fatiga:
+        f.append((fatiga[0], "fisiologico", fatiga[1]))
 
     social = perfil.get("situacion_social", set())
     presentes = [(k, _SOCIAL_CALOR[k]) for k in social if _SOCIAL_CALOR.get(k, 1.0) > 1.0]
@@ -156,10 +222,20 @@ def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
     if (v := _ACTIVIDAD_FRIO.get(actividad, 1.0)) != 1.0:
         f.append((f"actividad {actividad}", "fisiologico", v))
 
-    imc = perfil.get("imc")
-    if imc is not None and imc < 18.5:
-        f.append(("fragilidad (IMC<18.5)", "fisiologico", 1.3))
-    # IMC≥30 en frío: neutro (grasa protectora) -> no se añade factor.
+    v = _factor_hora_frio(perfil.get("hora_inicio"), perfil.get("duracion_actividad_h"))
+    if v != 1.0:
+        inicio = perfil["hora_inicio"]
+        f.append((f"hora inicio {inicio:.0f}:00 (solapa amanecer)", "fisiologico", v))
+
+    grasa = perfil.get("porcentaje_grasa")
+    sexo = perfil.get("sexo")
+    if grasa is not None:
+        umbral_bajo = 12 if sexo == "hombre" else 20
+        umbral_alto = 25 if sexo == "hombre" else 32
+        if grasa < umbral_bajo:
+            f.append((f"grasa corporal baja ({grasa}%)", "fisiologico", 1.3))
+        elif grasa >= umbral_alto:
+            f.append((f"grasa corporal alta ({grasa}%, protector)", "fisiologico", 0.9))
 
     comorb = perfil.get("comorbilidades", set())
     if "cardiovascular" in comorb:
@@ -192,12 +268,13 @@ def personalizar_riesgo(
         de la LSTM, o cualquier probabilidad de riesgo de los modelos ML).
     perfil : dict
         Campos opcionales (ausente = neutro, no penaliza por falta de dato):
-        edad:int, sexo:"hombre"|"mujer", imc:float,
+        edad:int, sexo:"hombre"|"mujer", porcentaje_grasa:float,
         nivel_actividad:"reposo"|"ligera"|"moderada"|"intensa"|"muy_intensa",
-        duracion_actividad_h:float, aclimatado:bool,
+        duracion_actividad_h:float, hora_inicio:float (0-23), aclimatado:bool,
         comorbilidades:set{"cardiovascular","diabetes","respiratoria","mental"},
         farmacos:set{"antipsicoticos","diureticos_asa"},
-        situacion_social:set{"vive_solo","encamado","no_sale","vivienda_fria"}.
+        situacion_social:set{"vive_solo","encamado","no_sale","vivienda_fria"},
+        _perfil_horario:list[{"hora":int, "HI":float}] (opcional, usado por _factor_fatiga_acumulada).
     tipo : "calor" | "frio"
         Qué tabla de coeficientes aplicar. Son DISTINTAS (la obesidad y la
         actividad se comportan al revés en frío).
@@ -237,8 +314,9 @@ def personalizar_riesgo(
     return {
         "indice_original": indice,
         "factor_total": round(factor_total, 3),
-        "indice_personalizado": round(personalizado, 4),
+        "producto_bruto": round(producto, 3),
         "capado": capado,
+        "indice_personalizado": round(personalizado, 4),
         "factores": [
             {"nombre": n, "categoria": c, "factor": v} for n, c, v in factores
         ],

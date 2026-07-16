@@ -14,7 +14,7 @@ from climasafeai.features.build_features import preprocess_data
 from climasafeai.utils.paths import MODELS_DIR, PROCESSED_DATA_DIR, ARTIFACTS_DIR
 from climasafeai.data.sequences import cargar_dataset_secuencias, split_secuencias_por_fecha
 from climasafeai.models.lstm_model import escalar_secuencias
-from climasafeai.models.lstm_hybrid import (
+from climasafeai.models.lstm_province_hybrid import (
     alinear_features_diarias, escalar_diarias,
     load_lstm_hybrid,
 )

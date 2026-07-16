@@ -11,7 +11,7 @@ from sklearn.metrics import recall_score, f1_score, accuracy_score
 
 from climasafeai.data.sequences import cargar_dataset_secuencias, split_secuencias_por_fecha
 from climasafeai.models.lstm_model import escalar_secuencias
-from climasafeai.models.lstm_hybrid import (
+from climasafeai.models.lstm_province_hybrid import (
     alinear_features_diarias, escalar_diarias,
     train_lstm_hybrid, evaluate_lstm_hybrid,
 )

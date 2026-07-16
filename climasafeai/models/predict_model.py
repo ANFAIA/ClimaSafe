@@ -385,99 +385,273 @@ def predict_proba_new(model_name: str, X_new) -> np.ndarray:
     return model.predict_proba(X_new)
 
 
+CLASES = ["SEGURO", "PRECAUCION", "PELIGRO"]
+
+
+def _preguntar_perfil() -> dict:
+    print("\n--- Datos personales (opcional, pulsa Enter para saltar) ---")
+    perfil = {}
+    raw = input("  Edad: ").strip()
+    if raw:
+        perfil["edad"] = int(raw)
+    raw = input("  Sexo (hombre/mujer): ").strip().lower()
+    if raw in ("hombre", "mujer"):
+        perfil["sexo"] = raw
+    raw = input("  Porcentaje graso: ").strip()
+    if raw:
+        perfil["porcentaje_grasa"] = float(raw)
+    raw = input("  Nivel de actividad (reposo/ligera/moderada/intensa/muy_intensa): ").strip().lower().replace(" ", "_")
+    if raw in ("reposo", "ligera", "moderada", "intensa", "muy_intensa"):
+        perfil["nivel_actividad"] = raw
+    raw = input("  Hora inicio actividad (0-23, ej: 17): ").strip()
+    if raw:
+        perfil["hora_inicio"] = float(raw)
+    raw = input("  Duración actividad (horas): ").strip()
+    if raw:
+        perfil["duracion_actividad_h"] = float(raw)
+    raw = input("  ¿Aclimatado al clima local? (s/n): ").strip().lower()
+    if raw in ("s", "si", "sí"):
+        perfil["aclimatado"] = True
+    elif raw in ("n", "no"):
+        perfil["aclimatado"] = False
+    raw = input("  Fototipo Fitzpatrick (1-6): ").strip()
+    if raw in ("1", "2", "3", "4", "5", "6"):
+        perfil["fototipo"] = raw
+    print("  Comorbilidades (separadas por coma, ej: cardiovascular,diabetes):")
+    raw = input("    ").strip().lower()
+    if raw:
+        perfil["comorbilidades"] = set(c.strip().replace(" ", "_") for c in raw.split(",") if c.strip())
+    print("  Situación social (separada por coma, ej: vive_solo,encamado):")
+    raw = input("    ").strip().lower()
+    if raw:
+        perfil["situacion_social"] = set(c.strip().replace(" ", "_") for c in raw.split(",") if c.strip())
+    return perfil
+
+
 def try_model() -> None:
-    """
-    Modo interactivo: introduce tus datos y el modelo predice el resultado.
+    from climasafeai.models.ensemble import predict_ensemble
 
-    Flujo:
-      1. Lista los modelos disponibles en models/ y pide elegir uno.
-      2. Carga el modelo y los artefactos de preprocesado (scaler, PCA,
-         encoders, threshold) guardados durante el entrenamiento.
-      3. Pide al usuario los valores de cada feature por consola.
-      4. Preprocesa la entrada con process_input() de build_features.
-      5. Imprime la predicción (y probabilidad si está disponible).
+    print("\n=== ClimaSafeAI - Prediccion ensemble (4 modelos) ===\n")
 
-    Requisitos previos:
-      - Haber ejecutado run_full_pipeline() al menos una vez para que
-        existan los joblibs en artifacts/ y los modelos en models/.
-    """
-    from climasafeai.features.build_features import process_input
-    from climasafeai.utils.paths import ARTIFACTS_DIR, PROCESSED_DATA_DIR
-    import pandas as pd
-
-    # ── 1. Elegir modelo ────────────────────────────────────────────────
-    available = sorted(MODELS_DIR.glob("*.joblib"))
-    if not available:
-        print("No hay modelos entrenados en models/. Ejecuta primero la opción 0.")
-        return
-
-    print("\nModelos disponibles:")
-    for i, p in enumerate(available):
-        print(f"  [{i}] {p.stem}")
-    try:
-        idx = int(input("Elige modelo (número): "))
-        model = joblib.load(available[idx])
-        model_name = available[idx].stem
-    except (ValueError, IndexError):
-        print("Selección inválida.")
-        return
-
-    # ── 2. Cargar nombres de features ──────────────────────────────────
-    feat_path = ARTIFACTS_DIR / "feature_names.joblib"
-    if feat_path.exists():
-        feature_names = joblib.load(feat_path)
-    else:
-        x_train_path = PROCESSED_DATA_DIR / "X_train.csv"
-        if x_train_path.exists():
-            feature_names = pd.read_csv(x_train_path).columns.tolist()
-        else:
-            print("No se encontró feature_names.joblib ni X_train.csv. Ejecuta primero run_full_pipeline().")
-            return
-
-    # ── 3. Pedir valores al usuario ────────────────────────────────────
-    print(f"\nIntroduce los valores para el modelo '{model_name}':")
-    print("  (deja en blanco para usar 0 como valor por defecto)\n")
-    row = {}
-    for feat in feature_names:
-        raw = input(f"  {feat}: ").strip()
+    raw = input("Provincia o ubicacion (ej: Madrid, 40.4168,-3.7038): ").strip()
+    lat = lon = None
+    provincia = "Madrid"
+    if "," in raw and raw.count(",") == 1:
         try:
-            row[feat] = float(raw) if raw else 0.0
+            lat, lon = [float(x.strip()) for x in raw.split(",")]
+            provincia = f"{lat},{lon}"
         except ValueError:
-            row[feat] = raw if raw else 0.0
+            lat, lon = None, None
+    else:
+        provincia = raw
 
-    df_input = pd.DataFrame([row])
+    perfil = _preguntar_perfil()
 
-    # ── 4. Preprocesar ─────────────────────────────────────────────────
+    print("\nObteniendo datos meteorologicos...")
     try:
-        X_new = process_input(df_input)
+        resultado = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil)
     except Exception as e:
-        print(f"\nError en preprocesado: {e}")
+        print(f"\n  Error en la prediccion: {e}")
         return
 
-    # ── 6. Predecir ────────────────────────────────────────────────────
-    print(f"\n{'='*50}")
+    w = resultado["weather"]
+    print(f"\n{'='*60}")
+    print(f"  {provincia} ({w['lat']:.2f}, {w['lon']:.2f})")
+    if w.get("current"):
+        c = w["current"]
+        print(f"  {c.get('t2m_c', '?')}C  {c.get('rh', '?')}%  {c.get('wind_speed_kmh', '?')} km/h")
+    if w.get("uv_index") is not None:
+        print(f"  UV: {w['uv_index']}")
+    print(f"{'='*60}")
 
-    # ── 5. Cargar umbral (si existe) ───────────────────────────────────
-    threshold_path = ARTIFACTS_DIR / "threshold.joblib"
-    threshold = joblib.load(threshold_path) if threshold_path.exists() else 0.5
+    print(f"\n{'-'*60}")
+    print("  Predicciones individuales:")
+    print(f"{'-'*60}")
+    for modelo, res in resultado["modelos"].items():
+        if modelo == "LSTM":
+            if "error" in res:
+                print(f"  LSTM: {res['error']}")
+                continue
+            c_cal = res["calor"]["clase_threshold"]
+            c_frio = res["frio"]["clase_threshold"]
+            print(f"  LSTM (calor):   {CLASES[c_cal]} ({c_cal})  riesgo={res['calor']['prob_riesgo']:.3f}")
+            print(f"  LSTM (frio):    {CLASES[c_frio]} ({c_frio})  riesgo={res['frio']['prob_riesgo']:.3f}")
+        elif modelo == "Formula":
+            c_cal = res["calor"]["clase"]
+            c_frio = res["frio"]["clase"]
+            print(f"  Formula (calor): {CLASES[c_cal]} ({c_cal})  HI={res['calor']['heat_index_c']}C")
+            print(f"  Formula (frio):  {CLASES[c_frio]} ({c_frio})  WC={res['frio']['wind_chill_c']}C")
+        else:
+            c = res["clase_threshold"]
+            print(f"  {modelo}: {CLASES[c]} ({c})  riesgo={res['prob_riesgo']:.3f}")
 
-    if hasattr(model, "predict_proba"):
-        proba = model.predict_proba(X_new)[0]
-        pred  = int(proba[1] >= threshold)
-        print(f"  Modelo     : {model_name}")
-        print(f"  Umbral     : {threshold:.4f}")
-        print(f"  Predicción : {pred}")
-        print(f"  Probabilidades: {dict(enumerate(proba.round(4).tolist()))}")
-        # Decodificar etiqueta original si existe target_encoder
-        te_path = ARTIFACTS_DIR / "target_encoder.joblib"
-        if te_path.exists():
-            te = joblib.load(te_path)
-            print(f"  Clase      : {te.inverse_transform([pred])[0]}")
+    print(f"\n{'-'*60}")
+    print("  Umbrales aplicados (P(riesgo) >= t1 -> PRECAUCION, P(peligro) >= t2 -> PELIGRO):")
+    for modelo, res in resultado["modelos"].items():
+        if modelo == "LSTM" and isinstance(res, dict) and "error" not in res:
+            u_c = res.get("calor", {}).get("thresholds_usados", {})
+            u_f = res.get("frio", {}).get("thresholds_usados", {})
+            if u_c:
+                print(f"  LSTM calor:  t1={u_c['t1']:.2f}  t2={u_c['t2']:.2f}")
+            if u_f:
+                print(f"  LSTM frio:   t1={u_f['t1']:.2f}  t2={u_f['t2']:.2f}")
+        elif isinstance(res, dict) and "thresholds_usados" in res:
+            u = res["thresholds_usados"]
+            print(f"  {modelo}: t1={u['t1']:.2f}  t2={u['t2']:.2f}")
+
+    print(f"\n{'='*60}")
+    print(f"  ESCENARIO MAS RESTRICTIVO: {resultado['clase_final_label']} ({resultado['clase_final']})")
+    print(f"{'='*60}")
+
+    perfil_horario = w.get("perfil_horario")
+    h_ini = perfil.get("hora_inicio")
+    dur = perfil.get("duracion_actividad_h")
+    if perfil_horario:
+        print(f"\n{'-'*60}")
+        print("  Perfil de riesgo horario (HI por hora):")
+        print(f"{'-'*60}")
+        horas_lista = [e["hora"] for e in perfil_horario]
+        max_hi = max(h["HI"] for h in perfil_horario) if perfil_horario else 40
+        for entry in perfil_horario:
+            hora = entry["hora"]
+            hi = entry["HI"]
+            bars = min(8, max(0, int(hi / max(1, max_hi) * 8)))
+            barra = "▓" * bars + "░" * (8 - bars)
+            if hi < 27:
+                clase_h = "SEGURO"
+            elif hi < 39:
+                clase_h = "PRECAUCION"
+            else:
+                clase_h = "PELIGRO"
+            marca = ""
+            if h_ini is not None and dur is not None and h_ini <= hora < h_ini + dur:
+                marca = " ← actividad"
+            print(f"  {hora:02d}:00  HI={hi:.1f}C  {barra}  {clase_h}{marca}")
+        print()
+        if h_ini is not None and dur is not None:
+            h_fin = h_ini + dur
+            act_hi = [e["HI"] for e in perfil_horario if h_ini <= e["hora"] < h_fin]
+            act_clase = "SEGURO"
+            if act_hi:
+                max_act_hi = max(act_hi)
+                if max_act_hi >= 39:
+                    act_clase = "PELIGRO"
+                elif max_act_hi >= 27:
+                    act_clase = "PRECAUCION"
+            act_bar = "█" * int(dur * 4)
+            print(f"  Actividad:  {h_ini:.0f}:00 {act_bar} {h_fin:.0f}:00  {act_clase}")
+
+    override = resultado.get("override_fisico")
+    if override:
+        hi = resultado["modelos"]["Formula"]["calor"]["heat_index_c"]
+        wc = resultado["modelos"]["Formula"]["frio"]["wind_chill_c"]
+        if perfil_horario and h_ini is not None and dur is not None:
+            window_hi = [e["HI"] for e in perfil_horario if h_ini <= e["hora"] < h_ini + dur]
+            if window_hi:
+                peak_hi = max(window_hi)
+                h_fin = h_ini + dur
+                print(f"\n  NOTA: Condiciones actuales seguras (HI={hi}C), pero durante")
+                print(f"  la actividad prevista ({h_ini:.0f}:00-{h_fin:.0f}:00)")
+                print(f"  se espera HI de hasta {peak_hi}C, lo que justifica el nivel")
+                print(f"  de riesgo. El modelo ML lo confirma por tendencia.")
+            else:
+                print(f"\n  NOTA: Condiciones actuales seguras (HI={hi}C, WC={wc}C).")
+                print(f"  El modelo ML indicaba riesgo por tendencia meteorologica,")
+                print(f"  pero los indicadores fisicos actuales no lo confirman.")
+        else:
+            c = resultado.get("weather", {}).get("current", {})
+            t = c.get("t2m_c", "?")
+            uv = resultado.get("weather", {}).get("uv_index", "?")
+            print(f"\n  NOTA: Condiciones actuales ({t}C, HI={hi}C, WC={wc}C, UV={uv})")
+            print(f"  estan en rango seguro. El modelo ML indicaba riesgo por")
+            print(f"  tendencia de dias anteriores, pero los indicadores fisicos")
+            print(f"  no muestran riesgo objetivo.")
+
+    # -- Explicacion --
+    explicacion = resultado.get("explicacion", {})
+    if explicacion:
+        print(f"\n{'-'*60}")
+        print("  Explicacion:")
+        print(f"{'-'*60}")
+        modelo_det = explicacion.get("modelo_determinante", "")
+        if modelo_det:
+            print(f"  Modelo determinante: {modelo_det}")
+        detalles = explicacion.get("detalles", {})
+        for mod, det in detalles.items():
+            if isinstance(det, dict) and "error" in det:
+                continue
+            prob_mod = resultado.get("modelos", {}).get(mod, {}).get("prob_riesgo", 0)
+            if prob_mod < 0.35:
+                continue
+            if mod == "XGBoost_calor":
+                print(f"\n  Riesgo por tendencia meteorologica (XGBoost calor):")
+                print(f"  El modelo detecta patron de calor acumulado de dias previos")
+                print(f"  (NO es el HI actual, sino medias moviles y persistencia):")
+                tops = det.get("top_features", [])
+                if tops:
+                    todas_cero = all(t.get("importancia", 0) == 0 for t in tops)
+                    if todas_cero:
+                        print("    El modelo no detecta factores de riesgo significativos para este dia.")
+                    else:
+                        for ft in tops:
+                            print(f"    {ft['feature']}  ({ft['importancia']})")
+            elif mod == "RandomForest_frio":
+                print(f"\n  Riesgo por tendencia meteorologica (RandomForest frio):")
+                print(f"  El modelo detecta patron de frio acumulado de dias previos:")
+                tops = det.get("top_features", [])
+                if tops:
+                    todas_cero = all(t.get("importancia", 0) == 0 for t in tops)
+                    if todas_cero:
+                        print("    El modelo no detecta factores de riesgo significativos para este dia.")
+                    else:
+                        for ft in tops:
+                            print(f"    {ft['feature']}  ({ft['importancia']})")
+            elif mod == "LSTM":
+                metodo = det.get("metodo", "")
+                hora = det.get("hora_mas_influyente")
+                if hora is not None:
+                    print(f"\n  LSTM: hora mas influyente = {hora}:00")
+                vars_top = det.get("variables_top", [])
+                if vars_top:
+                    print(f"  Variables mas influyentes en la secuencia:")
+                    for vt in vars_top:
+                        print(f"    {vt['feature']}  ({vt['importancia']})")
+            elif mod == "Formula":
+                expls = det.get("explicaciones", [])
+                for exp_t in expls:
+                    print(f"\n  {exp_t}")
+
+    # -- Factores personales --
+    if resultado["perfil"]["calor"]["factores"] or resultado["perfil"]["frio"]["factores"]:
+        print(f"\n{'-'*60}")
+        print("  Factores de riesgo aplicados:")
+        print(f"{'-'*60}")
+        for tipo in ("calor", "frio"):
+            sec = resultado["perfil"][tipo]
+            if sec["factores"]:
+                print(f"  {tipo.capitalize()}:")
+                for f in sec["factores"]:
+                    print(f"    {f['nombre']} -> x{f['factor']}")
+                ft = sec["factor_total"]
+                pb = sec.get("producto_bruto", ft)
+                if sec.get("capado") and pb > ft:
+                    print(f"    Factor total calculado: x{pb}")
+                    print(f"    Aplicado (cap x{sec.get('cap_factores', 3.0)}): x{ft}")
+                else:
+                    print(f"    Factor total: x{ft}")
+                print(f"    Prob. poblacional: {sec['prob_poblacional']:.3f} -> personalizada: {sec['prob_personalizada']:.3f}")
     else:
-        pred = model.predict(X_new)[0]
-        print(f"  Modelo     : {model_name}")
-        print(f"  Predicción : {int(pred)}")
+        print("\n  Sin datos personales - factores neutros (x1.0)")
 
-    print(f"{'='*50}\n")
+    # -- Recomendaciones --
+    recomendaciones = resultado.get("recomendaciones", [])
+    if recomendaciones:
+        print(f"\n{'-'*60}")
+        print("  Recomendaciones:")
+        print(f"{'-'*60}")
+        for i, rec in enumerate(recomendaciones, 1):
+            print(f"  {i}. {rec}")
+
+    print(f"\n{'='*60}\n")
 
 

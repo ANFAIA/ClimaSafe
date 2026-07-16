@@ -1,0 +1,117 @@
+{
+  "fototipo": {
+    "descripcion": "Recomendaciones segun fototipo Fitzpatrick",
+    "1": {
+      "etiqueta": "Muy claro (siempre se quema)",
+      "texto": "Tu piel es muy sensible al sol. Usa proteccion solar SPF 50+ de amplio espectro, renueva cada 2 horas. Usa sombrero de ala ancha, gafas de sol y ropa que cubra la piel. Evita la exposicion directa entre las 12:00 y las 18:00."
+    },
+    "2": {
+      "etiqueta": "Claro (se quema con facilidad)",
+      "texto": "Tu piel es clara y se quema con facilidad. Usa SPF 50+, renueva cada 2 horas. Busca sombra en horas centrales del dia. Usa sombrero y gafas de sol."
+    },
+    "3": {
+      "etiqueta": "Claro-moreno (a veces se quema)",
+      "texto": "Riesgo moderado de quemadura. Usa SPF 30+ y proteccion adecuada. Renueva cada 2 horas si sudas o te banas."
+    },
+    "4": {
+      "etiqueta": "Moreno (rara vez se quema)",
+      "texto": "Riesgo bajo de quemadura pero no nulo. Usa SPF 30 como minimo. La radiacion UV acumulada tambien envejece la piel."
+    },
+    "5": {
+      "etiqueta": "Oscuro (muy rara vez se quema)",
+      "texto": "Riesgo muy bajo de quemadura. Aun asi, la exposicion prolongada puede causar dano. Proteccion basica recomendada."
+    },
+    "6": {
+      "etiqueta": "Muy oscuro (nunca se quema)",
+      "texto": "Riesgo minimo de quemadura. Sin embargo, el calor extremo y la deshidratacion siguen siendo peligrosos. Mantengate hidratado."
+    },
+    "desconocido": {
+      "etiqueta": "No especificado",
+      "texto": "No sabemos tu fototipo. Con niveles altos de UV, usa proteccion solar SPF 30+ como medida de precaucion."
+    }
+  },
+  "actividad": {
+    "descripcion": "Recomendaciones segun nivel de actividad",
+    "reposo": {
+      "texto": "En reposo, el riesgo es menor. Busca sombra o un lugar fresco si las temperaturas son altas."
+    },
+    "ligera": {
+      "texto": "Actividad ligera: mantente hidratado y busca sombra periodicamente."
+    },
+    "moderada": {
+      "texto": "Toma pausas de 5-10 minutos cada 2 horas en un lugar fresco o con sombra. Bebe agua regularmente."
+    },
+    "intensa": {
+      "texto": "Descansa 10 minutos cada hora en un lugar fresco. Bebe 200-300 ml de agua cada 20 minutos. Vigila signos de agotamiento por calor: mareo, nausea, dolor de cabeza."
+    },
+    "muy_intensa": {
+      "texto": "ALTA EXIGENCIA: Descansa 10-15 minutos cada 45 minutos. Bebe 300-400 ml de agua cada 20 minutos. Detente si sientes mareo, nausea, calambres o confusion. Busca atencion si los sintomas persisten."
+    }
+  },
+  "comorbilidades": {
+    "descripcion": "Recomendaciones segun condiciones de salud preexistentes",
+    "cardiovascular": {
+      "texto": "El calor extremo sobrecarga el sistema cardiovascular. Evita esfuerzos en horas de calor intenso. Mantente hidratado. Si tomas diureticos o medicacion para la tension, consulta con tu medico sobre ajustes en dias de calor extremo."
+    },
+    "diabetes": {
+      "texto": "El calor puede afectar tus niveles de glucosa y la absorcion de insulina. Manten la insulina refrigerada. Hidratate bien y controla tus niveles con mas frecuencia."
+    },
+    "respiratoria": {
+      "texto": "El aire caliente y seco puede irritar las vias respiratorias. Evita el ejercicio al aire libre en horas de calor extremo. Usa mascarilla humeda si el aire esta muy seco."
+    },
+    "mental": {
+      "texto": "Ciertos medicamentos psicotropicos alteran la termorregulacion. Extremar precauciones con el calor. Pide a alguien que revise tu estado regularmente."
+    }
+  },
+  "farmacos": {
+    "descripcion": "Recomendaciones segun medicacion",
+    "antipsicoticos": {
+      "texto": "Los antipsicoticos alteran la capacidad del cuerpo para regular la temperatura. Riesgo elevado de golpe de calor. Evita la exposicion prolongada al calor."
+    },
+    "diureticos_asa": {
+      "texto": "Los diureticos aumentan la perdida de liquidos. Riesgo elevado de deshidratacion. Aumenta la ingesta de agua y electrolitos."
+    }
+  },
+  "situacion_social": {
+    "descripcion": "Recomendaciones segun situacion social",
+    "vive_solo": {
+      "texto": "Al vivir solo, asegurate de que alguien sepa donde estas y puede contactarte. Revisa tu estado regularmente. En dias de calor extremo, contacta con familiares o amigos."
+    },
+    "encamado": {
+      "texto": "El riesgo es muy elevado para personas encamadas. Asegura ventilacion adecuada, hidratacion constante y supervision regular. Cambia de posicion para evitar ulceras por presion que empeoren con el calor."
+    },
+    "no_sale": {
+      "texto": "Las personas que no salen de casa pueden estar expuestas a temperaturas elevadas en interiores. Ventila por la manana temprano, cierra persianas durante el dia y usa ventilador o aire acondicionado si es posible."
+    },
+    "vivienda_fria": {
+      "texto": "Las viviendas con mala climatizacion pueden ser peligrosas tanto en calor como en frio. En calor extremo, busca un lugar fresco durante las horas centrales (centro comercial, biblioteca). En frio extremo, asegura calefaccion adecuada y abrigate."
+    }
+  },
+  "clima": {
+    "descripcion": "Recomendaciones segun condiciones climaticas actuales",
+    "calor_extremo": {
+      "texto": "Las temperaturas son peligrosamente altas. Permanece en lugares frescos. No realices actividad fisica al aire libre. Bebe agua aunque no tengas sed. Vigila a mayores y ninos."
+    },
+    "calor_moderado": {
+      "texto": "Las temperaturas son elevadas. Toma precauciones si realizas actividad al aire libre. Hidratate bien y busca sombra."
+    },
+    "frio_extremo": {
+      "texto": "Las temperaturas son peligrosamente bajas. Abrigate con varias capas de ropa. Protege extremidades (manos, pies, orejas). Evita la exposicion prolongada al viento."
+    },
+    "frio_moderado": {
+      "texto": "Las temperaturas son bajas. Usa ropa de abrigo adecuada. Protege las zonas descubiertas del viento."
+    },
+    "uv_alto": {
+      "texto": "El indice UV es alto. Proteccion solar obligatoria aunque este nublado. La radiacion UV atraviesa las nubes."
+    }
+  },
+  "generales": {
+    "descripcion": "Recomendaciones generales independientes del perfil",
+    "hidratacion": "Bebe agua regularmente aunque no tengas sed. La sed es un signo tardio de deshidratacion. Evita alcohol y cafeina que deshidratan.",
+    "ropa": "Usa ropa ligera, de colores claros y tejidos transpirables. Protege la cabeza del sol directo.",
+    "horas_peligro": "Las horas mas peligrosas para el calor son entre las 12:00 y las 18:00. Para el frio, las horas mas peligrosas son al amanecer y al anochecer.",
+    "comidas": "Haz comidas ligeras y frecuentes. Evita comidas pesadas y calientes que aumentan la temperatura corporal.",
+    "senal_alarma_calor": "Si sientes mareo, confusion, nausea, piel roja y caliente pero sin sudor, o dolor de cabeza intenso, busca ayuda medica urgente. Puede ser un golpe de calor.",
+    "senal_alarma_frio": "Si sientes entumecimiento, piel palida y cerosa, temblores incontrolables o confusion, busca ayuda medica urgente. Puede ser hipotermia."
+  }
+}

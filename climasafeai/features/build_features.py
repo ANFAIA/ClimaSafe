@@ -393,7 +393,11 @@ def process_input(df_new: pd.DataFrame, clase: str = "calor") -> np.ndarray:
         if col in df_new.columns:
             df_new[col] = df_new[col].map(mapping)
 
-    cols_a_eliminar = list(COLS_TO_DROP) + LEAKAGE_COLS_BY_CLASE.get(clase, [])
+    cols_a_eliminar = (
+        list(COLS_TO_DROP)
+        + LEAKAGE_COLS_BY_CLASE.get(clase, [])
+        + COLS_TO_DROP_BY_CLASE.get(clase, [])
+    )
     cols_present = [c for c in cols_a_eliminar if c in df_new.columns]
     if cols_present:
         df_new.drop(columns=cols_present, inplace=True)
