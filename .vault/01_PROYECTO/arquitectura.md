@@ -22,41 +22,52 @@ ClimaSafeAI es un sistema de aviso de riesgo climático personalizado (calor/fr�
 
 | Fuente | Datos |
 |--------|-------|
-| ERA5 | Reanálisis climático |
-| AEMET | Estaciones meteorológicas España |
-| Open-Meteo | API meteorológica |
-| OpenUV | Radiación UV |
-| MoMo (ISCIII) | Mortalidad diaria |
+| Open-Meteo | API meteorológica (gratis, sin API key) |
+| MoMo (ISCIII) | Mortalidad diaria España |
 
-## Pipeline ML (`main.py:51`)
+> El sistema solo usa fuentes gratuitas y open-source. Open-Meteo reemplazó a ERA5/AEMET/OpenUV como fuente única de datos meteorológicos en producción.
 
-El pipeline completo se ejecuta con `python main.py` (opción 0). Cada paso verifica si su output ya existe y salta automáticamente.
+## Pipeline de inferencia (`predict_model.py`)
+
+En producción, cada consulta ejecuta:
 
 ```
-1. Descarga de datos crudos (MoMo + ERA5) — skip si existen
-2. Preprocesado → parquets etiquetados — skip si existen y actualizados
-3. Secuencias LSTM 24h (secuencias_24h.npz) — skip si existe
-4. Preprocesado ML: train/test split por fecha + escalado
-5. Entrenamiento: XGBoost (calor) + RandomForest (frío) inline
-6. Entrenamiento: LSTM híbrida (secuencia 24h + features diarias)
-7. Evaluación tabulares (argmax + umbrales calibrados)
-8. Evaluación LSTM híbrida
-9. Tabla comparativa final (Rec_riesgo como métrica principal)
+1. Clima actual → Open-Meteo (Tª, humedad, viento, UV, HI, WC)
+2. Perfil horario → HI y WC para cada hora en la ventana de actividad
+3. Ensemble de 4 modelos en paralelo:
+   ├── XGBoost (calor) → prob_riesgo_calor
+   ├── RandomForest (frío) → prob_riesgo_frio
+   ├── LSTM → prob_riesgo_calor + prob_riesgo_frio
+   └── Fórmula determinista → HI/WC/UV con tiempo de exposición
+4. Guardarraíl físico: degrada PELIGRO→PRECAUCION si HI<27°C y WC>0°C y UV<6
+5. Personalización: factores edad, grasa, actividad, comorbilidades, fototipo
+6. Explicabilidad: SHAP + explicación fórmula con HI ventana actividad
+7. Recomendaciones filtradas por riesgo dominante (calor/frío/ambos)
 ```
 
 ## Modelos
 
-| Modelo | Clase | Métrica guía | Estado |
-|--------|-------|-------------|--------|
-| XGBoost | Calor | Recall riesgo | Producción (27 features) |
-| RandomForest | Frío | Recall riesgo | Producción (19 features) |
-| LSTM híbrida | Calor + Frío | Rec_riesgo | En pipeline |
+| Modelo | Captura | Fuente de calibración | Estado |
+|--------|---------|----------------------|--------|
+| XGBoost | Riesgo poblacional calor | MoMo (España) | Producción |
+| RandomForest | Riesgo poblacional frío | MoMo (España) | Producción |
+| LSTM province_hybrid | Correlación temporal HI/WC ↔ mortalidad | MoMo (España) | Producción |
+| Fórmula determinista | Riesgo individual (fototipo, exposición) | NWS/OMS | Producción |
 
-La LSTM híbrida (`climasafeai/models/lstm_hybrid.py`) combina un tronco LSTM sobre secuencias de 24h con features diarias (31 columnas: 27 clásicas + 4 nocturnas/rachas severas), superando a la LSTM base. Ver [[03_MODELOS/LSTM]].
+Las 4 estimaciones se combinan con el criterio **más restrictivo**. La LSTM está en `lstm_province_hybrid.py` (fusión de `lstm_hybrid.py` + `lstm_province.py`).
 
-Selección de features por clase: calor usa 27 features completas (grupos A-D), frío usa 19 (sin persistencia avanzada, que dañaba -0.020 Rec_riesgo). Ver `documentacion/ablacion_features_27v19.md`.
+## Módulos clave (nuevos)
 
-Umbrales de decisión calibrados (cascada por severidad): calor t1=0.40/t2=0.35, frío t1=0.45/t2=0.40. Mejoran Rec_riesgo +0.035 calor, +0.095 frío vs argmax.
+| Módulo | Función |
+|--------|---------|
+| `ensemble.py` | Orquesta 4 modelos, guardarraíl físico, perfil_horario, override (degradación PELIGRO→PRECAUCION) |
+| `explicabilidad.py` | SHAP con FEATURE_NAME_MAP (31 entradas), explicación fórmula con HI ventana actividad |
+| `recomendaciones.py` | `_riesgo_dominante()` determina si el riesgo es calor/frío/ambos y filtra recomendaciones |
+| `weather_fetcher.py` | Open-Meteo inlined, perfil_horario con HI/WC por hora |
+
+## Ver también
+
+- [[modelos]] — detalle de experimentos y métricas
 
 ## Ver también
 

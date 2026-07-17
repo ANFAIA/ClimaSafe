@@ -167,7 +167,7 @@ fórmula, que sigue evaluando el riesgo individual real.
 Por eso, en cada consulta se calculan siempre las tres estimaciones —
 modelo ML de calor, modelo ML de frío, y la **fórmula científica
 determinista** (Heat Index / Wind Chill / UV, con tiempo de exposición y
-fototipo de piel — ver `formulas_riesgo_deterministico.md`) sobre los datos
+fototipo de piel — ver `../riesgo/formulas_riesgo_deterministico.md`) sobre los datos
 meteorológicos del momento (Open-Meteo) — y se toma como resultado final
 el criterio más restrictivo de las tres. La fórmula cubre exactamente el
 hueco que el ML no puede cubrir por diseño (individual, universal, sin
@@ -200,7 +200,7 @@ Esto significa que la fórmula seguiría siendo necesaria como componente
 del sistema incluso si se dispusiera de CMBD actualizado — no es solo un
 sustituto temporal mientras no hay acceso a esa fuente.
 
-Ver `formulas_riesgo_deterministico.md` para el detalle de implementación de la
+Ver `../riesgo/formulas_riesgo_deterministico.md` para el detalle de implementación de la
 fórmula (tablas Heat Index/Wind Chill del NWS, fórmula de tiempo hasta
 eritema de la OMS por fototipo, y código de referencia).
 
@@ -302,3 +302,63 @@ documentado en la Parte C del notebook y su checkpoint conservado
 (`models/LSTM_multitask_reg.pt`).
 
 ---
+
+## 7. Exploración de modelos avanzados (descartados)
+
+Durante el desarrollo se evaluaron modelos más sofisticados como alternativas a los
+componentes actuales. Ninguno se integró. Las razones se documentan aquí para evitar
+reevaluarlos sin contexto.
+
+### 7.1 WeatherNext 2 (Google DeepMind) — capa meteorológica
+
+Modelo global de predicción meteorológica con resolución 0.25° (~30 km), ensemble
+de 64 miembros y horizonte de 15 días.
+
+**Descartado porque:**
+- Requiere Vertex AI API (pago por consulta) — rompe el requisito de coste cero
+- Resolución temporal de 6 h (Open-Meteo da 1 h gratis y sin API key)
+- Para España peninsular la mejora sobre Open-Meteo es marginal
+- No es auto-hosteable sin infraestructura Google Cloud
+
+### 7.2 TimesFM 2.5 y Granite TTM-R3 — capa de predicción por series temporales
+
+Foundation models de propósito general entrenados en millones de series temporales
+de dominios diversos, candidatos a sustituir la LSTM.
+
+**Descartados porque:**
+- Son modelos de propósito general; los modelos actuales (XGBoost, RF, LSTM) están
+  entrenados específicamente con datos MoMo de mortalidad + meteorología española.
+  Un foundation model sin fine-tuning no supera esa especialización.
+- TimesFM 2.5 (200M params) requiere GPU para inferencia — incompatible con el
+  objetivo de ejecución en CPU.
+- Granite TTM-R3 (1.4M params) corre en CPU pero su licencia R3 es CC-BY-NC-SA
+  (no comercial), incompatible con cualquier uso fuera de investigación.
+- Añadir un quinto modelo al ensemble actual tiene rendimientos decrecientes
+  frente al coste de integración.
+
+### 7.3 Prithvi-EO-2.0 (IBM/NASA) — capa geoespacial
+
+Foundation model para imágenes satelitales (Sentinel-2, Landsat). Podría detectar
+islas de calor urbanas, zonas verdes o reflectividad de superficies a nivel de calle.
+
+**Descartado porque:**
+- Requiere GPU para inferencia (600M params)
+- Añade un pipeline satelital completo (descarga, preprocesado, inferencia)
+- Los datos satelitales dependen de condiciones meteorológicas (nubes) y tienen
+  revisit time de ~5 días
+- La resolución de Sentinel-2 (10-60 m) es excesiva para una app a nivel provincial
+- Solo tendría sentido si el sistema bajara a nivel de barrio o calle
+
+### 7.4 Principio: solo código abierto y gratuito
+
+Todo el stack de ClimaSafeAI se mantiene dentro de este principio:
+
+| Componente | Elegido | Alternativa evaluada | Motivo del descarte |
+|---|---|---|---|
+| Datos meteorológicos | Open-Meteo (gratis, sin API key) | WeatherNext (Vertex AI) | Coste, resolución temporal |
+| Predicción ML | XGBoost, RF, LSTM (CPU, entrenados con MoMo) | TimesFM 2.5, TTM-R3 | GPU, licencia, especialización |
+| Datos satelitales | No usado | Prithvi-EO-2.0 | Complejidad, resolución innecesaria |
+
+Ninguna fuente de pago, ningún API key obligatorio, ningún modelo con requisitos
+de GPU en producción. Si en el futuro se necesitara una de estas capacidades, se
+priorizará siempre la alternativa abierta que pueda ejecutarse en CPU.

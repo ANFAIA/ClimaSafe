@@ -130,10 +130,12 @@ Thresholds LSTM específicos: calor t1=0.60/t2=0.55, frío t1=0.40/t2=0.35 (en `
 
 - Evaluado pero ninguna estrategia de ensamble superó al mejor modelo individual
 
+## Nota: fusión de archivos (2026-07-16)
+
+`lstm_hybrid.py` y `lstm_province.py` se fusionaron en `lstm_province_hybrid.py` para reducir de 22 a 19 archivos .py. Todos los imports actualizados.
+
 ## Referencias
 
-- `climasafeai/models/lstm_province_hybrid.py` — implementación activa
-- `climasafeai/models/lstm_hybrid.py` — predecesora (reemplazada)
-- `climasafeai/models/lstm_model.py` — implementación base
-- `climasafeai/models/lstm_province.py` — variante con embedding (legacy)
+- `climasafeai/models/lstm_province_hybrid.py` — implementación activa (fusión de las 3 variantes)
+- `climasafeai/models/lstm_model.py` — implementación base (legacy)
 - `climasafeai/data/sequences.py` — generación de secuencias

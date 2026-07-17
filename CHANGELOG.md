@@ -8,7 +8,7 @@
 
 ### Documentación
 
-- documenta la frontera recall/precisión y la recomendación de umbrales (documentacion/calibracion_umbrales.md)
+- documenta la frontera recall/precisión y la recomendación de umbrales (documentacion/ml/calibracion_umbrales.md)
 
 ## [Unreleased] — 2026-07-03
 
@@ -171,12 +171,12 @@
 
 ### Documentación
 
-- documenta la frontera recall/precisión y la recomendación de umbrales (`documentacion/calibracion_umbrales.md`)
-- documenta eliminación de fuga temporal train-test del label (`documentacion/label_sin_fuga.md`)
-- documenta la ablación de features (`documentacion/ablacion_features_27v19.md`)
-- documenta features de frío con retardo (`documentacion/features_frio_retardo.md`)
-- documenta LSTM híbrida (`documentacion/lstm_hibrida.md`)
-- conclusiones de modelos actualizadas (`documentacion/conclusiones_modelos.md`)
+- documenta la frontera recall/precisión y la recomendación de umbrales (`documentacion/ml/calibracion_umbrales.md`)
+- documenta eliminación de fuga temporal train-test del label (`documentacion/ml/label_sin_fuga.md`)
+- documenta la ablación de features (`documentacion/ml/ablacion_features_27v19.md`)
+- documenta features de frío con retardo (`documentacion/ml/features_frio_retardo.md`)
+- documenta LSTM híbrida (`documentacion/ml/lstm_hibrida.md`)
+- conclusiones de modelos actualizadas (`documentacion/ml/conclusiones_modelos.md`)
 
 ## [Unreleased] — 2026-07-11
 

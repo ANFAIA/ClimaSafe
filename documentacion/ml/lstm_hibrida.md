@@ -8,7 +8,7 @@ y el veredicto frente a la LSTM base y los modelos desplegados.
 
 ## 1. Motivación: la LSTM pura no sabe en qué día de la ola está
 
-La LSTM multi-tarea (`lstm_model.py`, ver `diseño_modelo.md` §6) clasifica
+La LSTM multi-tarea (`lstm_model.py`, ver `../arquitectura/diseño_modelo.md` §6) clasifica
 cada día viendo SOLO su secuencia de 24 horas (t2m, rh, viento, Heat Index,
 Wind Chill). Eso le da lo que los modelos tabulares no ven — el perfil
 intradía completo, incluido el alivio nocturno — pero le quita lo que
@@ -91,7 +91,7 @@ Rec_riesgo frente a la LSTM base en **+0.103 en calor** (0.4939 → 0.5971) y
 **+0.049 en frío** (0.4647 → 0.5141), con mejoras paralelas en F1_macro
 (+0.112 calor, +0.073 frío) y sin degradar accuracy — al contrario, la
 híbrida sube ~8 puntos de accuracy en ambas cabezas. Confirma la hipótesis
-de `diseño_modelo.md` §6: la LSTM pura pierde la persistencia que capturan
+de `../arquitectura/diseño_modelo.md` §6: la LSTM pura pierde la persistencia que capturan
 los rollings diarios, y devolvérsela cierra buena parte de la brecha.
 
 **Frente a los modelos desplegados**, la híbrida sigue por debajo pero ya

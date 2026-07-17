@@ -5,7 +5,7 @@
 ## Qué es esto y cómo encaja
 
 La LSTM (y los modelos ML) dan un **índice de peligrosidad poblacional 0-1**
-por provincia/día (`indice_riesgo_softmax`, ver `diseño_modelo.md` §6). Ese
+por provincia/día (`indice_riesgo_softmax`, ver `../arquitectura/diseño_modelo.md` §6). Ese
 índice no distingue individuos: dos personas en la misma provincia el mismo
 día reciben el mismo número. En producción se quiere **modular ese índice
 según el perfil de la persona** — el ejemplo del que partió esto: "índice 0.8,
@@ -46,19 +46,26 @@ para no generar riesgos individuales absurdos por acumulación.
 
 La función `personalizar_riesgo` recibe un `perfil` con estos campos (todos
 opcionales — un campo ausente = factor neutro ×1.0, no penaliza por falta de
-dato):
+dato).
+
+> **Nota:** `edad` y `sexo` se eliminaron de `personalizacion.py` porque ahora
+> se calibran mediante modelos separados por **estrato demográfico** (ver
+> `make_dataset.py` → `ESTRATOS`). Los valores `edad` y `sexo` en el perfil se
+> ignoran a efectos de personalización; son el estrato el que determina qué
+> modelo se usa.
 
 | Campo | Tipo | Valores | Confirmado por el usuario |
 |---|---|---|---|
-| `edad` | int | años | ✓ |
-| `sexo` | str | "hombre" \| "mujer" | ✓ |
 | `imc` | float | kg/m² | ✓ |
+| `porcentaje_grasa` | float | % (alternativa/override a IMC) | añadido |
 | `nivel_actividad` | str | "reposo" \| "ligera" \| "moderada" \| "intensa" \| "muy_intensa" | ✓ |
 | `duracion_actividad_h` | float | horas de exposición activa | ✓ |
+| `hora_inicio` | float | hora de inicio de actividad (0-23) | añadido |
 | `aclimatado` | bool | — | añadido (ya en el proyecto) |
 | `comorbilidades` | set | {"cardiovascular", "diabetes", "respiratoria", "mental"} | añadido |
 | `farmacos` | set | {"antipsicoticos", "diureticos_asa"} | añadido |
-| `situacion_social` | set | {"vive_solo", "encamado", "no_sale", "vivienda_fria"} | añadido (capa aparte, ver §Vulnerabilidad social) |
+| `situacion_social` | set | {"vive_solo", "encamado", "no_sale", "vivienda_fria", "trabajo_exterior", "deporte_exterior"} | añadido |
+| `_perfil_horario` | list[dict] | `[{"hora": int, "HI": float}, ...]` | añadido (uso interno, fatiga acumulada) |
 
 ## Tabla de coeficientes propuesta — CALOR
 
@@ -66,11 +73,7 @@ Factores multiplicativos sobre las odds del índice. Redondeados desde los
 riesgos relativos / odds ratios publicados (columna RR/OR con su intervalo).
 
 | Factor | Condición | Coef. propuesto | RR/OR publicado | Fuente | Confianza |
-|---|---|---|---|---|---|
-| **Edad** | 65–74 | ×1.2 | RR 1.25 (1.20–1.30) | Meta-análisis vulnerabilidad calor (Bunker 2016; Benmarhnia 2015) | Alta |
-| | 75–84 | ×1.5 | OR crece con edad; >75 notablemente mayor | íd. | Alta |
-| | ≥85 | ×2.0 | "riesgo aumenta sustancialmente >85" | íd. | Media |
-| **Sexo** | mujer | ×1.1 | OR 1.45 mujeres vs 1.34 global | Meta-análisis (Benmarhnia 2015) | Media |
+|---|---|---|---|---|---|---|
 | **Nivel de actividad** | ligera | ×1.1 | calor metabólico ∝ MET; umbral WBGT (RAL) baja al subir la carga | NIOSH [2016-106] §carga metabólica | Alta (base fisiológica) |
 | | moderada | ×1.3 | íd. | íd. | Alta |
 | | intensa | ×1.6 | íd. | íd. | Alta |
@@ -79,11 +82,14 @@ riesgos relativos / odds ratios publicados (columna RR/OR con su intervalo).
 | **Aclimatación** | no aclimatado | ×1.6 | RAL vs REL NIOSH | NIOSH [2016-106] (ya en el proyecto) | Alta |
 | **Enf. cardiovascular** | cardiopatía/HTA previa | ×1.4 | exceso CVD por calor ~1.15; OR cardiopatía elevado (Chicago) | Semenza 1996 (NEJM); Circ. Res. 2024 | Alta |
 | **Diabetes** | diabetes mellitus | ×1.2 | más ingresos/muertes por calor | Rev. sistemática LMIC 2025 | Media |
-| **Enf. mental / psicofármacos** | esquizofrenia, antipsicóticos | ×1.8 | OR 2.43 (1.52–4.01) dispensación antipsicótico; psiquiátricos 2× | Sci. Reports 2025; Psychiatric Services 1998 | Alta |
+| **Enf. mental / psicofármacos** | esquizofrenia, antipsicóticos | ×1.8 | OR 2.43 (1.52–4.01) dispensación antipsicótico; psiquiátricos 2× | Sci. Reports 2025; Psychiatric Services 1998. **Nota:** Wong 2024 muestra IRR 1.45–1.48 para la misma condición (cohorte UK, sin distinguir medicación). Se opta por ×1.8 (del OR 2.43 de Sci Reports) por ser el estudio más específico de antipsicóticos + calor extremo; los OR de caso-control tienden a sobreestimar vs IRR de cohorte, por lo que ×1.8 es un compromiso conservador entre ambos. | Media |
 | **Diuréticos** | de asa (deshidratación) | ×1.3 | RR 1.54 (dementia + loop) | PLOS One 2020 (Medicare) | Media |
+| **Hora del día (calor)** | solapa ≥75% ventana 12-18h | ×1.3 | pico de temperatura y radiación solar en ventana central | NIOSH; fisiología circadiana (mecanismo, no RR) | Media |
+| | solapa 50-75% | ×1.2 | íd. | íd. | Media |
+| | solapa parcial <50% | ×1.1 | íd. | íd. | Media |
 | **Aislamiento / dependencia** | vive solo / no sale de casa / encamado | ×2.0 | OR 2.3 vive solo; 5.5 encamado; 6.7 no sale | Semenza 1996 (Chicago, NEJM) | Alta (pero situacional) |
-| **Obesidad** | IMC ≥30 | ×1.2 † | ver nota  abajo | mixta | **Baja** |
-| **Fragilidad** | IMC <18.5 | ×1.3 | IMC bajo en ancianos = fragilidad/desnutrición | Semenza 1996 (Chicago) | Media |
+| **Obesidad** | IMC ≥30 (o % grasa ≥25/32 h/m) y actividad ≥moderada | ×1.2 † | ver nota  abajo | mixta | **Baja** |
+| **Fragilidad** | IMC <18.5 (o % grasa <12/20 h/m) | ×1.3 | IMC bajo en ancianos = fragilidad/desnutrición | Semenza 1996 (Chicago) | Media |
 | **Fatiga acumulada** | ≥4h trabajo al llegar a HI≥27°C, actividad ≥moderada | ×1.2 / ×1.3 | NIOSH work/rest schedules: trabajo continuo sin recuperación acumula estrés; a 6h+ el riesgo sube | NIOSH 2017-127; Lancet Planetary Health 2018 (Flouris: 4× más riesgo en turno con calor) | **Media** |
 
 † El ×1.2 de obesidad **solo se aplica si `nivel_actividad` ≥ moderada** (ver nota).
@@ -150,21 +156,17 @@ y marcados como provisionales.
 
 | Factor | Condición | Coef. propuesto | Base | Confianza |
 |---|---|---|---|---|
-| **Edad** | 65–74 / 75–84 / ≥85 | ×1.2 / ×1.4 / ×1.7 | termorregulación deteriorada con la edad | Media |
-| **Sexo** | mujer | ×1.05 | señal menor que en calor | Baja |
+| | | | | |
 | **Nivel de actividad** | ligera / moderada | ×0.95 / ×0.9 | la actividad genera calor → protectora frente al frío moderado | Media (fisiológica) |
 | | intensa con sudor + viento | ×1.2 | sudor + ropa húmeda + viento acelera la pérdida (hipotermia) | Media |
 | **Enf. cardiovascular** | cardiopatía/HTA | ×1.5 | el frío sube TA, colesterol, fibrinógeno; CVD = hasta 70% del exceso invernal | Alta |
 | **Enf. respiratoria** | EPOC, asma | ×1.4 | 2ª causa del exceso invernal; lag largo tras ola de frío | Media |
+| **Hora del día (frío)** | solapa ≥75% ventana 4-8h | ×1.3 | amanecer = mínima temperatura diaria + menor actividad | mecanismo fisiológico | Media |
+| | solapa 50-75% | ×1.2 | íd. | íd. | Media |
+| | solapa parcial <50% | ×1.1 | íd. | íd. | Media |
 | **Aislamiento / vivienda fría** | vive solo / pobreza energética | ×1.5 | exceso invernal mayor en climas templados con vivienda mal aislada | Media (situacional) |
-| **Obesidad** | IMC ≥30 | ×1.0 (neutro) | la grasa aísla → protectora frente al frío; sin señal de mayor mortalidad | — |
-| **Fragilidad** | IMC <18.5 | ×1.3 | poca masa/aislamiento → menor tolerancia al frío | Media |
-
-Notas:
-- La obesidad que en calor es (débil) factor de riesgo, en frío es **neutra o
-  levemente protectora** — el mismo aislamiento graso que perjudica en calor
-  ayuda en frío. Buen ejemplo de por qué los factores son **específicos de
-  calor/frío**, no globales.
+| **Obesidad / grasa corporal alta** | IMC ≥30 (o % grasa ≥25/32 h/m) | ×0.9 (protector) | la grasa aísla → protectora en frío | mecanismo fisiológico | Media |
+| **Fragilidad** | IMC <18.5 (o % grasa <12/20 h/m) | ×1.3 | poca masa/aislamiento → menor tolerancia al frío | Media |
 - El **nivel de actividad se invierte**: en frío moderado la actividad genera
   calor y protege (coef. <1), pero la actividad **intensa con sudoración y
   viento** empapa la ropa y acelera la pérdida de calor (coef. >1). Por eso el
@@ -187,17 +189,28 @@ Notas:
 ## Implementación
 
 Función: `climasafeai/features/personalizacion.py` → `personalizar_riesgo(indice, perfil, tipo="calor"|"frio")`.
-Tests: `tests/test_personalizacion.py`. Decisiones ya tomadas:
+Tests: `tests/test_personalizacion.py` (24 tests). Decisiones ya tomadas:
 
 - **Cap del producto de factores = 3.0** (los factores no son independientes).
 - **Composición en odds** (no multiplicación directa) para no salirse de [0,1].
 - **Tablas separadas calor/frío** (`_factores_calor` / `_factores_frio`): la
   obesidad y la actividad se comportan al revés.
+- **Soporte dual IMC / % grasa corporal**: el código acepta tanto `imc` como
+  `porcentaje_grasa`. Si ambos están presentes, `porcentaje_grasa` tiene
+  prioridad. Los thresholds de IMC son ≥30 (exceso) y <18.5 (déficit); los de
+  % grasa son ≥25/32 h/m (exceso) y <12/20 h/m (déficit).
 - **Obesidad solo en esfuerzo** (actividad ≥ moderada) — donde la literatura la
   respalda.
+- **Fragilidad siempre**: IMC bajo o % grasa bajo activan factor ×1.3
+  independientemente del nivel de actividad (a diferencia de obesidad).
 - **Salud mental y antipsicóticos = un único factor** (no doble conteo; el
   riesgo lo marca la condición, no el fármaco — ver `papers/wong-2024-...`).
 - **Factores sociales por MÁXIMO, no producto** (los OR de Chicago se solapan).
+- **Hora del día**: factor horario en calor (ventana 12-18h, pico térmico) y
+  en frío (ventana 4-8h, amanecer). Se activa según solapamiento de la
+  actividad con la ventana.
+- **Fatiga acumulada**: factor adicional si actividad ≥moderada, HI≥27°C en
+  el pico, y ≥4h acumuladas al llegar a ese pico.
 - La función devuelve un **desglose por factor** (nombre/categoría/valor):
   un sistema de salud necesita explicar el porqué, no dar un número opaco.
   Las categorías (`fisiologico` / `medico` / `situacional`) permiten a quien
@@ -209,5 +222,11 @@ Tests: `tests/test_personalizacion.py`. Decisiones ya tomadas:
    Calor del Ministerio de Sanidad, MoMo desagregado) para ajustar al contexto.
 2. Afinar el factor de **duración+viento en frío** (hoy la actividad intensa en
    frío es un ×1.2 fijo; idealmente dependería de viento/humedad reales del día).
-3. Descargar el resto de fuentes de dominio público (NIOSH 2016-106, CDC MMWR)
+3. **Validar modelo ML contra literatura**: verificar que las predicciones del
+   modelo (p.ej. riesgo por grado sobre percentil) caen dentro de los rangos
+   epidemiológicos conocidos (p.ej. +3.44% mortalidad CV por 1°C, Bunker 2016).
+4. **Thresholds dinámicos por clima**: MMT varía (~P60 tropical, ~P80-90
+   templado, Gasparrini 2015). Implementar thresholds de calor regionalizados
+   en lugar del percentil fijo actual.
+5. Descargar el resto de fuentes de dominio público (NIOSH 2016-106, CDC MMWR)
    a markdown cuando el acceso al PDF lo permita — hoy solo citadas (ver `papers/README.md`).
