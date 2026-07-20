@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "cap_factores": 3.0,
+  "calor": {
+    "comorbilidades": {
+      "cardiovascular": {"coef": 1.4, "nombre": "cardiopatía/HTA", "doi": "10.1056/NEJM199607113350201", "implementado": true},
+      "diabetes": {"coef": 1.2, "nombre": "diabetes", "doi": null, "implementado": true},
+      "mental": {"coef": 1.8, "nombre": "salud mental", "doi": "10.1038/s41598-025-...", "implementado": true}
+    },
+    "farmacos": {
+      "antipsicoticos": {"coef": 1.8, "nombre": "antipsicóticos", "doi": "10.1038/s41598-025-...", "implementado": true},
+      "diureticos_asa": {"coef": 1.3, "nombre": "diuréticos de asa", "doi": "10.1371/journal.pone.0233617", "implementado": true}
+    },
+    "fisiologico": {
+      "no_aclimatado": {"coef": 1.6, "nombre": "no aclimatado", "doi": null, "implementado": true},
+      "grasa_alta_esfuerzo": {"coef": 1.2, "nombre": "obesidad / grasa alta (en esfuerzo)", "doi": null, "implementado": true},
+      "sexo_mujer": {"coef": 1.1, "nombre": "sexo mujer", "doi": null, "implementado": true}
+    },
+    "situacional": {
+      "encamado": {"coef": 2.0, "nombre": "encamado", "doi": "10.1056/NEJM199607113350201", "implementado": true},
+      "no_sale": {"coef": 2.0, "nombre": "no sale de casa", "doi": "10.1056/NEJM199607113350201", "implementado": true},
+      "vive_solo": {"coef": 1.5, "nombre": "vive solo", "doi": "10.1056/NEJM199607113350201", "implementado": true}
+    }
+  },
+  "frio": {
+    "comorbilidades": {
+      "cardiovascular": {"coef": 1.5, "nombre": "cardiopatía/HTA", "doi": null, "implementado": true},
+      "respiratoria": {"coef": 1.4, "nombre": "enf. respiratoria", "doi": null, "implementado": true}
+    },
+    "fisiologico": {
+      "grasa_baja": {"coef": 1.3, "nombre": "grasa corporal baja / fragilidad", "doi": null, "implementado": true},
+      "grasa_alta_protector": {"coef": 0.9, "nombre": "grasa corporal alta (protector en frío)", "doi": null, "implementado": true},
+      "sexo_mujer": {"coef": 1.05, "nombre": "sexo mujer", "doi": null, "implementado": true}
+    },
+    "situacional": {
+      "vivienda_fria": {"coef": 1.5, "nombre": "vivienda fría", "doi": null, "implementado": true},
+      "encamado": {"coef": 1.5, "nombre": "encamado", "doi": null, "implementado": true},
+      "vive_solo": {"coef": 1.3, "nombre": "vive solo", "doi": null, "implementado": true},
+      "no_sale": {"coef": 1.3, "nombre": "no sale de casa", "doi": null, "implementado": true}
+    }
+  }
+}

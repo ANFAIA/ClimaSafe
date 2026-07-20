@@ -98,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     scout_p = subparsers.add_parser("scout", help="Busca papers en arXiv/OpenAlex y los clasifica.")
     scout_p.add_argument("--dry-run", action="store_true", help="Solo mostrar resultados, no guardar archivos")
     scout_p.add_argument("--query", action="append", help="Filtrar por substring en query o target (puede repetirse)")
+    scout_p.add_argument("--review", action="store_true", help="Revisar factores pendientes de implementar")
 
     return parser
 
@@ -172,7 +173,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "scout":
-        from agents.paper_scout import scout_run, scout_summary
+        from agents.paper_scout import scout_run, scout_review, scout_summary
+        if args.review:
+            return scout_review()
         result = scout_run(dry_run=args.dry_run, queries=args.query)
         print(scout_summary(result))
         return 0 if not result.errors else 1

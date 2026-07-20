@@ -27,11 +27,52 @@ Dos puntos de diseño clave:
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# Coeficientes (ver documentacion/coeficientes_personalizacion_riesgo.md)
-# Cada factor: categoría para el desglose transparente
-#   fisiologico | medico | situacional
-# ---------------------------------------------------------------------------
+import json
+import warnings
+from pathlib import Path
+
+# ── Factores desde JSON (data/factores_riesgo.json) ──────────────────────
+# Los coeficientes simples (comorbilidades, fármacos, situación social) se
+# leen de este archivo. Los factores complejos (edad, actividad, duración,
+# hora, fatiga acumulada) siguen siendo funciones de código.
+# El scout añade factores nuevos con implementado=false para revisión manual.
+
+_FACTORES_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "factores_riesgo.json"
+_FACTORES_CACHE: dict | None = None
+
+
+def _cargar_factores() -> dict:
+    global _FACTORES_CACHE
+    if _FACTORES_CACHE is not None:
+        return _FACTORES_CACHE
+    with open(_FACTORES_PATH) as f:
+        _FACTORES_CACHE = json.load(f)
+
+    # Warning si hay factores pendientes de implementar
+    pendientes = 0
+    for tipo in ("calor", "frio"):
+        for categoria, factores in _FACTORES_CACHE.get(tipo, {}).items():
+            if not isinstance(factores, dict):
+                continue
+            for clave, info in factores.items():
+                if isinstance(info, dict) and not info.get("implementado"):
+                    pendientes += 1
+    if pendientes:
+        warnings.warn(
+            f"⚠️  {pendientes} factor(es) de riesgo pendiente(s) de revisión. "
+            f"Ejecuta: uv run python -m agents scout --review",
+            stacklevel=2,
+        )
+
+    return _FACTORES_CACHE
+
+
+def _factores_implementados(tipo: str, categoria: str) -> dict:
+    """Devuelve {clave: {coef, nombre, doi}} solo con implementado=true."""
+    data = _cargar_factores()
+    factores = data.get(tipo, {}).get(categoria, {})
+    return {k: v for k, v in factores.items() if v.get("implementado")}
+
 
 # Cap del PRODUCTO de factores: los factores no son independientes (mayor +
 # obeso + cardiópata solapan mecanismos), así que acumularlos sin límite
@@ -137,13 +178,6 @@ def _factor_fatiga_acumulada(perfil: dict) -> tuple[str, float] | None:
     return (label, factor)
 
 
-# Social: valores TEMPLADOS respecto a los OR univariantes de Chicago (2.3-6.7),
-# que se solapan entre sí — se toma el MÁXIMO de los presentes, no el producto,
-# para no contar la misma vulnerabilidad varias veces.
-_SOCIAL_CALOR = {"encamado": 2.0, "no_sale": 2.0, "vive_solo": 1.5, "vivienda_fria": 1.0}
-_SOCIAL_FRIO = {"vivienda_fria": 1.5, "encamado": 1.5, "vive_solo": 1.3, "no_sale": 1.3}
-
-
 def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
     """Devuelve [(nombre, categoria, valor), ...] de los factores activos."""
     f: list[tuple[str, str, float]] = []
@@ -153,8 +187,11 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
         if v != 1.0:
             f.append((f"edad {edad}", "fisiologico", v))
 
+    fisio_cal = _factores_implementados("calor", "fisiologico")
     if perfil.get("sexo") == "mujer":
-        f.append(("sexo mujer", "fisiologico", 1.1))
+        sm = fisio_cal.get("sexo_mujer")
+        if sm:
+            f.append((sm["nombre"], "fisiologico", sm["coef"]))
 
     actividad = perfil.get("nivel_actividad", "reposo")
     if (v := _ACTIVIDAD_CALOR.get(actividad, 1.0)) != 1.0:
@@ -175,34 +212,44 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
     if grasa is not None:
         umbral_alto = 25 if sexo == "hombre" else 32
         if grasa >= umbral_alto and actividad in _ACTIVIDADES_ESFUERZO:
-            f.append((f"grasa corporal alta ({grasa}%, en esfuerzo)", "fisiologico", 1.2))
+            gae = fisio_cal.get("grasa_alta_esfuerzo")
+            if gae:
+                f.append((f"{gae['nombre']} ({grasa}%)", "fisiologico", gae["coef"]))
+
+    comorb_cal = _factores_implementados("calor", "comorbilidades")
+    farmacos_cal = _factores_implementados("calor", "farmacos")
+    social_cal = _factores_implementados("calor", "situacional")
 
     if perfil.get("aclimatado") is False:
-        f.append(("no aclimatado", "fisiologico", 1.6))
+        ac = fisio_cal.get("no_aclimatado")
+        if ac:
+            f.append(("no aclimatado", "fisiologico", ac["coef"]))
 
     comorb = perfil.get("comorbilidades", set())
-    if "cardiovascular" in comorb:
-        f.append(("cardiopatía/HTA", "medico", 1.4))
-    if "diabetes" in comorb:
-        f.append(("diabetes", "medico", 1.2))
+    for k in comorb:
+        if k in comorb_cal and k != "mental":
+            f.append((comorb_cal[k]["nombre"], "medico", comorb_cal[k]["coef"]))
 
     # Salud mental y psicofármacos: un ÚNICO factor (el riesgo lo marca la
     # condición, no el fármaco aislado — ver wong-2024). Evita doble conteo.
     farmacos = perfil.get("farmacos", set())
     if "mental" in comorb or "antipsicoticos" in farmacos:
-        f.append(("salud mental / antipsicóticos", "medico", 1.8))
-    if "diureticos_asa" in farmacos:
-        f.append(("diuréticos de asa", "medico", 1.3))
+        ap = comorb_cal.get("mental") or farmacos_cal.get("antipsicoticos")
+        if ap:
+            f.append((ap["nombre"], "medico", ap["coef"]))
+    for k in farmacos:
+        if k in farmacos_cal and k != "antipsicoticos":
+            f.append((farmacos_cal[k]["nombre"], "medico", farmacos_cal[k]["coef"]))
 
     fatiga = _factor_fatiga_acumulada(perfil)
     if fatiga:
         f.append((fatiga[0], "fisiologico", fatiga[1]))
 
     social = perfil.get("situacion_social", set())
-    presentes = [(k, _SOCIAL_CALOR[k]) for k in social if _SOCIAL_CALOR.get(k, 1.0) > 1.0]
+    presentes = [(k, social_cal[k]) for k in social if k in social_cal]
     if presentes:
-        nombre, valor = max(presentes, key=lambda kv: kv[1])
-        f.append((f"aislamiento/dependencia ({nombre})", "situacional", valor))
+        nombre, mejor = max(presentes, key=lambda kv: kv[1]["coef"])
+        f.append((f"aislamiento/dependencia ({mejor['nombre']})", "situacional", mejor["coef"]))
 
     return f
 
@@ -215,8 +262,11 @@ def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
         if v != 1.0:
             f.append((f"edad {edad}", "fisiologico", v))
 
+    fisio_frio = _factores_implementados("frio", "fisiologico")
     if perfil.get("sexo") == "mujer":
-        f.append(("sexo mujer", "fisiologico", 1.05))
+        sm = fisio_frio.get("sexo_mujer")
+        if sm:
+            f.append((sm["nombre"], "fisiologico", sm["coef"]))
 
     actividad = perfil.get("nivel_actividad", "reposo")
     if (v := _ACTIVIDAD_FRIO.get(actividad, 1.0)) != 1.0:
@@ -233,21 +283,26 @@ def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
         umbral_bajo = 12 if sexo == "hombre" else 20
         umbral_alto = 25 if sexo == "hombre" else 32
         if grasa < umbral_bajo:
-            f.append((f"grasa corporal baja ({grasa}%)", "fisiologico", 1.3))
+            gb = fisio_frio.get("grasa_baja")
+            if gb:
+                f.append((f"{gb['nombre']} ({grasa}%)", "fisiologico", gb["coef"]))
         elif grasa >= umbral_alto:
-            f.append((f"grasa corporal alta ({grasa}%, protector)", "fisiologico", 0.9))
+            gp = fisio_frio.get("grasa_alta_protector")
+            if gp:
+                f.append((f"{gp['nombre']} ({grasa}%)", "fisiologico", gp["coef"]))
 
+    comorb_frio = _factores_implementados("frio", "comorbilidades")
     comorb = perfil.get("comorbilidades", set())
-    if "cardiovascular" in comorb:
-        f.append(("cardiopatía/HTA", "medico", 1.5))
-    if "respiratoria" in comorb:
-        f.append(("enf. respiratoria", "medico", 1.4))
+    for k in comorb:
+        if k in comorb_frio:
+            f.append((comorb_frio[k]["nombre"], "medico", comorb_frio[k]["coef"]))
 
+    social_frio = _factores_implementados("frio", "situacional")
     social = perfil.get("situacion_social", set())
-    presentes = [(k, _SOCIAL_FRIO[k]) for k in social if _SOCIAL_FRIO.get(k, 1.0) > 1.0]
+    presentes = [(k, social_frio[k]) for k in social if k in social_frio]
     if presentes:
-        nombre, valor = max(presentes, key=lambda kv: kv[1])
-        f.append((f"aislamiento/vivienda fría ({nombre})", "situacional", valor))
+        nombre, mejor = max(presentes, key=lambda kv: kv[1]["coef"])
+        f.append((f"aislamiento/vivienda fría ({mejor['nombre']})", "situacional", mejor["coef"]))
 
     return f
 

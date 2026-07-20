@@ -45,6 +45,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DOCS_DIR = BASE_DIR / "documentacion"
 PAPERS_DIR = DOCS_DIR / "papers"
 MODELOS_DIR = DOCS_DIR / "modelos"
+FACTORES_JSON_PATH = BASE_DIR / "data" / "factores_riesgo.json"
 
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
 DEFAULT_LLM_MODEL = os.getenv("PAPER_SCOUT_MODEL", "gemini-2.0-flash")
@@ -554,7 +555,111 @@ def _update_indices(all_papers: list[ScoutPaper]) -> list[Path]:
     return updated
 
 
+# ── Factores de riesgo JSON ──────────────────────────────────────────────────
+
+def _factores_json_cargar() -> dict:
+    if FACTORES_JSON_PATH.exists():
+        return json.loads(FACTORES_JSON_PATH.read_text(encoding="utf-8"))
+    return {"version": 1, "cap_factores": 3.0, "calor": {}, "frio": {}}
+
+
+def _agregar_factor_json(
+    clave: str,
+    categoria: str,
+    tipo: str,
+    coeficiente: float,
+    nombre: str,
+    doi: str | None = None,
+) -> bool:
+    """Añade un factor al JSON con implementado=false. No sobreescribe."""
+    data = _factores_json_cargar()
+    if tipo not in ("calor", "frio"):
+        return False
+    seccion = data.setdefault(tipo, {})
+    sub = seccion.setdefault(categoria, {})
+    if clave in sub and sub[clave].get("implementado"):
+        return False  # ya existe y está activo, no tocamos
+    sub.setdefault(clave, {
+        "coef": coeficiente,
+        "nombre": nombre,
+        "doi": doi,
+        "implementado": False,
+    })
+    FACTORES_JSON_PATH.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
+
+
+def _review_pendientes() -> list[dict]:
+    """Devuelve lista de factores con implementado=false para revisión."""
+    data = _factores_json_cargar()
+    pendientes: list[dict] = []
+    for tipo in ("calor", "frio"):
+        for categoria, factores in data.get(tipo, {}).items():
+            if not isinstance(factores, dict):
+                continue
+            for clave, info in factores.items():
+                if isinstance(info, dict) and not info.get("implementado"):
+                    pendientes.append({
+                        "tipo": tipo,
+                        "categoria": categoria,
+                        "clave": clave,
+                        "coeficiente": info.get("coef"),
+                        "nombre": info.get("nombre", clave),
+                        "doi": info.get("doi"),
+                    })
+    return pendientes
+
+
+def _aprobar_factor(clave: str, tipo: str, categoria: str) -> bool:
+    """Marca un factor como implementado=true."""
+    data = _factores_json_cargar()
+    factor = data.get(tipo, {}).get(categoria, {}).get(clave)
+    if factor is None:
+        return False
+    factor["implementado"] = True
+    FACTORES_JSON_PATH.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
+
+
+def _rechazar_factor(clave: str, tipo: str, categoria: str) -> bool:
+    """Elimina un factor del JSON."""
+    data = _factores_json_cargar()
+    seccion = data.get(tipo, {}).get(categoria, {})
+    if clave not in seccion:
+        return False
+    del seccion[clave]
+    FACTORES_JSON_PATH.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
+
+
 # ── CLI principal ─────────────────────────────────────────────────────────────
+
+def _parse_data_point(data_point: str) -> dict | None:
+    """Intenta parsear un data_point string a {clave, coef, nombre}.
+
+    Ej: "RR=1.37 (1.15-2.43)" → {coef: 1.37, nombre: "RR=1.37"}
+    """
+    m = re.search(r"([\d.]+)", data_point)
+    if not m:
+        return None
+    try:
+        coef = float(m.group(1))
+    except ValueError:
+        return None
+    if coef < 0.1 or coef > 100:
+        return None
+    clave = _slugify(data_point, max_len=60) or "unknown"
+    return {"clave": clave, "coef": coef, "nombre": data_point}
+
 
 def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> ScoutResult:
     """
@@ -604,6 +709,24 @@ def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> Sco
 
     if not dry_run and all_relevant:
         _update_indices(all_relevant)
+        # Guardar factores encontrados en el JSON
+        for p in all_relevant:
+            if not p.llm_data_points:
+                continue
+            target = p.query_info.get("target", "factores-riesgo")
+            tipo = "frio" if "frio" in target.lower() else "calor"
+            for dp in p.llm_data_points:
+                parsed = _parse_data_point(dp)
+                if parsed is None:
+                    continue
+                _agregar_factor_json(
+                    clave=parsed["clave"],
+                    categoria="medico",
+                    tipo=tipo,
+                    coeficiente=parsed["coef"],
+                    nombre=f"{parsed['nombre']} ({p.title[:50]})",
+                    doi=p.doi,
+                )
 
     return result
 
@@ -633,13 +756,71 @@ def scout_summary(result: ScoutResult) -> str:
     return "\n".join(lines)
 
 
+def scout_review() -> int:
+    """Revisa factores pendientes y permite aprobarlos o rechazarlos."""
+    pendientes = _review_pendientes()
+    if not pendientes:
+        print("✓ No hay factores pendientes de revisión.")
+        return 0
+
+    print(f"🔬 {len(pendientes)} factores pendientes de revisión:\n")
+    for i, p in enumerate(pendientes, 1):
+        doi_str = f" (DOI: {p['doi']})" if p.get("doi") else ""
+        print(f"  [{i}] {p['nombre']} ×{p['coeficiente']}")
+        print(f"      tipo: {p['tipo']} | categoría: {p['categoria']} | clave: {p['clave']}{doi_str}")
+
+    print("\n  [a] Aprobar todos")
+    print("  [r] Rechazar todos")
+    print("  [1,2,...] Aprobar por número")
+    print("  [q] Salir sin cambios")
+
+    while True:
+        try:
+            choice = input("\n  → ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+
+        if choice == "q":
+            return 0
+        if choice == "a":
+            for p in pendientes:
+                _aprobar_factor(p["clave"], p["tipo"], p["categoria"])
+            print(f"  ✓ {len(pendientes)} factores aprobados.")
+            return 0
+        if choice == "r":
+            for p in pendientes:
+                _rechazar_factor(p["clave"], p["tipo"], p["categoria"])
+            print(f"  ✗ {len(pendientes)} factores rechazados.")
+            return 0
+
+        try:
+            nums = [int(x.strip()) for x in choice.split(",") if x.strip()]
+        except ValueError:
+            print("  ? Opción no válida")
+            continue
+
+        ok = 0
+        for n in nums:
+            if 1 <= n <= len(pendientes):
+                p = pendientes[n - 1]
+                _aprobar_factor(p["clave"], p["tipo"], p["categoria"])
+                ok += 1
+        print(f"  ✓ {ok} factores aprobados.")
+        return 0
+
+
 def main() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Paper Scout — búsqueda programada de papers")
     parser.add_argument("--dry-run", action="store_true", help="Solo mostrar resultados, no guardar")
     parser.add_argument("--query", action="append", help="Filtrar por substring en query o target (puede repetirse)")
+    parser.add_argument("--review", action="store_true", help="Revisar factores pendientes de implementar")
     args = parser.parse_args()
+
+    if args.review:
+        return scout_review()
 
     result = scout_run(dry_run=args.dry_run, queries=args.query)
     print(scout_summary(result))
