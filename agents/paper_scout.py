@@ -477,21 +477,17 @@ def _quality_filter(p: dict[str, Any], qinfo: dict[str, Any]) -> bool:
     return True
 
 
-def _calidad_paper(source: str, citations: int | None, source_type: str | None) -> str:
-    """Determina la calidad del paper según fuente y citas.
+def _backends_validos() -> tuple[str, ...]:
+    return ("openalex",)
 
-    - arXiv → baja (preprint)
-    - OpenAlex journal + ≥50 citas → alta
-    - OpenAlex journal + <50 citas → media (peer-reviewed)
-    - OpenAlex repositorio/unknown → baja
-    """
-    if source == "arxiv":
+
+def _calidad_paper(source: str, citations: int | None, source_type: str | None) -> str:
+    """Solo OpenAlex con source_type=journal, clasificados por citas."""
+    if source_type != "journal":
         return "baja"
     if citations is not None and citations >= 50:
         return "alta"
-    if source_type == "journal":
-        return "media"
-    return "baja"
+    return "media"
 
 
 def _search_query(qinfo: dict[str, Any]) -> list[ScoutPaper]:
@@ -499,8 +495,8 @@ def _search_query(qinfo: dict[str, Any]) -> list[ScoutPaper]:
     papers: list[ScoutPaper] = []
     keywords = ResearchTool.extract_keywords(query, top=8)
 
-    for backend_name in ("arxiv", "openalex"):
-        search_fn = ResearchTool.search_arxiv if backend_name == "arxiv" else ResearchTool.search_openalex
+    for backend_name in _backends_validos():
+        search_fn = ResearchTool.search_openalex if backend_name == "openalex" else ResearchTool.search_arxiv
         try:
             raw = search_fn(query, max_results=MAX_RESULTS_PER_QUERY)
         except Exception:
@@ -508,6 +504,12 @@ def _search_query(qinfo: dict[str, Any]) -> list[ScoutPaper]:
 
         for p in raw:
             if not p.get("title"):
+                continue
+            source_type = p.get("source_type")
+            # Solo journals académicos con peer-review
+            if source_type and source_type != "journal":
+                continue
+            if not source_type:
                 continue
             relevance = ResearchTool.relevance(p, keywords)
             if relevance < RELEVANCE_THRESHOLD:
@@ -526,8 +528,8 @@ def _search_query(qinfo: dict[str, Any]) -> list[ScoutPaper]:
                 citations=p.get("citations"),
                 query_info=dict(qinfo),
                 journal=p.get("journal"),
-                source_type=p.get("source_type"),
-                calidad=_calidad_paper(p.get("source", backend_name), p.get("citations"), p.get("source_type")),
+                source_type=source_type,
+                calidad=_calidad_paper(p.get("source", backend_name), p.get("citations"), source_type),
             ))
 
     # Dedupe
