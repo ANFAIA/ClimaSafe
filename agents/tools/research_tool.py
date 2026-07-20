@@ -123,7 +123,9 @@ class ResearchTool:
                 for a in work.get("authorships", [])
             ]
             doi = work.get("doi")
-            url = (work.get("primary_location", {}) or {}).get("landing_page_url") or work.get("id")
+            loc = work.get("primary_location") or {}
+            url = loc.get("landing_page_url") or work.get("id")
+            source = loc.get("source") or {}
             papers.append(ResearchTool._normalize(
                 title=work.get("display_name") or "",
                 abstract=ResearchTool._abstract_from_inverted(work.get("abstract_inverted_index")),
@@ -131,6 +133,8 @@ class ResearchTool:
                 year=work.get("publication_year"),
                 url=url, doi=doi, citations=work.get("cited_by_count"),
                 source="openalex",
+                journal=source.get("display_name"),
+                source_type=source.get("type"),
             ))
         return papers
 
@@ -159,6 +163,8 @@ class ResearchTool:
             "doi": (kw.get("doi") or "").replace("https://doi.org/", "").lower() or None,
             "citations": kw.get("citations"),
             "source": kw.get("source", ""),
+            "journal": kw.get("journal"),
+            "source_type": kw.get("source_type"),
         }
 
     @staticmethod

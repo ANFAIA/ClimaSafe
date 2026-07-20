@@ -243,6 +243,9 @@ class ScoutPaper:
     relevance: float
     citations: int | None
     query_info: dict[str, Any]
+    journal: str | None = None
+    source_type: str | None = None
+    calidad: str = ""
 
     classification: str = ""
     llm_summary: str = ""
@@ -387,6 +390,11 @@ def _generate_markdown(paper: ScoutPaper) -> str:
     lines.append(f"> **URL:** {paper.url}  ")
     if paper.year:
         lines.append(f"> **Año:** {paper.year}")
+    if paper.calidad:
+        calidad_icono = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(paper.calidad, "⚪")
+        lines.append(f"> **Calidad:** {calidad_icono} {paper.calidad}")
+    if paper.journal:
+        lines.append(f"> **Journal:** {paper.journal}")
     lines.append("")
 
     authors_str = ", ".join(paper.authors[:5])
@@ -428,12 +436,13 @@ def _papers_index_md(category: str, target_dir: str, papers: list[ScoutPaper]) -
     lines = [f"# {target_dir.replace('-', ' ').title()}", ""]
     lines.append("Papers encontrados automáticamente por el agente scout.")
     lines.append("")
-    lines.append("| Título | Año | Fuente | Relevancia | Clasificación |")
-    lines.append("|--------|-----|--------|------------|---------------|")
+    lines.append("| Título | Año | Fuente | Calidad | Relevancia | Clasificación |")
+    lines.append("|--------|-----|--------|---------|------------|---------------|")
     for p in papers:
         slug = _slugify(p.title)
         short_title = p.title[:60] + "..." if len(p.title) > 60 else p.title
-        lines.append(f"| [{short_title}]({slug}.md) | {p.year or '—'} | {p.source} | {p.relevance:.2f} | {p.classification} |")
+        calidad_icono = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(p.calidad, "⚪")
+        lines.append(f"| [{short_title}]({slug}.md) | {p.year or '—'} | {p.source} | {calidad_icono} {p.calidad} | {p.relevance:.2f} | {p.classification} |")
     lines.append("")
     lines.append(f"_Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M')}_")
     lines.append("")
@@ -468,6 +477,23 @@ def _quality_filter(p: dict[str, Any], qinfo: dict[str, Any]) -> bool:
     return True
 
 
+def _calidad_paper(source: str, citations: int | None, source_type: str | None) -> str:
+    """Determina la calidad del paper según fuente y citas.
+
+    - arXiv → baja (preprint)
+    - OpenAlex journal + ≥50 citas → alta
+    - OpenAlex journal + <50 citas → media (peer-reviewed)
+    - OpenAlex repositorio/unknown → baja
+    """
+    if source == "arxiv":
+        return "baja"
+    if citations is not None and citations >= 50:
+        return "alta"
+    if source_type == "journal":
+        return "media"
+    return "baja"
+
+
 def _search_query(qinfo: dict[str, Any]) -> list[ScoutPaper]:
     query = qinfo["query"]
     papers: list[ScoutPaper] = []
@@ -499,6 +525,9 @@ def _search_query(qinfo: dict[str, Any]) -> list[ScoutPaper]:
                 relevance=relevance,
                 citations=p.get("citations"),
                 query_info=dict(qinfo),
+                journal=p.get("journal"),
+                source_type=p.get("source_type"),
+                calidad=_calidad_paper(p.get("source", backend_name), p.get("citations"), p.get("source_type")),
             ))
 
     # Dedupe
@@ -570,6 +599,7 @@ def _agregar_factor_json(
     coeficiente: float,
     nombre: str,
     doi: str | None = None,
+    calidad: str = "baja",
 ) -> bool:
     """Añade un factor al JSON con implementado=false. No sobreescribe."""
     data = _factores_json_cargar()
@@ -583,6 +613,7 @@ def _agregar_factor_json(
         "coef": coeficiente,
         "nombre": nombre,
         "doi": doi,
+        "calidad": calidad,
         "implementado": False,
     })
     FACTORES_JSON_PATH.write_text(
@@ -609,6 +640,7 @@ def _review_pendientes() -> list[dict]:
                         "coeficiente": info.get("coef"),
                         "nombre": info.get("nombre", clave),
                         "doi": info.get("doi"),
+                        "calidad": info.get("calidad", "baja"),
                     })
     return pendientes
 
@@ -726,6 +758,7 @@ def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> Sco
                     coeficiente=parsed["coef"],
                     nombre=f"{parsed['nombre']} ({p.title[:50]})",
                     doi=p.doi,
+                    calidad=p.calidad,
                 )
 
     return result
@@ -751,7 +784,8 @@ def scout_summary(result: ScoutResult) -> str:
         lines.append("Papers encontrados:")
         for p in sorted(result.new_papers, key=lambda x: -x.relevance):
             tag = str(p.classification)
-            lines.append(f"  [{tag:14s}] {p.relevance:.2f}  {p.title[:70]}")
+            calidad_icono = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(p.calidad, "⚪")
+            lines.append(f"  [{tag:14s}] {calidad_icono} {p.relevance:.2f}  {p.title[:70]}")
     lines.append("─────────────────────────────────────────────────")
     return "\n".join(lines)
 
@@ -766,8 +800,9 @@ def scout_review() -> int:
     print(f"🔬 {len(pendientes)} factores pendientes de revisión:\n")
     for i, p in enumerate(pendientes, 1):
         doi_str = f" (DOI: {p['doi']})" if p.get("doi") else ""
-        print(f"  [{i}] {p['nombre']} ×{p['coeficiente']}")
-        print(f"      tipo: {p['tipo']} | categoría: {p['categoria']} | clave: {p['clave']}{doi_str}")
+        calidad_icono = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(p["calidad"], "⚪")
+        print(f"  [{i}] {calidad_icono} {p['nombre']} ×{p['coeficiente']}")
+        print(f"      calidad: {p['calidad']} | tipo: {p['tipo']} | categoría: {p['categoria']}{doi_str}")
 
     print("\n  [a] Aprobar todos")
     print("  [r] Rechazar todos")
