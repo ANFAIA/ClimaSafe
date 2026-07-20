@@ -45,6 +45,9 @@ def _cargar_factores() -> dict:
     global _FACTORES_CACHE
     if _FACTORES_CACHE is not None:
         return _FACTORES_CACHE
+    if not _FACTORES_PATH.exists():
+        _FACTORES_CACHE = {"version": 1, "cap_factores": 3.0}
+        return _FACTORES_CACHE
     with open(_FACTORES_PATH) as f:
         _FACTORES_CACHE = json.load(f)
 

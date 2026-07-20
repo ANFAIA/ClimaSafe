@@ -46,6 +46,7 @@ pytest_cache/
 data/**/*.csv
 data/**/*.tsv
 data/**/*.json
+!data/factores_riesgo.json
 data/**/*.jsonl
 data/**/*.parquet
 data/**/*.feather
