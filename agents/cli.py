@@ -7,6 +7,9 @@ Uso:
     uv run python -m agents run git suggest_commit_message
     uv run python -m agents run data eda_report --filename dataset.csv --target-col target
     uv run python -m agents ask "genera el changelog desde el último tag"
+    uv run python -m agents scout
+    uv run python -m agents scout --dry-run
+    uv run python -m agents scout --query transformers
 """
 
 from __future__ import annotations
@@ -92,6 +95,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("tools", help="Lista las herramientas registradas.")
 
+    scout_p = subparsers.add_parser("scout", help="Busca papers en arXiv/OpenAlex y los clasifica.")
+    scout_p.add_argument("--dry-run", action="store_true", help="Solo mostrar resultados, no guardar archivos")
+    scout_p.add_argument("--query", action="append", help="Filtrar por substring en query o target (puede repetirse)")
+
     return parser
 
 
@@ -163,6 +170,12 @@ def main(argv: list[str] | None = None) -> int:
         for name in sorted(tool_registry.all()):
             print(f"- {name}")
         return 0
+
+    if args.command == "scout":
+        from agents.paper_scout import scout_run, scout_summary
+        result = scout_run(dry_run=args.dry_run, queries=args.query)
+        print(scout_summary(result))
+        return 0 if not result.errors else 1
 
     parser.print_help()
     return 1

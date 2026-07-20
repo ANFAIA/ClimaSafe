@@ -31,10 +31,47 @@ from climasafeai.models.recomendaciones import generar_recomendaciones
 
 CLASES = ["SEGURO", "PRECAUCION", "PELIGRO"]
 
+_FACTORES_RIESGO_EDAD = {
+    "calor": {"joven": 0.6, "adulto": 0.6, "mayor": 0.75, "anciano": 0.875, "viejano": 1.0, "todos": 1.0},
+    "frio":  {"joven": 0.75, "adulto": 0.75, "mayor": 0.875, "anciano": 0.95, "viejano": 1.0, "todos": 1.0},
+}
+
+
+def _edad_a_estrato(edad: float | None) -> str:
+    if edad is None:
+        return "todos"
+    if edad < 45:
+        return "joven"
+    if edad < 60:
+        return "adulto"
+    if edad < 70:
+        return "mayor"
+    if edad < 80:
+        return "anciano"
+    return "viejano"
+
 
 def _cargar_province_mapping() -> dict[str, int]:
     from climasafeai.features.external_features import _EMBEDDED_DEMOGRAPHICS
     return {p: i for i, p in enumerate(sorted(_EMBEDDED_DEMOGRAPHICS.keys()))}
+
+
+def _aplicar_factor_edad(proba: np.ndarray, clase: str, grupo_edad: str) -> np.ndarray:
+    """Ajusta probabilidad (3,) por factor edad. Devuelve copia."""
+    factor = _FACTORES_RIESGO_EDAD.get(clase, {}).get(grupo_edad, 1.0)
+    if factor == 1.0:
+        return proba
+    p = proba.copy()
+    prob_riesgo = 1.0 - p[0]
+    prob_riesgo_adj = prob_riesgo * factor
+    p_sum = p[1] + p[2]
+    if p_sum > 0:
+        p1_frac = p[1] / p_sum
+        p2_frac = p[2] / p_sum
+        p[0] = 1.0 - prob_riesgo_adj
+        p[1] = prob_riesgo_adj * p1_frac
+        p[2] = prob_riesgo_adj * p2_frac
+    return p
 
 
 def _predecir_tabular(
@@ -42,6 +79,7 @@ def _predecir_tabular(
     clase: str,
     df_features: pd.DataFrame,
     provincia: str | None = None,
+    grupo_edad: str = "todos",
 ) -> dict:
     model = joblib.load(MODELS_DIR / model_path)
     df_input = df_features.copy()
@@ -51,6 +89,8 @@ def _predecir_tabular(
 
     proba = model.predict_proba(X)
     pred_argmax = int(proba[0].argmax())
+
+    proba[0] = _aplicar_factor_edad(proba[0], clase, grupo_edad)
 
     u_global = CLASS_THRESHOLDS_RECOMENDADOS.get(clase, {"t1": 0.5, "t2": 0.4})
     u = dict(u_global)
@@ -81,6 +121,7 @@ def _predecir_lstm(
     df_hora: pd.DataFrame,
     df_features: pd.DataFrame,
     provincia: str | None = None,
+    grupo_edad: str = "todos",
 ) -> dict:
     try:
         model = load_lstm_province_hybrid(LSTM_PROVINCE_HYBRID_MODEL_PATH, device="cpu")
@@ -111,6 +152,9 @@ def _predecir_lstm(
 
     proba_c = torch.softmax(logits_c, dim=1).numpy()[0]
     proba_f = torch.softmax(logits_f, dim=1).numpy()[0]
+
+    proba_c = _aplicar_factor_edad(proba_c, "calor", grupo_edad)
+    proba_f = _aplicar_factor_edad(proba_f, "frio", grupo_edad)
 
     u_c = CLASS_THRESHOLDS_LSTM.get("calor", {"t1": 0.6, "t2": 0.55})
     u_f = CLASS_THRESHOLDS_LSTM.get("frio", {"t1": 0.4, "t2": 0.35})
@@ -183,15 +227,18 @@ def predict_ensemble(
     df_features = weather["df_features"]
     df_hora = weather["df_hora"]
 
+    # Determinar estrato por edad del usuario
+    estrato = _edad_a_estrato(perfil.get("edad") if perfil else None)
+
     resultados = {}
 
-    xgb_result = _predecir_tabular("XGBoost_calor.joblib", "calor", df_features, provincia)
+    xgb_result = _predecir_tabular("XGBoost_calor.joblib", "calor", df_features, provincia, grupo_edad=estrato)
     resultados["XGBoost_calor"] = xgb_result
 
-    rf_result = _predecir_tabular("RandomForest_frio.joblib", "frio", df_features, provincia)
+    rf_result = _predecir_tabular("RandomForest_frio.joblib", "frio", df_features, provincia, grupo_edad=estrato)
     resultados["RandomForest_frio"] = rf_result
 
-    lstm_result = _predecir_lstm(df_hora, df_features, provincia)
+    lstm_result = _predecir_lstm(df_hora, df_features, provincia, grupo_edad=estrato)
     resultados["LSTM"] = lstm_result
 
     formula_result = _predecir_formulas(weather["current"])

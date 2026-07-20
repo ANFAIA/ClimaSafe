@@ -1,0 +1,35 @@
+name: Paper Scout
+
+on:
+  schedule:
+    # Cada dos semanas, lunes a las 8:00 UTC
+    - cron: "0 8 */14 * *"
+  workflow_dispatch:
+    # Permite ejecución manual desde la UI de GitHub
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python and dependencies
+        run: uv sync
+
+      - name: Run paper scout
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: uv run python -m agents scout
+
+      - name: Commit new papers
+        run: |
+          git config user.name "Paper Scout Bot"
+          git config user.email "bot@climasafeai.dev"
+          git add documentacion/papers/ documentacion/modelos/
+          git diff --cached --quiet || git commit -m "scout: nuevos papers encontrados [skip ci]"
+
+      - name: Push changes
+        run: git push

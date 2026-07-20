@@ -34,6 +34,8 @@ dependencies = [
     "netcdf4>=1.7.4",
     "dask>=2026.6.0",
     "geopandas>=1.1.4",
+    # ── Agentes ─────────────────────────────────────────────────────────
+    "openai",          # Paper Scout: clasificación LLM de papers
 ]
 
 [project.optional-dependencies]
