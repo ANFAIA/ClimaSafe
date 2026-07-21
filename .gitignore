@@ -150,5 +150,12 @@ graphify-out/cache/
 # --- LLM ---
 .claude
 .opencode/node_modules/
+opencode.json
+
+# --- MLflow local DB ---
+mlflow.db
+
+# --- Data artifacts ---
+data/processed/*.pt
 
 notebooks/0-5-*.ipynb

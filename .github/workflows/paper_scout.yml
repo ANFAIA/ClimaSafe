@@ -27,12 +27,12 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: uv run python -m agents scout
 
-      - name: Commit new papers
+      - name: Commit new papers and factors
         run: |
           git config user.name "Paper Scout Bot"
           git config user.email "bot@climasafeai.dev"
-          git add documentacion/papers/ documentacion/modelos/
-          git diff --cached --quiet || git commit -m "scout: nuevos papers encontrados [skip ci]"
+          git add documentacion/papers/ documentacion/modelos/ data/factores_riesgo.json
+          git diff --cached --quiet || git commit -m "scout: nuevos papers y factores de riesgo [skip ci]"
 
       - name: Push changes
         run: git push

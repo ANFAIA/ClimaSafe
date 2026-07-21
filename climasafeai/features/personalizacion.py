@@ -185,11 +185,6 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
     """Devuelve [(nombre, categoria, valor), ...] de los factores activos."""
     f: list[tuple[str, str, float]] = []
 
-    if (edad := perfil.get("edad")) is not None:
-        v = _factor_edad_calor(edad)
-        if v != 1.0:
-            f.append((f"edad {edad}", "fisiologico", v))
-
     fisio_cal = _factores_implementados("calor", "fisiologico")
     if perfil.get("sexo") == "mujer":
         sm = fisio_cal.get("sexo_mujer")
@@ -214,10 +209,15 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
     sexo = perfil.get("sexo")
     if grasa is not None:
         umbral_alto = 25 if sexo == "hombre" else 32
+        umbral_bajo = 12 if sexo == "hombre" else 20
         if grasa >= umbral_alto and actividad in _ACTIVIDADES_ESFUERZO:
             gae = fisio_cal.get("grasa_alta_esfuerzo")
             if gae:
                 f.append((f"{gae['nombre']} ({grasa}%)", "fisiologico", gae["coef"]))
+        elif grasa < umbral_bajo:
+            gbp = fisio_cal.get("grasa_baja_protector")
+            if gbp:
+                f.append((f"{gbp['nombre']} ({grasa}%)", "fisiologico", gbp["coef"]))
 
     comorb_cal = _factores_implementados("calor", "comorbilidades")
     farmacos_cal = _factores_implementados("calor", "farmacos")
@@ -227,6 +227,16 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
         ac = fisio_cal.get("no_aclimatado")
         if ac:
             f.append(("no aclimatado", "fisiologico", ac["coef"]))
+
+    if perfil.get("falta_sueno"):
+        fs = fisio_cal.get("falta_sueno")
+        if fs:
+            f.append((fs["nombre"], "fisiologico", fs["coef"]))
+
+    if perfil.get("enfermedad_reciente"):
+        er = fisio_cal.get("enfermedad_reciente")
+        if er:
+            f.append((er["nombre"], "fisiologico", er["coef"]))
 
     comorb = perfil.get("comorbilidades", set())
     for k in comorb:
@@ -248,22 +258,27 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
     if fatiga:
         f.append((fatiga[0], "fisiologico", fatiga[1]))
 
-    social = perfil.get("situacion_social", set())
-    presentes = [(k, social_cal[k]) for k in social if k in social_cal]
+    sociales = set(perfil.get("situacion_social", []))
+    if perfil.get("alcohol_reciente"):
+        sociales.add("alcohol")
+    presentes = [(k, social_cal[k]) for k in sociales if k in social_cal]
     if presentes:
         nombre, mejor = max(presentes, key=lambda kv: kv[1]["coef"])
         f.append((f"aislamiento/dependencia ({mejor['nombre']})", "situacional", mejor["coef"]))
+
+    # Factores ocupacionales
+    ocupacional_cal = _factores_implementados("calor", "ocupacional")
+    if perfil.get("ocupacional"):
+        ocups_perfil = set(perfil["ocupacional"])
+        for k in ocups_perfil:
+            if k in ocupacional_cal:
+                f.append((ocupacional_cal[k]["nombre"], "ocupacional", ocupacional_cal[k]["coef"]))
 
     return f
 
 
 def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
     f: list[tuple[str, str, float]] = []
-
-    if (edad := perfil.get("edad")) is not None:
-        v = _factor_edad_frio(edad)
-        if v != 1.0:
-            f.append((f"edad {edad}", "fisiologico", v))
 
     fisio_frio = _factores_implementados("frio", "fisiologico")
     if perfil.get("sexo") == "mujer":
@@ -332,6 +347,8 @@ def personalizar_riesgo(
         comorbilidades:set{"cardiovascular","diabetes","respiratoria","mental"},
         farmacos:set{"antipsicoticos","diureticos_asa"},
         situacion_social:set{"vive_solo","encamado","no_sale","vivienda_fria"},
+        alcohol_reciente:bool (añade "alcohol" a situacion_social),
+        ocupacional:set{"estres_termico_laboral","esfuerzo_termico_laboral"},
         _perfil_horario:list[{"hora":int, "HI":float}] (opcional, usado por _factor_fatiga_acumulada).
     tipo : "calor" | "frio"
         Qué tabla de coeficientes aplicar. Son DISTINTAS (la obesidad y la

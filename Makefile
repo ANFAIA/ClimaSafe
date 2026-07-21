@@ -8,7 +8,7 @@
         monitor tune serve query \
         docker-run docker-update docker-down \
         clean clean-models clean-figures clean-all \
-        run info help
+        run info help web
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Variables
@@ -81,6 +81,7 @@ help:
 	@echo "    make clean-all      todo lo anterior"
 	@echo ""
 	@echo "  Docker"
+	@echo "    make web             lanza web chat en http://localhost:8000"
 	@echo "    make docker-run     construye imagen y lanza el chat en http://localhost:8080"
 	@echo "    make docker-update  reconstruye la imagen con los cambios mas recientes"
 	@echo "    make docker-down    para y elimina los contenedores"
@@ -167,6 +168,10 @@ serve:
 	@echo "▶  Lanzando API REST en http://localhost:8000"
 	@echo "   Documentación interactiva: http://localhost:8000/docs"
 	uv run uvicorn api.main:app --reload --port 8000
+
+web:
+	@echo "▶  Lanzando web chat en http://localhost:8000"
+	uv run uvicorn chat.app:app --reload --port 8000
 
 
 profile:

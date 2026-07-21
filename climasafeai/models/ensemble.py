@@ -297,6 +297,24 @@ def predict_ensemble(
     HI = HI_current
     if perfil_horario:
         HI = max(h["HI"] for h in perfil_horario)
+
+    clase_ml_original = int(clase_final)
+
+    if HI is not None and HI >= 27 and clase_final < 1:
+        clase_final = 1
+        override_fisico = {
+            "clase_ml": clase_ml_original,
+            "clase_final": 1,
+            "razon": f"HI_peak={HI:.1f}C>=27, riesgo por calor",
+        }
+    if HI is not None and HI >= 39 and clase_final < 2:
+        clase_final = 2
+        override_fisico = {
+            "clase_ml": clase_ml_original,
+            "clase_final": 2,
+            "razon": f"HI_peak={HI:.1f}C>=39, peligro por calor",
+        }
+
     if (
         HI is not None and HI < 27
         and WC is not None and WC > 0
@@ -311,7 +329,7 @@ def predict_ensemble(
         elif clase_final == 1:
             razon_extra = " (se mantiene PRECAUCION: modelos ML detectan tendencia de riesgo)"
         override_fisico = {
-            "clase_ml": int(clase_final),
+            "clase_ml": clase_ml_original,
             "clase_final": int(nueva_clase),
             "razon": f"HI_peak={HI:.1f}C<27, WC={WC:.1f}C>0, UV<6{razon_extra}",
         }
@@ -352,6 +370,25 @@ def predict_ensemble(
         "factores": res_frio["factores"],
     }
 
+    # Clase desde probabilidad personalizada
+    prob_pers = max(
+        res_calor["indice_personalizado"],
+        res_frio["indice_personalizado"],
+    )
+    clase_pers = 0
+    if prob_pers >= 0.45:
+        clase_pers = 1
+    if prob_pers >= 0.65:
+        clase_pers = 2
+
+    # Si hay override por HI, prevalece (seguridad)
+    # Si no, la clase final viene de la probabilidad personalizada
+    if override_fisico is None:
+        clase_final = clase_pers
+    else:
+        # Override ya forzó clase_final más arriba, mantener
+        pass
+
     weather_result = {
         "lat": weather["lat"],
         "lon": weather["lon"],
@@ -380,9 +417,14 @@ def predict_ensemble(
     )
 
     if override_fisico:
-        risk_source = "tendencia meteorológica" if not perfil_horario else "actividad prevista"
-        explicacion["modelo_determinante"] = f"Override — condiciones actuales seguras, riesgo por {risk_source}"
+        razon = override_fisico["razon"]
+        explicacion["modelo_determinante"] = f"Override — {razon}"
         explicacion["override"] = override_fisico
+    elif override_fisico is None:
+        clase_modelos = max(todas_clases) if todas_clases else 0
+        if clase_pers != clase_modelos:
+            direccion = "subió" if clase_pers > clase_modelos else "bajó"
+            explicacion["modelo_determinante"] = f"Personalización ({direccion} de {CLASES[clase_modelos]} a {CLASES[clase_pers]})"
 
     recomendaciones = generar_recomendaciones(perfil, {
         "modelos": resultados,

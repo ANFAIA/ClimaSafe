@@ -380,11 +380,7 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# Cargar modelos al arrancar (errores no fatales: app arranca igual)
-try:
-    load_models()
-except Exception as _startup_exc:
-    print(f"[chat/app] Aviso al cargar modelos al inicio: {_startup_exc}", file=sys.stderr)
+# Modelos se cargan bajo demanda (al conectar WebSocket), no al arrancar
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -537,6 +533,36 @@ async def api_factores():
     return _get_implemented_factors()
 
 
+@app.post("/api/approve-factor")
+async def api_approve_factor(body: dict):
+    tipo = body.get("tipo")
+    categoria = body.get("categoria")
+    clave = body.get("clave")
+    errors = []
+    if not tipo:
+        errors.append("tipo")
+    if not categoria:
+        errors.append("categoria")
+    if not clave:
+        errors.append("clave")
+    if errors:
+        return {"success": False, "error": f"Faltan campos: {', '.join(errors)}"}
+
+    try:
+        data = json.loads(_FACTORES_JSON.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"success": False, "error": f"No se pudo leer JSON: {e}"}
+
+    seccion = data.get(tipo, {})
+    factores = seccion.get(categoria, {})
+    if clave not in factores:
+        return {"success": False, "error": f"No se encontró '{clave}' en {tipo}/{categoria}"}
+
+    factores[clave]["implementado"] = True
+    _FACTORES_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"success": True, "factor": clave}
+
+
 @app.post("/api/predict")
 async def api_predict(body: dict):
     provincia = body.get("provincia", "Madrid")
@@ -568,6 +594,8 @@ async def api_predict(body: dict):
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
+    if not _state["model_loaded"]:
+        load_models()
     await ws.send_json({"type": "bot", "text": _welcome_message()})
 
     session: dict[str, Any] = {"state": "idle", "features": {}, "idx": 0}

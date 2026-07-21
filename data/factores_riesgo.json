@@ -1,19 +1,19 @@
 {
-  "version": 1,
+  "version": 2,
   "cap_factores": 3.0,
   "calor": {
     "comorbilidades": {
       "cardiovascular": {
         "coef": 1.4,
         "nombre": "cardiopatía/HTA",
-        "doi": "10.1056/NEJM199607113350201",
+        "doi": "10.1056/NEJM199607113350203",
         "calidad": "alta",
         "implementado": true
       },
       "diabetes": {
         "coef": 1.2,
         "nombre": "diabetes",
-        "doi": null,
+        "doi": "10.1056/NEJM199607113350203",
         "calidad": "media",
         "implementado": true
       },
@@ -21,6 +21,13 @@
         "coef": 1.8,
         "nombre": "salud mental",
         "doi": "10.1038/s41598-025-...",
+        "calidad": "alta",
+        "implementado": true
+      },
+      "respiratoria": {
+        "coef": 1.3,
+        "nombre": "enfermedad respiratoria",
+        "doi": "10.1016/j.ebiom.2016.02.034",
         "calidad": "alta",
         "implementado": true
       }
@@ -52,7 +59,7 @@
       "grasa_alta_esfuerzo": {
         "coef": 1.2,
         "nombre": "obesidad / grasa alta (en esfuerzo)",
-        "doi": null,
+        "doi": "10.1056/NEJM199607113350203",
         "calidad": "alta",
         "implementado": true
       },
@@ -62,27 +69,71 @@
         "doi": null,
         "calidad": "alta",
         "implementado": true
+      },
+      "falta_sueno": {
+        "coef": 1.2,
+        "nombre": "falta de sueño / mala noche",
+        "doi": "10.1113/ep088458",
+        "calidad": "alta",
+        "implementado": true
+      },
+      "enfermedad_reciente": {
+        "coef": 1.3,
+        "nombre": "enfermedad reciente / convalecencia",
+        "doi": "10.1113/ep088458",
+        "calidad": "alta",
+        "implementado": true
+      },
+      "grasa_baja_protector": {
+        "coef": 0.9,
+        "nombre": "grasa corporal baja (protector en calor)",
+        "doi": null,
+        "calidad": "alta",
+        "implementado": true
       }
     },
     "situacional": {
       "encamado": {
         "coef": 2.0,
         "nombre": "encamado",
-        "doi": "10.1056/NEJM199607113350201",
+        "doi": "10.1056/NEJM199607113350203",
         "calidad": "alta",
         "implementado": true
       },
       "no_sale": {
         "coef": 2.0,
         "nombre": "no sale de casa",
-        "doi": "10.1056/NEJM199607113350201",
+        "doi": "10.1056/NEJM199607113350203",
         "calidad": "alta",
         "implementado": true
       },
       "vive_solo": {
         "coef": 1.5,
         "nombre": "vive solo",
-        "doi": "10.1056/NEJM199607113350201",
+        "doi": "10.1056/NEJM199607113350203",
+        "calidad": "alta",
+        "implementado": true
+      },
+      "alcohol": {
+        "coef": 1.8,
+        "nombre": "consumo de alcohol (reciente)",
+        "doi": "10.1056/NEJM199607113350203",
+        "calidad": "alta",
+        "implementado": true
+      }
+    },
+    "ocupacional": {
+      "estres_termico_laboral": {
+        "coef": 2.0,
+        "nombre": "estrés térmico laboral",
+        "doi": "10.2486/indhealth.2012-0138",
+        "calidad": "media",
+        "implementado": true
+      },
+      "esfuerzo_termico_laboral": {
+        "coef": 2.5,
+        "nombre": "esfuerzo térmico laboral (golpe de calor)",
+        "doi": "10.1016/s2542-5196(18)30237-7",
         "calidad": "alta",
         "implementado": true
       }
@@ -93,7 +144,7 @@
       "cardiovascular": {
         "coef": 1.5,
         "nombre": "cardiopatía/HTA",
-        "doi": null,
+        "doi": "10.3389/fcvm.2023.1084611",
         "calidad": "alta",
         "implementado": true
       },
@@ -132,7 +183,7 @@
       "vivienda_fria": {
         "coef": 1.5,
         "nombre": "vivienda fría",
-        "doi": null,
+        "doi": "10.1136/jech.57.10.784",
         "calidad": "alta",
         "implementado": true
       },

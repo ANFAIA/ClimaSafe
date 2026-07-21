@@ -226,6 +226,12 @@ SEARCH_QUERIES: list[dict[str, Any]] = [
         "target": "transformers",
         "description": "Forecasting probabilístico con cuantificación de incertidumbre",
     },
+    {
+        "query": "exertional heat stroke athletes risk factors dehydration sleep illness",
+        "category": "factor-riesgo",
+        "target": "factores-riesgo",
+        "description": "Golpe de calor por esfuerzo en deportistas jóvenes",
+    },
 ]
 
 
@@ -251,6 +257,7 @@ class ScoutPaper:
     llm_summary: str = ""
     llm_reasoning: str = ""
     llm_data_points: list[str] = field(default_factory=list)
+    llm_factors: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -289,29 +296,90 @@ def _classify_batch(papers: list[ScoutPaper]) -> list[ScoutPaper]:
     )
 
     prompt = textwrap.dedent(f"""\
-        Eres un asistente que clasifica papers para ClimaSafeAI
-        (predicción de riesgo climático personalizado: calor, frío, UV).
+        Eres un asistente que clasifica artículos científicos para ClimaSafeAI,
+        un sistema de predicción de riesgo térmico personalizado (calor, frío, UV).
 
-        Papers a clasificar ({len(papers)}):
-        {papers_block}
+        INSTRUCCIONES:
 
-        Por cada paper, decide si describe:
-        1. "factor-riesgo": factor de riesgo cuantificable (medicación, comorbilidad,
-           exposición, índice biometeorológico, plan de acción).
-        2. "modelo": modelo ML alternativo (arquitectura, forecasting, generación).
-        3. "irrelevante": no aporta al proyecto.
+        1. CLASIFICA cada paper en UNA de estas tres categorías:
+           - "factor-riesgo" → describe un factor de riesgo cuantificable
+             (medicación, comorbilidad, exposición laboral, índice
+             biometeorológico, plan de acción contra el calor, aclimatación)
+           - "modelo" → describe un modelo de ML/estadístico alternativo
+             (arquitectura, forecasting, generación de escenarios)
+           - "irrelevante" → no aporta nada al proyecto
 
-        Responde ÚNICAMENTE con un JSON array, un objeto por paper:
+        2. Si la clasificación es "factor-riesgo", EXTAE los factores de riesgo
+           específicos que menciona el paper. Cada factor debe incluir:
+           - clave: identificador corto sin espacios (ej: "falta_sueno")
+           - nombre: nombre legible para mostrar al usuario
+           - categoria: una de las listadas abajo
+           - tipo: "calor", "frio" o "ambos" según aplique
+           - coef: el coeficiente numérico (RR, OR, HR, hazard ratio)
+           - poblacion: a quién aplica (ej: "deportistas", "ancianos", "general")
+           - evidencia: cita textual o paráfrasis corta del paper
+
+        3. Si la clasificación NO es "factor-riesgo", el array factors debe
+           ir vacío: []
+
+        CATEGORÍAS válidas para "categoria":
+        - "fisiologico": edad, sexo, aclimatación, grasa corporal, sueño,
+          enfermedad reciente, hidratación
+        - "comorbilidades": cardiovascular, diabetes, respiratoria, renal,
+          obesidad, salud mental
+        - "farmacos": antipsicóticos, diuréticos de asa, betabloqueantes
+        - "situacional": vive solo, encamado, vivienda fría, trabajo
+          exterior, sin aire acondicionado
+        - "ocupacional": exposición laboral, horas de trabajo, EPI
+        - "indices": heat index, wind chill, WBGT, UTCI
+
+        EJEMPLO de respuesta correcta para un paper sobre factores de riesgo
+        en deportistas:
         [
           {{
             "id": 0,
-            "classification": "factor-riesgo" | "modelo" | "irrelevante",
-            "reasoning": "explicación breve en español (máx 2 líneas)",
-            "summary": "resumen de lo que aporta (máx 3 líneas)",
-            "data_points": ["RR=1.37", ...]  // datos numéricos relevantes o []
-          }},
-          ...
+            "classification": "factor-riesgo",
+            "reasoning": "Identifica falta de sueño y deshidratación como factores de riesgo en deportistas jóvenes",
+            "summary": "Revisión sistemática que encuentra asociación entre falta de sueño, deshidratación y golpe de calor por esfuerzo en atletas",
+            "factors": [
+              {{
+                "clave": "falta_sueno",
+                "nombre": "falta de sueño / mala noche",
+                "categoria": "fisiologico",
+                "tipo": "calor",
+                "coef": 1.2,
+                "poblacion": "deportistas",
+                "evidencia": "Falta de sueño incrementa el riesgo de golpe de calor por esfuerzo (Westwood 2020)"
+              }},
+              {{
+                "clave": "deshidratacion",
+                "nombre": "deshidratación / beber poca agua",
+                "categoria": "fisiologico",
+                "tipo": "calor",
+                "coef": 1.4,
+                "poblacion": "deportistas",
+                "evidencia": "La deshidratación es el factor #1 en exertional heat stroke (Racinais 2015)"
+              }}
+            ]
+          }}
         ]
+
+        EJEMPLO para un paper irrelevante:
+        [
+          {{
+            "id": 0,
+            "classification": "irrelevante",
+            "reasoning": "Estudia cultivos agrícolas, no salud humana",
+            "summary": "",
+            "factors": []
+          }}
+        ]
+
+        PAPERS A CLASIFICAR ({len(papers)}):
+        {papers_block}
+
+        Responde ÚNICAMENTE con un JSON array válido. Sin markdown, sin
+        explicaciones adicionales.
     """)
 
     client = OpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL, timeout=90)
@@ -321,7 +389,7 @@ def _classify_batch(papers: list[ScoutPaper]) -> list[ScoutPaper]:
                 model=DEFAULT_LLM_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=2048,
+                max_tokens=4096,
             )
             content = resp.choices[0].message.content.strip()
             break
@@ -366,6 +434,7 @@ def _classify_batch(papers: list[ScoutPaper]) -> list[ScoutPaper]:
         p.llm_reasoning = c.get("reasoning", "")
         p.llm_summary = c.get("summary", "")
         p.llm_data_points = c.get("data_points", [])
+        p.llm_factors = c.get("factors", [])
 
     return papers
 
@@ -414,7 +483,20 @@ def _generate_markdown(paper: ScoutPaper) -> str:
         lines.append(paper.llm_summary)
         lines.append("")
 
-    if paper.llm_data_points:
+    if paper.llm_factors:
+        lines.append("## Factores de riesgo extraídos")
+        lines.append("")
+        lines.append("| Factor | Tipo | Categoría | Coef. | Población |")
+        lines.append("|--------|------|-----------|-------|-----------|")
+        for f in paper.llm_factors:
+            coef = f.get("coef", "")
+            poblacion = f.get("poblacion", "general")
+            tipo = f.get("tipo", "calor")
+            cat = f.get("categoria", "")
+            nombre = f.get("nombre", f.get("clave", "?"))
+            lines.append(f"| {nombre} | {tipo} | {cat} | {coef} | {poblacion} |")
+        lines.append("")
+    elif paper.llm_data_points:
         lines.append("## Datos numéricos extraídos")
         lines.append("")
         for dp in paper.llm_data_points:
@@ -603,26 +685,56 @@ def _agregar_factor_json(
     doi: str | None = None,
     calidad: str = "baja",
 ) -> bool:
-    """Añade un factor al JSON con implementado=false. No sobreescribe."""
+    """Añade o actualiza un factor en el JSON.
+
+    - Si calidad es "alta" y hay DOI → auto-aprobado (implementado=True)
+    - Si el factor ya existe y el nuevo es de mayor calidad → actualiza coef y doi
+    - Si el factor ya existe y está implementado → no lo toca
+    """
     data = _factores_json_cargar()
     if tipo not in ("calor", "frio"):
         return False
     seccion = data.setdefault(tipo, {})
     sub = seccion.setdefault(categoria, {})
-    if clave in sub and sub[clave].get("implementado"):
-        return False  # ya existe y está activo, no tocamos
-    sub.setdefault(clave, {
-        "coef": coeficiente,
-        "nombre": nombre,
-        "doi": doi,
-        "calidad": calidad,
-        "implementado": False,
-    })
+
+    auto_approve = calidad == "alta" and bool(doi)
+    existente = sub.get(clave)
+
+    if existente:
+        if existente.get("implementado"):
+            if auto_approve and _calidad_mayor(calidad, existente.get("calidad", "baja")):
+                existente["coef"] = coeficiente
+                existente["doi"] = doi
+                existente["calidad"] = calidad
+                existente["nombre"] = nombre
+            else:
+                return False
+        else:
+            existente["coef"] = coeficiente
+            existente["nombre"] = nombre
+            if doi:
+                existente["doi"] = doi
+            if auto_approve:
+                existente["implementado"] = True
+    else:
+        sub[clave] = {
+            "coef": coeficiente,
+            "nombre": nombre,
+            "doi": doi,
+            "calidad": calidad,
+            "implementado": auto_approve,
+        }
+
     FACTORES_JSON_PATH.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     return True
+
+
+def _calidad_mayor(nueva: str, actual: str) -> bool:
+    orden = {"baja": 0, "media": 1, "alta": 2}
+    return orden.get(nueva, 0) > orden.get(actual, 0)
 
 
 def _review_pendientes() -> list[dict]:
@@ -743,25 +855,55 @@ def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> Sco
 
     if not dry_run and all_relevant:
         _update_indices(all_relevant)
-        # Guardar factores encontrados en el JSON
         for p in all_relevant:
-            if not p.llm_data_points:
-                continue
             target = p.query_info.get("target", "factores-riesgo")
-            tipo = "frio" if "frio" in target.lower() else "calor"
-            for dp in p.llm_data_points:
-                parsed = _parse_data_point(dp)
-                if parsed is None:
-                    continue
-                _agregar_factor_json(
-                    clave=parsed["clave"],
-                    categoria="medico",
-                    tipo=tipo,
-                    coeficiente=parsed["coef"],
-                    nombre=f"{parsed['nombre']} ({p.title[:50]})",
-                    doi=p.doi,
-                    calidad=p.calidad,
-                )
+            tipo_default = "frio" if "frio" in target.lower() else "calor"
+
+            # Factores estructurados (nuevo formato)
+            if p.llm_factors:
+                for f in p.llm_factors:
+                    clave = f.get("clave", "").strip()
+                    if not clave:
+                        continue
+                    categoria = f.get("categoria", "fisiologico")
+                    tipo = f.get("tipo", tipo_default)
+                    if tipo == "ambos":
+                        for t in ("calor", "frio"):
+                            _agregar_factor_json(
+                                clave=clave,
+                                categoria=categoria,
+                                tipo=t,
+                                coeficiente=f.get("coef", 1.0),
+                                nombre=f.get("nombre", clave),
+                                doi=p.doi,
+                                calidad=p.calidad,
+                            )
+                    else:
+                        _agregar_factor_json(
+                            clave=clave,
+                            categoria=categoria,
+                            tipo=tipo,
+                            coeficiente=f.get("coef", 1.0),
+                            nombre=f.get("nombre", clave),
+                            doi=p.doi,
+                            calidad=p.calidad,
+                        )
+
+            # Factores desde data_points (formato legacy)
+            elif p.llm_data_points:
+                for dp in p.llm_data_points:
+                    parsed = _parse_data_point(dp)
+                    if parsed is None:
+                        continue
+                    _agregar_factor_json(
+                        clave=parsed["clave"],
+                        categoria="fisiologico",
+                        tipo=tipo_default,
+                        coeficiente=parsed["coef"],
+                        nombre=f"{parsed['nombre']} ({p.title[:50]})",
+                        doi=p.doi,
+                        calidad=p.calidad,
+                    )
 
     return result
 
