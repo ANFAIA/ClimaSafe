@@ -314,7 +314,7 @@ def _classify_batch(papers: list[ScoutPaper]) -> list[ScoutPaper]:
         ]
     """)
 
-    client = OpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
+    client = OpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL, timeout=90)
     for attempt in range(2):
         try:
             resp = client.chat.completions.create(
