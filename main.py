@@ -195,6 +195,15 @@ def run_full_pipeline() -> None:
     joblib.dump(rf_frio, MODELS_DIR / "RandomForest_frio.joblib")
     print(f"    Guardado → RandomForest_frio.joblib")
 
+    # Calibración isotónica post-hoc para RF_frio
+    print("  Calibrando isotonic para frío...")
+    from climasafeai.models.calibrate import fit_isotonic
+    # Último 15% de fechas de train para calibration set
+    _cal_n = max(1, int(len(y_tr_frio) * 0.15))
+    _X_cal = X_tr_frio[-_cal_n:]
+    _y_cal = y_tr_frio.iloc[-_cal_n:] if hasattr(y_tr_frio, 'iloc') else y_tr_frio[-_cal_n:]
+    fit_isotonic(rf_frio, np.asarray(_X_cal), np.asarray(_y_cal), clase="frio")
+
     # --- Aprender umbrales por provincia (train) ---
     print("  Calibrando umbrales por provincia...")
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -293,19 +302,24 @@ def run_full_pipeline() -> None:
 
     print("  --- Frío ---")
     rf_frio = joblib.load(MODELS_DIR / "RandomForest_frio.joblib")
+    proba_frio = rf_frio.predict_proba(X_te_frio)
+
+    # Umbrales raw (calibrados sobre probas sin calibrar)
+    _U_FRIO_RAW = {"t1": 0.45, "t2": 0.40}
+    # Umbrales post-isotonic (calibrados sobre probas con isotonic)
     u_frio = CLASS_THRESHOLDS_RECOMENDADOS["frio"]
+
     res_frio_arg = _metricas_con_umbrales(y_te_frio, rf_frio.predict(X_te_frio), "RF (argmax)", "frio")
     res_frio_th = _metricas_con_umbrales(
-        y_te_frio, apply_class_thresholds(rf_frio.predict_proba(X_te_frio), **u_frio),
-        f"RF (t1={u_frio['t1']}, t2={u_frio['t2']})", "frio",
+        y_te_frio, apply_class_thresholds(proba_frio, **_U_FRIO_RAW),
+        "RF (t1=0.45, t2=0.40 raw)", "frio",
     )
 
-    # Umbrales por provincia
-    proba_frio = rf_frio.predict_proba(X_te_frio)
+    # Umbrales por provincia (siempre raw)
     umb_frio = joblib.load(ARTIFACTS_DIR / "umbrales_provincia_frio.joblib")
     pred_frio_prov = np.zeros(len(proba_frio), dtype=int)
     for prov in np.unique(prov_te_frio):
-        u = umb_frio.get(prov, {"t1": u_frio["t1"], "t2": u_frio["t2"]})
+        u = umb_frio.get(prov, {"t1": _U_FRIO_RAW["t1"], "t2": _U_FRIO_RAW["t2"]})
         mask = prov_te_frio == prov
         p = proba_frio[mask]
         pred = np.zeros(len(p), dtype=int)
@@ -314,7 +328,22 @@ def run_full_pipeline() -> None:
         pred_frio_prov[mask] = pred
     res_frio_prov = _metricas_con_umbrales(y_te_frio, pred_frio_prov, "RF (por provincia)", "frio")
 
-    res_frio = pd.DataFrame([res_frio_arg, res_frio_th, res_frio_prov])
+    # Calibración isotónica con thr recalibrados
+    try:
+        from climasafeai.models.calibrate import load_isotonic, calibrate_proba
+        _iso_frio = load_isotonic("frio")
+        if _iso_frio:
+            proba_frio_cal = calibrate_proba(proba_frio, _iso_frio)
+            res_frio_iso = _metricas_con_umbrales(
+                y_te_frio, apply_class_thresholds(proba_frio_cal, **u_frio),
+                f"RF + isotonic (t1={u_frio['t1']}, t2={u_frio['t2']})", "frio",
+            )
+            res_frio = pd.DataFrame([res_frio_arg, res_frio_th, res_frio_iso, res_frio_prov])
+        else:
+            res_frio = pd.DataFrame([res_frio_arg, res_frio_th, res_frio_prov])
+    except Exception as e:
+        print(f"    AVISO: calibración isotónica no disponible ({e})")
+        res_frio = pd.DataFrame([res_frio_arg, res_frio_th, res_frio_prov])
     res_frio.to_csv(REPORTS_DIR / "resultados_frio.csv", index=False)
 
     # ------------------------------------------------------------------

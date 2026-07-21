@@ -20,7 +20,7 @@ import mlflow
 import mlflow.sklearn
 
 import shap
-from climasafeai.utils.paths import FIGURES_DIR, MODELS_DIR, REPORTS_DIR
+from climasafeai.utils.paths import FIGURES_DIR, MODELS_DIR, REPORTS_DIR, ARTIFACTS_DIR
 
 # Umbral de decisión. Bajar (e.g. 0.3) aumenta recall de clase minoritaria.
 DECISION_THRESHOLD: float = 0.5
@@ -39,7 +39,9 @@ DECISION_THRESHOLD: float = 0.5
 # Con class_thresholds=None todo sigue funcionando como siempre (argmax).
 CLASS_THRESHOLDS_RECOMENDADOS: dict = {
     "calor": {"t1": 0.50, "t2": 0.45},
-    "frio":  {"t1": 0.45, "t2": 0.40},
+    # FRIO: calibrados sobre probabilidades post-isotonic (ver conformal_prediction.md).
+    # Al usar estos thresholds, predict_new carga y aplica isotonic automáticamente.
+    "frio":  {"t1": 0.21, "t2": 0.20},
 }
 
 # Thresholds óptimos para LSTM province_hybrid (con peso_riesgo_extra=8.0).
@@ -335,7 +337,7 @@ def _shap_beeswarm(shap_values, X_explain, feat_names, model_name, max_display):
 
 
 
-def predict_new(model_name: str, X_new, class_thresholds=None) -> np.ndarray:
+def predict_new(model_name: str, X_new, class_thresholds=None, calibrate_isotonic=False) -> np.ndarray:
     """Carga un modelo y predice sobre nuevas muestras (ya preprocesadas).
 
     Parameters
@@ -347,12 +349,16 @@ def predict_new(model_name: str, X_new, class_thresholds=None) -> np.ndarray:
           sobre predict_proba -- ver apply_class_thresholds().
         - "calor" | "frio": usa los umbrales calibrados de
           CLASS_THRESHOLDS_RECOMENDADOS para ese modelo de riesgo.
+    calibrate_isotonic : bool
+        Si True, aplica isotonic regression (post-hoc) a las probabilidades
+        antes de aplicar los thresholds. Los thresholds de frío están
+        calibrados sobre probabilidades post-isotonic; recomendado=True.
     """
     path = MODELS_DIR / f"{model_name}.joblib"
     if not path.exists():
         raise FileNotFoundError(f"Modelo no encontrado: {path}")
     model = joblib.load(path)
-    if class_thresholds is None:
+    if class_thresholds is None and not calibrate_isotonic:
         return model.predict(X_new)
 
     if isinstance(class_thresholds, str):
@@ -363,14 +369,24 @@ def predict_new(model_name: str, X_new, class_thresholds=None) -> np.ndarray:
                 "{'t1': ..., 't2': ...} o None."
             )
         class_thresholds = CLASS_THRESHOLDS_RECOMENDADOS[class_thresholds]
+
     if not hasattr(model, "predict_proba"):
         raise ValueError(
             f"{model_name} no soporta predict_proba -- no se pueden aplicar "
             "umbrales por clase; llama a predict_new sin class_thresholds."
         )
-    return apply_class_thresholds(
-        model.predict_proba(X_new), class_thresholds["t1"], class_thresholds["t2"]
-    )
+
+    proba = model.predict_proba(X_new)
+
+    if calibrate_isotonic:
+        from climasafeai.models.calibrate import load_isotonic, calibrate_proba
+        iso = load_isotonic("frio")  # devuelve None si no existe
+        if iso is not None:
+            proba = calibrate_proba(proba, iso)
+
+    if class_thresholds is not None:
+        return apply_class_thresholds(proba, class_thresholds["t1"], class_thresholds["t2"])
+    return proba
 
 
 

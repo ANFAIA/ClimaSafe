@@ -88,13 +88,26 @@ def _predecir_tabular(
     X = process_input(df_input, clase=clase)
 
     proba = model.predict_proba(X)
+
+    # Calibración isotónica post-hoc para frío
+    _calibrado = False
+    if clase == "frio":
+        try:
+            from climasafeai.models.calibrate import load_isotonic, calibrate_proba
+            iso = load_isotonic("frio")
+            if iso is not None:
+                proba = calibrate_proba(proba, iso)
+                _calibrado = True
+        except Exception:
+            pass
+
     pred_argmax = int(proba[0].argmax())
 
     proba[0] = _aplicar_factor_edad(proba[0], clase, grupo_edad)
 
     u_global = CLASS_THRESHOLDS_RECOMENDADOS.get(clase, {"t1": 0.5, "t2": 0.4})
     u = dict(u_global)
-    if provincia:
+    if provincia and not _calibrado:
         try:
             umb_path = ARTIFACTS_DIR / f"umbrales_provincia_{clase}.joblib"
             if umb_path.exists():
