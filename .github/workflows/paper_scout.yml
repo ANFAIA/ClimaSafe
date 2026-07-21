@@ -7,6 +7,9 @@ on:
   workflow_dispatch:
     # Permite ejecución manual desde la UI de GitHub
 
+permissions:
+  contents: write
+
 jobs:
   scout:
     runs-on: ubuntu-latest
