@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClimaSafeAI - Riesgo Termico</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --seguro: #27ae60;
+    --precaucion: #f39c12;
+    --peligro: #e74c3c;
+    --bg: #f0f2f5;
+    --card: #ffffff;
+    --text: #2c3e50;
+    --text-light: #7f8c8d;
+    --accent: #3498db;
+    --border: #dee2e6;
+    --radius: 12px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+    padding: 20px;
+  }
+  .container { max-width: 880px; margin: 0 auto; }
+
+  header {
+    background: linear-gradient(135deg, #2c3e50 0%, #3498db 50%, #e74c3c 100%);
+    color: #fff; padding: 30px; border-radius: var(--radius);
+    margin-bottom: 24px; text-align: center;
+  }
+  header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
+  header p { opacity: 0.85; font-size: 0.95rem; }
+
+  .pending-banner {
+    background: #fff3cd; color: #856404; border: 1px solid #ffc107;
+    border-radius: var(--radius); padding: 12px 20px; margin-bottom: 16px;
+    font-size: 0.9rem; display: none; align-items: center; gap: 8px;
+  }
+  .pending-banner a { color: #533f03; font-weight: 600; }
+  .pending-banner .badge {
+    background: #856404; color: #fff; border-radius: 10px;
+    padding: 1px 8px; font-size: 0.75rem; font-weight: 700;
+  }
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 20px 24px; margin-bottom: 16px;
+    transition: opacity 0.3s;
+  }
+  .card-title {
+    font-size: 0.9rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-light); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+
+  .step-indicator {
+    display: flex; gap: 8px; margin-bottom: 16px; justify-content: center;
+  }
+  .step-dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--border);
+    transition: all 0.3s;
+  }
+  .step-dot.active { background: var(--accent); transform: scale(1.3); }
+  .step-dot.done { background: var(--seguro); }
+
+  .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .form-group { flex: 1; min-width: 140px; }
+  .form-group label { display: block; font-size: 0.8rem; font-weight: 500; color: var(--text-light); margin-bottom: 3px; }
+  .form-group input, .form-group select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 0.9rem; background: #fff; color: var(--text);
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(52,152,219,0.15);
+  }
+
+  .btn {
+    background: var(--accent); color: #fff; border: none; padding: 10px 28px;
+    border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: #2980b9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(52,152,219,0.3); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-outline {
+    background: transparent; color: var(--accent); border: 1px solid var(--accent);
+  }
+  .btn-outline:hover { background: #ebf5fb; box-shadow: none; }
+
+  .btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+  .weather-strip {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; padding: 8px 0;
+  }
+  .weather-item { text-align: center; min-width: 70px; }
+  .weather-item .value { font-size: 1.1rem; font-weight: 700; }
+  .weather-item .label { font-size: 0.75rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.3px; }
+
+  .class-SEGURO { color: var(--seguro); }
+  .class-PRECAUCION { color: var(--precaucion); }
+  .class-PELIGRO { color: var(--peligro); }
+  .bg-SEGURO { background: #d5f5e3; border-color: var(--seguro); }
+  .bg-PRECAUCION { background: #fef5e7; border-color: var(--precaucion); }
+  .bg-PELIGRO { background: #fdedec; border-color: var(--peligro); }
+
+  .final-result {
+    text-align: center; padding: 28px; border-radius: var(--radius);
+    margin: 16px 0;
+  }
+  .final-result .class { font-size: 2.2rem; font-weight: 800; }
+  .final-result .sub { font-size: 0.9rem; opacity: 0.8; margin-top: 4px; }
+
+  .hourly-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin: 8px 0; }
+  .hourly-bar .slot { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; color: #fff; font-weight: 600; cursor: pointer; }
+  .hourly-bar .slot.active { outline: 2px solid #fff; outline-offset: -2px; z-index: 1; box-shadow: 0 0 0 3px var(--accent); border-radius: 3px; }
+  .hourly-labels { display: flex; font-size: 0.65rem; color: var(--text-light); }
+  .hourly-labels span { flex: 1; text-align: center; }
+
+  .override-box {
+    background: #fef5e7; border-left: 4px solid var(--precaucion);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 0.9rem; line-height: 1.4;
+  }
+
+  .factors-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .factors-table th { text-align: left; color: var(--text-light); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .factors-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .factors-table .total { font-weight: 700; border-top: 2px solid var(--text); }
+
+  .rec-list { list-style: none; padding: 0; }
+  .rec-list li {
+    padding: 8px 0 8px 20px; position: relative; border-bottom: 1px solid var(--border);
+    font-size: 0.9rem; line-height: 1.4;
+  }
+  .rec-list li:last-child { border-bottom: none; }
+  .rec-list li::before { content: ''; position: absolute; left: 0; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  .opt-time { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+  .opt-time .box { flex: 1; min-width: 180px; padding: 12px 16px; border-radius: 8px; }
+  .opt-time .box.good { background: #d5f5e3; border: 1px solid var(--seguro); }
+  .opt-time .box.bad { background: #fdedec; border: 1px solid var(--peligro); }
+  .opt-time .box .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); }
+  .opt-time .box .value { font-size: 1rem; font-weight: 700; }
+
+  .loading { display: none; text-align: center; padding: 40px; }
+  .loading.active { display: block; }
+  .spinner { width: 36px; height: 36px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .explain-item { padding: 6px 0; font-size: 0.85rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+  .explain-item:last-child { border-bottom: none; }
+
+  .step { display: none; }
+  .step.visible { display: block; }
+
+  #results { display: none; }
+  #results.visible { display: block; }
+
+  #map { height: 260px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--border); cursor: crosshair; }
+
+  .checkbox-grid {
+    display: flex; flex-wrap: wrap; gap: 4px;
+  }
+  .checkbox-grid label {
+    font-size: 0.8rem; display: flex; align-items: center; gap: 3px;
+    background: var(--bg); padding: 4px 8px; border-radius: 6px;
+    cursor: pointer; border: 1px solid var(--border); transition: all 0.2s;
+  }
+  .checkbox-grid label:hover { border-color: var(--accent); }
+  .checkbox-grid label:has(input:checked) {
+    background: #ebf5fb; border-color: var(--accent); color: var(--accent); font-weight: 500;
+  }
+  .checkbox-grid label input { margin: 0; }
+  .checkbox-grid label.full { width: 100%; background: transparent; border: none; padding: 4px 0; }
+
+  .collapse-header {
+    display:flex; justify-content:space-between; align-items:center;
+    cursor:pointer; user-select:none;
+  }
+  .collapse-header:hover { opacity:0.7; }
+  .collapse-body { overflow:hidden; max-height:0; transition:max-height 0.3s ease; }
+  .collapse-body.open { max-height:2000px; }
+
+  @media (max-width: 600px) {
+    .form-group { min-width: 100%; }
+    header h1 { font-size: 1.3rem; }
+    .final-result .class { font-size: 1.6rem; }
+    #map { height: 180px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>ClimaSafeAI</h1>
+    <p>Sistema de prediccion de riesgo termico personalizado</p>
+    </header>
+
+    <div class="pending-banner" id="pending-banner">
+      <span>🔬</span>
+      <span><strong>Factores de riesgo pendientes</strong> — Hay <span class="badge" id="pending-count">0</span> factor(es) nuevo(s) sin revisar.</span>
+      <span style="margin-left:auto;font-size:0.8rem">Revisa con: <code>python -m agents scout --review</code></span>
+    </div>
+
+    <div class="step-indicator">
+    <div class="step-dot active" id="dot1"></div>
+    <div class="step-dot" id="dot2"></div>
+    <div class="step-dot" id="dot3"></div>
+  </div>
+
+  <div class="step visible" id="step1">
+    <div class="card">
+      <div class="card-title">Ubicacion</div>
+      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
+        Escribe una provincia o haz clic en el mapa para seleccionar la ubicacion.
+      </p>
+      <div class="form-row">
+        <div class="form-group" style="flex:3">
+          <label for="provincia">Provincia o coordenadas</label>
+          <input type="text" id="provincia" value="Madrid" placeholder="Madrid / 40.4168,-3.7038">
+        </div>
+      </div>
+      <div id="map"></div>
+      <div class="btn-row">
+        <button class="btn" onclick="irPaso2()">Siguiente</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step" id="step2">
+    <div class="card">
+      <div class="card-title">Datos personales</div>
+      <div class="form-row">
+        <div class="form-group"><label>Edad</label><input type="number" id="edad" min="0" max="120"></div>
+        <div class="form-group"><label>Sexo</label><select id="sexo"><option value="">-</option><option value="hombre">Hombre</option><option value="mujer">Mujer</option></select></div>
+        <div class="form-group"><label>% Grasa</label><input type="number" id="porcentaje_grasa" min="0" max="70" step="0.1"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Actividad</label>
+          <select id="nivel_actividad">
+            <option value="">-</option><option value="reposo">Reposo</option>
+            <option value="ligera">Ligera</option><option value="moderada">Moderada</option>
+            <option value="intensa">Intensa</option><option value="muy_intensa">Muy intensa</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Hora inicio (0-23)</label><input type="number" id="hora_inicio" min="0" max="23"></div>
+        <div class="form-group"><label>Duracion (h)</label><input type="number" id="duracion_actividad_h" min="0" max="24" step="0.5"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Aclimatado</label>
+          <select id="aclimatado"><option value="">-</option><option value="si">Si</option><option value="no">No</option></select>
+        </div>
+        <div class="form-group"><label>Fototipo</label>
+          <select id="fototipo">
+            <option value="">-</option><option value="1">I (piel muy clara)</option>
+            <option value="2">II (piel clara)</option><option value="3">III (piel normal)</option>
+            <option value="4">IV (piel morena)</option><option value="5">V (piel oscura)</option>
+            <option value="6">VI (piel muy oscura)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Comorbilidades</label>
+          <div class="checkbox-grid" id="comorbilidades">
+            <label class="full"><input type="checkbox" value="" checked onchange="toggleComorbNone(this)"> Ninguna</label>
+            <label><input type="checkbox" value="cardiovascular"> Cardiovascular</label>
+            <label><input type="checkbox" value="diabetes"> Diabetes</label>
+            <label><input type="checkbox" value="respiratorio"> Respiratorio</label>
+            <label><input type="checkbox" value="obesidad"> Obesidad</label>
+            <label><input type="checkbox" value="renal"> Renal</label>
+            <label><input type="checkbox" value="hipertension"> Hipertension</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Situacion social</label>
+          <div class="checkbox-grid" id="situacion_social">
+            <label class="full"><input type="checkbox" value="" checked onchange="toggleSocNone(this)"> Condiciones normales</label>
+            <label><input type="checkbox" value="vive_solo"> Vive solo</label>
+            <label><input type="checkbox" value="encamado"> Encamado</label>
+            <label><input type="checkbox" value="baja_movilidad"> Baja movilidad</label>
+            <label><input type="checkbox" value="trabajo_exterior"> Trabajo exterior</label>
+            <label><input type="checkbox" value="deporte_exterior"> Deporte exterior</label>
+            <label><input type="checkbox" value="sin_aire_acondicionado"> Sin aire acondicionado</label>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
+        <button class="btn" onclick="predecir()" id="btn-predict">Predecir riesgo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>Obteniendo datos meteorologicos y calculando riesgo...</p>
+  </div>
+
+  <div id="results">
+    <div class="card" id="weather-card" style="display:none">
+      <div class="card-title">Clima actual</div>
+      <div class="weather-strip" id="weather-strip"></div>
+    </div>
+
+    <div class="card" id="final-card" style="display:none">
+      <div class="final-result" id="final-result"></div>
+    </div>
+
+    <div class="card" id="hourly-card" style="display:none">
+      <div class="card-title">Perfil horario (HI por hora)</div>
+      <div class="hourly-labels" id="hourly-labels"></div>
+      <div class="hourly-bar" id="hourly-bar"></div>
+      <div id="hourly-legend" style="margin-top:6px;display:flex;flex-wrap:wrap"></div>
+      <div id="activity-bar" style="margin-top:8px;font-size:0.85rem"></div>
+    </div>
+
+    <div class="card" id="override-card" style="display:none">
+      <div class="override-box" id="override-box"></div>
+    </div>
+
+    <div class="card" id="explain-card" style="display:none">
+      <div class="card-title">Explicacion</div>
+      <div id="explain-content"></div>
+    </div>
+
+    <div class="card" id="recs-card" style="display:none">
+      <div class="card-title">Recomendaciones</div>
+      <ul class="rec-list" id="rec-list"></ul>
+    </div>
+
+    <div class="card" id="opt-card" style="display:none">
+      <div class="card-title">Horario optimo</div>
+      <button class="btn" onclick="calcularHorarioOptimo()" style="background:#95a5a6">Calcular mejor horario</button>
+      <div class="opt-time" id="opt-time"></div>
+    </div>
+
+    <div class="card" id="factors-card" style="display:none">
+      <div class="collapse-header" onclick="toggleFactors()">
+        <span class="card-title" style="margin-bottom:0;border:none;padding:0">Factores personales</span>
+        <span id="factors-toggle">+</span>
+      </div>
+      <div id="factors-body" class="collapse-body"></div>
+    </div>
+
+    <div class="btn-row" style="justify-content:center">
+      <button class="btn btn-outline" onclick="nuevaConsulta()">Nueva consulta</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CLASSES = ["SEGURO", "PRECAUCION", "PELIGRO"];
+let map = null;
+let mapMarker = null;
+
+function initMap(lat, lon) {
+  if (!map) {
+    map = L.map('map', { zoomControl: true }).setView([lat, lon], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    map.on('click', function(e) {
+      const lat = e.latlng.lat.toFixed(4);
+      const lon = e.latlng.lng.toFixed(4);
+      document.getElementById('provincia').value = lat + ',' + lon;
+      ponerMarcador(e.latlng.lat, e.latlng.lng);
+    });
+  } else {
+    map.setView([lat, lon], 8);
+  }
+  ponerMarcador(lat, lon);
+}
+
+function ponerMarcador(lat, lon) {
+  if (mapMarker) mapMarker.remove();
+  mapMarker = L.circleMarker([lat, lon], {
+    radius: 10, fillColor: '#3498db', color: '#2980b9', weight: 2, fillOpacity: 0.7,
+  }).addTo(map).bindPopup(lat.toFixed(4) + ', ' + lon.toFixed(4));
+}
+
+function irPaso2() {
+  document.getElementById('step1').classList.remove('visible');
+  document.getElementById('step2').classList.add('visible');
+  document.getElementById('dot1').classList.remove('active');
+  document.getElementById('dot1').classList.add('done');
+  document.getElementById('dot2').classList.add('active');
+}
+
+function irPaso1() {
+  document.getElementById('step2').classList.remove('visible');
+  document.getElementById('step1').classList.add('visible');
+  document.getElementById('dot2').classList.remove('active');
+  document.getElementById('dot1').classList.remove('done');
+  document.getElementById('dot1').classList.add('active');
+}
+
+function toggleComorbNone(el) {
+  const checks = document.querySelectorAll('#comorbilidades input[type=checkbox]');
+  if (el.checked) checks.forEach(c => { if (c !== el) c.checked = false; });
+}
+function toggleSocNone(el) {
+  const checks = document.querySelectorAll('#situacion_social input[type=checkbox]');
+  if (el.checked) checks.forEach(c => { if (c !== el) c.checked = false; });
+}
+
+function getPerfil() {
+  const p = {};
+  const edad = document.getElementById('edad').value;
+  if (edad) p.edad = parseInt(edad);
+  const sexo = document.getElementById('sexo').value;
+  if (sexo) p.sexo = sexo;
+  const grasa = document.getElementById('porcentaje_grasa').value;
+  if (grasa) p.porcentaje_grasa = parseFloat(grasa);
+  const actividad = document.getElementById('nivel_actividad').value;
+  if (actividad) p.nivel_actividad = actividad;
+  const h_ini = document.getElementById('hora_inicio').value;
+  if (h_ini) p.hora_inicio = parseFloat(h_ini);
+  const dur = document.getElementById('duracion_actividad_h').value;
+  if (dur) p.duracion_actividad_h = parseFloat(dur);
+  const acli = document.getElementById('aclimatado').value;
+  if (acli) p.aclimatado = acli === 'si';
+  const foto = document.getElementById('fototipo').value;
+  if (foto) p.fototipo = foto;
+  const comorbVals = Array.from(document.querySelectorAll('#comorbilidades input[type=checkbox]:checked'))
+    .map(c => c.value).filter(v => v);
+  if (comorbVals.length) p.comorbilidades = comorbVals;
+  const sitVals = Array.from(document.querySelectorAll('#situacion_social input[type=checkbox]:checked'))
+    .map(c => c.value).filter(v => v);
+  if (sitVals.length) p.situacion_social = sitVals;
+  return p;
+}
+
+async function predecir() {
+  const btn = document.getElementById('btn-predict');
+  btn.disabled = true;
+  const loading = document.getElementById('loading');
+  loading.classList.add('active');
+  document.getElementById('results').classList.remove('visible');
+
+  const provincia = document.getElementById('provincia').value.trim() || 'Madrid';
+  const perfil = getPerfil();
+
+  let lat = null, lon = null;
+  const coordMatch = provincia.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/);
+  if (coordMatch) {
+    lat = parseFloat(coordMatch[1]);
+    lon = parseFloat(coordMatch[2]);
+  }
+
+  try {
+    const res = await fetch('/api/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provincia, lat, lon, perfil }),
+    });
+    const data = await res.json();
+    document.getElementById('step2').classList.remove('visible');
+    document.getElementById('dot2').classList.remove('active');
+    document.getElementById('dot2').classList.add('done');
+    document.getElementById('dot3').classList.add('active');
+    mostrarResultados(data);
+  } catch (e) {
+    alert('Error al conectar con el servidor: ' + e.message);
+  } finally {
+    loading.classList.remove('active');
+    btn.disabled = false;
+  }
+}
+
+function nuevaConsulta() {
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('dot3').classList.remove('active');
+  document.getElementById('dot3').classList.remove('done');
+  document.getElementById('dot1').classList.add('active');
+  document.getElementById('step1').classList.add('visible');
+  window._ultimoResultado = null;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function mostrarResultados(d) {
+  document.getElementById('results').classList.add('visible');
+  const w = d.weather;
+  if (w && w.lat && w.lon) ponerMarcador(w.lat, w.lon);
+  mostrarClima(w);
+  mostrarFinal(d);
+  mostrarPerfilHorario(d);
+  if (d.override_fisico) mostrarOverride(d);
+  if (d.explicacion) mostrarExplicacion(d.explicacion, d.modelos);
+  if (d.perfil) mostrarFactores(d.perfil);
+  if (d.recomendaciones && d.recomendaciones.length) mostrarRecomendaciones(d.recomendaciones);
+  document.getElementById('opt-card').style.display = 'block';
+  window._ultimoResultado = d;
+  window.scrollTo({ top: document.getElementById('results').offsetTop - 20, behavior: 'smooth' });
+}
+
+function mostrarClima(w) {
+  if (!w) return;
+  document.getElementById('weather-card').style.display = 'block';
+  const c = w.current || {};
+  document.getElementById('weather-strip').innerHTML = [
+    { v: (c.t2m_c ?? '?') + 'C', l: 'Temperatura' },
+    { v: (c.rh ?? '?') + '%', l: 'Humedad' },
+    { v: (c.wind_speed_kmh ?? '?') + ' km/h', l: 'Viento' },
+    { v: w.uv_index != null ? Number(w.uv_index).toFixed(1) : '?', l: 'UV' },
+  ].map(x => '<div class="weather-item"><div class="value">' + x.v + '</div><div class="label">' + x.l + '</div></div>').join('');
+}
+
+function mostrarFinal(d) {
+  document.getElementById('final-card').style.display = 'block';
+  const label = d.clase_final_label ?? '?';
+  document.getElementById('final-result').className = 'final-result bg-' + label;
+  document.getElementById('final-result').innerHTML = '<div class="class class-' + label + '">' + label + '</div>'
+    + '<div class="sub">' + (d.explicacion?.modelo_determinante ? 'Determinado por: ' + d.explicacion.modelo_determinante : 'Escenario mas restrictivo') + '</div>';
+}
+
+function mostrarPerfilHorario(d) {
+  const ph = d.weather?.perfil_horario ?? d.perfil?.calor?._perfil_horario;
+  if (!ph || !ph.length) return;
+  document.getElementById('hourly-card').style.display = 'block';
+  const bar = document.getElementById('hourly-bar');
+  const labels = document.getElementById('hourly-labels');
+  const h_ini = d.perfil_usuario?.hora_inicio;
+  const dur = d.perfil_usuario?.duracion_actividad_h;
+
+  bar.innerHTML = '';
+  labels.innerHTML = '';
+  for (let i = 0; i < 24; i+=3) {
+    const s = document.createElement('span');
+    s.textContent = i + ':00';
+    labels.appendChild(s);
+  }
+
+  function colorSensacion(hi) {
+    if (hi >= 46) return '#8b0000';
+    if (hi >= 39) return '#e74c3c';
+    if (hi >= 32) return '#f39c12';
+    if (hi >= 27) return '#a0d000';
+    return '#27ae60';
+  }
+
+  for (const e of ph) {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    const hi = e.HI;
+    slot.style.background = colorSensacion(hi);
+    if (h_ini !== undefined && dur !== undefined && e.hora >= h_ini && e.hora < h_ini + dur) {
+      slot.classList.add('active');
+    }
+    slot.title = e.hora + ':00 sensación térmica ' + Math.round(hi) + 'C';
+    slot.innerHTML = '<span style="opacity:' + (hi > 32 ? 1 : 0.6) + '">' + e.hora + '</span>';
+    bar.appendChild(slot);
+  }
+
+  const legendDiv = document.getElementById('hourly-legend');
+  if (legendDiv) {
+    const cats = [
+      { label: '< 27 Seguro', color: '#27ae60' },
+      { label: '27-32 Precaución', color: '#a0d000' },
+      { label: '32-39 Prec. alta', color: '#f39c12' },
+      { label: '39-46 Peligro', color: '#e74c3c' },
+      { label: '> 46 Pel. extremo', color: '#8b0000' },
+    ];
+    legendDiv.innerHTML = cats.map(c =>
+      '<span style="display:inline-flex;align-items:center;margin-right:12px;font-size:0.7rem">'
+      + '<span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:' + c.color + ';margin-right:3px"></span>'
+      + c.label + '</span>'
+    ).join('');
+  }
+
+  const actDiv = document.getElementById('activity-bar');
+  if (h_ini !== undefined && dur !== undefined) {
+    const h_fin = h_ini + dur;
+    const actHI = ph.filter(e => e.hora >= h_ini && e.hora < h_fin).map(e => e.HI);
+    const maxActHI = actHI.length ? Math.max(...actHI) : 0;
+    const minActHI = actHI.length ? Math.min(...actHI) : 0;
+    actDiv.innerHTML = '<strong>Actividad:</strong> ' + h_ini + ':00 \u2014 ' + h_fin + ':00'
+      + '  <span style="color:var(--text-light);font-size:0.8rem">Sensación térmica '
+      + Math.round(minActHI) + '-' + Math.round(maxActHI) + 'C</span>';
+  }
+}
+
+function mostrarOverride(d) {
+  document.getElementById('override-card').style.display = 'block';
+  let msg = '';
+  const hi = d.modelos?.Formula?.calor?.heat_index_c;
+  const wc = d.modelos?.Formula?.frio?.wind_chill_c;
+  const ph = d.weather?.perfil_horario ?? [];
+  const h_ini = d.perfil_usuario?.hora_inicio;
+  const dur = d.perfil_usuario?.duracion_actividad_h;
+
+  if (ph.length && h_ini !== undefined && dur !== undefined) {
+    const windowHI = ph.filter(e => e.hora >= h_ini && e.hora < h_ini + dur).map(e => e.HI);
+    if (windowHI.length) {
+      const peakHI = Math.max(...windowHI);
+      const h_fin = h_ini + dur;
+      msg = 'Condiciones actuales seguras (HI=' + hi + 'C), pero durante la actividad prevista ('
+        + h_ini + ':00-' + h_fin + ':00) se espera HI de hasta ' + peakHI.toFixed(1)
+        + 'C, lo que justifica el nivel de riesgo. El modelo ML lo confirma por tendencia.';
+    }
+  }
+  if (!msg) {
+    msg = 'Condiciones actuales seguras (HI=' + hi + 'C, WC=' + wc + 'C). '
+      + 'El modelo ML indicaba riesgo por tendencia meteorologica, pero los indicadores fisicos actuales no lo confirman.';
+  }
+  document.getElementById('override-box').innerHTML = '<strong>Nota:</strong> ' + msg;
+}
+
+function mostrarExplicacion(ex, modelos) {
+  if (!ex) return;
+  document.getElementById('explain-card').style.display = 'block';
+  const cont = document.getElementById('explain-content');
+  let html = '';
+
+  if (ex.modelo_determinante) {
+    html += '<p style="margin-bottom:10px"><strong>Modelo determinante:</strong> ' + ex.modelo_determinante + '</p>';
+  }
+
+  for (const [mod, det] of Object.entries(ex.detalles ?? {})) {
+    if (det.error) continue;
+    const prob = modelos?.[mod]?.prob_riesgo ?? 0;
+    if (prob < 0.35 && mod !== 'Formula') continue;
+
+    if (mod === 'XGBoost_calor' || mod === 'RandomForest_frio') {
+      const label = mod === 'XGBoost_calor' ? 'XGBoost calor' : 'RandomForest frio';
+      html += '<div style="margin-top:10px"><strong>Riesgo por tendencia meteorologica (' + label + '):</strong></div>';
+      if (det.top_features?.length) {
+        const allZero = det.top_features.every(t => (t.importancia ?? 0) === 0);
+        if (allZero) {
+          html += '<div style="font-size:0.85rem;color:var(--text-light)">El modelo no detecta factores de riesgo significativos para este dia.</div>';
+        } else {
+          for (const ft of det.top_features) {
+            html += '<div class="explain-item"><span>' + ft.feature + '</span><span>' + (ft.importancia * 100).toFixed(1) + '%</span></div>';
+          }
+        }
+      }
+    } else if (mod === 'LSTM' && det.hora_mas_influyente !== undefined) {
+      html += '<div style="margin-top:10px"><strong>LSTM:</strong> hora mas influyente = ' + det.hora_mas_influyente + ':00</div>';
+      if (det.variables_top?.length) {
+        for (const vt of det.variables_top) {
+          html += '<div class="explain-item"><span>' + vt.feature + '</span><span>' + (vt.importancia * 100).toFixed(1) + '%</span></div>';
+        }
+      }
+    } else if (mod === 'Formula' && det.explicaciones?.length) {
+      for (const exp of det.explicaciones) {
+        html += '<div style="margin-top:10px;padding:10px 12px;background:#f8f9fa;border-radius:8px;font-size:0.9rem">' + exp + '</div>';
+      }
+    }
+  }
+  cont.innerHTML = html;
+}
+
+function mostrarFactores(p) {
+  if (!p) return;
+  const card = document.getElementById('factors-card');
+  let hasFactors = false;
+  for (const tipo of ['calor', 'frio']) {
+    if (p[tipo]?.factores?.length) { hasFactors = true; break; }
+  }
+  if (!hasFactors) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const tog = document.getElementById('factors-toggle');
+  const body = document.getElementById('factors-body');
+  body.classList.remove('open');
+  tog.textContent = '+';
+  const cont = document.getElementById('factors-body');
+  let html = '';
+  for (const tipo of ['calor', 'frio']) {
+    const sec = p[tipo];
+    if (!sec?.factores?.length) continue;
+    html += '<div style="margin-top:8px"><strong style="text-transform:capitalize">' + tipo + ':</strong></div>';
+    html += '<table class="factors-table"><thead><tr><th>Factor</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>';
+    for (const f of sec.factores) {
+      html += '<tr><td>' + f.nombre + '</td><td style="color:var(--text-light)">' + f.categoria + '</td><td>x' + f.factor + '</td></tr>';
+    }
+    const pb = sec.producto_bruto ?? sec.factor_total;
+    const ft = sec.factor_total;
+    if (sec.capado && pb > ft) {
+      html += '<tr class="total"><td>Factor calculado</td><td></td><td>x' + pb + '</td></tr>';
+      html += '<tr class="total"><td>Aplicado (cap x' + (sec.cap_factores ?? 3) + ')</td><td></td><td>x' + ft + '</td></tr>';
+    } else {
+      html += '<tr class="total"><td>Factor total</td><td></td><td>x' + ft + '</td></tr>';
+    }
+    html += '<tr><td colspan="3" style="font-size:0.8rem;color:var(--text-light)">Prob. poblacional: '
+      + (sec.prob_poblacional * 100).toFixed(1) + '% -> personalizada: ' + (sec.prob_personalizada * 100).toFixed(1) + '%</td></tr>';
+    html += '</tbody></table>';
+  }
+  cont.innerHTML = html;
+}
+
+function mostrarRecomendaciones(recs) {
+  if (!recs || !recs.length) return;
+  document.getElementById('recs-card').style.display = 'block';
+  document.getElementById('rec-list').innerHTML = recs.map(r => '<li>' + r + '</li>').join('');
+}
+
+function toggleFactors() {
+  const body = document.getElementById('factors-body');
+  const tog = document.getElementById('factors-toggle');
+  body.classList.toggle('open');
+  tog.textContent = body.classList.contains('open') ? '-' : '+';
+}
+
+function calcularHorarioOptimo() {
+  const d = window._ultimoResultado;
+  if (!d) return;
+  const ph = d.weather?.perfil_horario ?? d.perfil?.calor?._perfil_horario;
+  if (!ph?.length) return;
+  const dur = d.perfil_usuario?.duracion_actividad_h ?? 2;
+
+  const ventanas = [];
+  for (let h = 0; h <= 24 - dur; h++) {
+    const vals = ph.filter(e => e.hora >= h && e.hora < h + dur).map(e => e.HI);
+    if (vals.length) ventanas.push({ hora: h, maxHI: Math.max(...vals), seguro: Math.max(...vals) < 27 });
+  }
+  if (!ventanas.length) return;
+
+  ventanas.sort((a, b) => a.seguro === b.seguro ? a.maxHI - b.maxHI : (b.seguro ? 1 : -1) - (a.seguro ? 1 : -1));
+  const mejor = ventanas[0];
+  const peor = ventanas.reduce((a, b) => a.maxHI > b.maxHI ? a : b);
+
+  document.getElementById('opt-time').innerHTML = '<div class="box good"><div class="label">Recomendado</div><div class="value">'
+    + mejor.hora + ':00 - ' + (mejor.hora + dur) + ':00</div><div style="font-size:0.8rem;color:var(--text-light)">HI max: '
+    + mejor.maxHI.toFixed(1) + 'C</div></div>'
+    + '<div class="box bad"><div class="label">Evitar</div><div class="value">'
+    + peor.hora + ':00 - ' + (peor.hora + dur) + ':00</div><div style="font-size:0.8rem;color:var(--text-light)">HI max: '
+    + peor.maxHI.toFixed(1) + 'C</div></div>';
+}
+
+async function checkPendingFactors() {
+  try {
+    const res = await fetch('/api/pending-factors');
+    const data = await res.json();
+    if (data.count > 0) {
+      document.getElementById('pending-count').textContent = data.count;
+      document.getElementById('pending-banner').style.display = 'flex';
+    }
+  } catch (_) { /* ignorar errores de red */ }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initMap(40.4168, -3.7038);
+  checkPendingFactors();
+});
+</script>
+</body>
+</html>

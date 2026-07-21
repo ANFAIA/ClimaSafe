@@ -11,6 +11,7 @@ o directamente:
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -403,6 +404,7 @@ async def api_status():
         "models":       list(_state["models"].keys()),
         "feature_count": len(_state["feature_names"]),
         "features":     _state["feature_names"],
+        "has_pending_factors": len(_get_pending_factors() or []) > 0,
     }
 
 
@@ -418,6 +420,149 @@ async def api_reload():
         "model_loaded": _state["model_loaded"],
         "models": list(_state["models"].keys()),
     }
+
+
+_FACTORES_JSON = PROJECT_DIR / "data" / "factores_riesgo.json"
+
+
+def _normalize_perfil(perfil: dict) -> dict:
+    """Traduce claves del frontend a las que espera personalizacion.py."""
+    p = dict(perfil)
+
+    comorb = p.get("comorbilidades")
+    if isinstance(comorb, list):
+        mapped = set()
+        for c in comorb:
+            if c == "respiratorio":
+                mapped.add("respiratoria")
+            elif c == "hipertension":
+                mapped.add("cardiovascular")
+            elif c in ("obesidad", "renal", ""):
+                continue
+            else:
+                mapped.add(c)
+        p["comorbilidades"] = mapped
+
+    social = p.get("situacion_social")
+    if isinstance(social, list):
+        mapped = set()
+        for s in social:
+            if s in ("baja_movilidad", "trabajo_exterior", "deporte_exterior", "sin_aire_acondicionado", ""):
+                continue
+            mapped.add(s)
+        p["situacion_social"] = mapped
+
+    if "fototipo" in p:
+        del p["fototipo"]
+
+    return p
+
+
+def _get_weather_summary(result: dict) -> dict:
+    """Extrae un dict serializable del weather (sin df_hora/df_features)."""
+    w = result.get("weather", {})
+    return {
+        "lat": w.get("lat"),
+        "lon": w.get("lon"),
+        "uv_index": w.get("uv_index"),
+        "current": w.get("current"),
+        "perfil_horario": w.get("perfil_horario"),
+        "provincia": w.get("provincia"),
+    }
+
+
+def _get_implemented_factors() -> dict:
+    """Devuelve solo factores con implementado=true, agrupados por tipo y categoria."""
+    if not _FACTORES_JSON.exists():
+        return {"calor": {}, "frio": {}}
+    try:
+        data = json.loads(_FACTORES_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return {"calor": {}, "frio": {}}
+    result = {}
+    for tipo in ("calor", "frio"):
+        seccion = data.get(tipo, {})
+        t_result = {}
+        for categoria, factores in seccion.items():
+            if not isinstance(factores, dict):
+                continue
+            impl = {k: v for k, v in factores.items() if isinstance(v, dict) and v.get("implementado")}
+            if impl:
+                t_result[categoria] = [
+                    {"clave": k, "nombre": v.get("nombre", k), "coeficiente": v.get("coef")}
+                    for k, v in impl.items()
+                ]
+        result[tipo] = t_result
+    return result
+
+
+def _get_pending_factors() -> list[dict]:
+    """Lee factores con implementado=false del JSON."""
+    if not _FACTORES_JSON.exists():
+        return []
+    try:
+        data = json.loads(_FACTORES_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    pendientes = []
+    for tipo in ("calor", "frio"):
+        seccion = data.get(tipo, {})
+        for categoria, factores in seccion.items():
+            if not isinstance(factores, dict):
+                continue
+            for clave, info in factores.items():
+                if isinstance(info, dict) and not info.get("implementado"):
+                    pendientes.append({
+                        "clave": clave,
+                        "tipo": tipo,
+                        "categoria": categoria,
+                        "nombre": info.get("nombre", clave),
+                        "coeficiente": info.get("coef"),
+                        "doi": info.get("doi"),
+                        "calidad": info.get("calidad", "baja"),
+                    })
+    return pendientes
+
+
+@app.get("/api/pending-factors")
+async def api_pending_factors():
+    return {
+        "count": len(_get_pending_factors()),
+        "factors": _get_pending_factors(),
+    }
+
+
+@app.get("/api/factores")
+async def api_factores():
+    return _get_implemented_factors()
+
+
+@app.post("/api/predict")
+async def api_predict(body: dict):
+    provincia = body.get("provincia", "Madrid")
+    lat = body.get("lat")
+    lon = body.get("lon")
+    perfil = _normalize_perfil(body.get("perfil") or {})
+
+    try:
+        from climasafeai.models.ensemble import predict_ensemble
+        result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+    result["perfil_usuario"] = perfil
+    result["weather"] = _get_weather_summary(result)
+
+    for mod_name, mod_res in result.get("modelos", {}).items():
+        if isinstance(mod_res, dict):
+            mod_res.pop("_X", None)
+    if "error" in result.get("modelos", {}).get("LSTM", {}):
+        del result["modelos"]["LSTM"]["error"]
+
+    result["weather"].pop("df_hora", None)
+    result["weather"].pop("df_features", None)
+
+    return result
 
 
 @app.websocket("/ws")

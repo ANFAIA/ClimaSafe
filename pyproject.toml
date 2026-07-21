@@ -36,6 +36,8 @@ dependencies = [
     "geopandas>=1.1.4",
     # ── Agentes ─────────────────────────────────────────────────────────
     "openai",          # Paper Scout: clasificación LLM de papers
+    "torch-geometric>=2.8.0",
+    "mcp>=1.28.1",
 ]
 
 [project.optional-dependencies]
