@@ -11,7 +11,6 @@ o directamente:
 """
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +22,8 @@ import pandas as pd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+
+from climasafeai.db.manager import DBManager
 
 
 
@@ -418,7 +419,7 @@ async def api_reload():
     }
 
 
-_FACTORES_JSON = PROJECT_DIR / "data" / "factores_riesgo.json"
+_db = DBManager()
 
 
 def _normalize_perfil(perfil: dict) -> dict:
@@ -443,7 +444,7 @@ def _normalize_perfil(perfil: dict) -> dict:
     if isinstance(social, list):
         mapped = set()
         for s in social:
-            if s in ("baja_movilidad", "trabajo_exterior", "deporte_exterior", "sin_aire_acondicionado", ""):
+            if s in ("baja_movilidad", "trabajo_exterior", "deporte_exterior", ""):
                 continue
             mapped.add(s)
         p["situacion_social"] = mapped
@@ -469,62 +470,19 @@ def _get_weather_summary(result: dict) -> dict:
 
 def _get_implemented_factors() -> dict:
     """Devuelve solo factores con implementado=true, agrupados por tipo y categoria."""
-    if not _FACTORES_JSON.exists():
-        return {"calor": {}, "frio": {}}
-    try:
-        data = json.loads(_FACTORES_JSON.read_text(encoding="utf-8"))
-    except Exception:
-        return {"calor": {}, "frio": {}}
-    result = {}
-    for tipo in ("calor", "frio"):
-        seccion = data.get(tipo, {})
-        t_result = {}
-        for categoria, factores in seccion.items():
-            if not isinstance(factores, dict):
-                continue
-            impl = {k: v for k, v in factores.items() if isinstance(v, dict) and v.get("implementado")}
-            if impl:
-                t_result[categoria] = [
-                    {"clave": k, "nombre": v.get("nombre", k), "coeficiente": v.get("coef")}
-                    for k, v in impl.items()
-                ]
-        result[tipo] = t_result
-    return result
+    return _db.obtener_factores(solo_implementados=True)
 
 
 def _get_pending_factors() -> list[dict]:
-    """Lee factores con implementado=false del JSON."""
-    if not _FACTORES_JSON.exists():
-        return []
-    try:
-        data = json.loads(_FACTORES_JSON.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    pendientes = []
-    for tipo in ("calor", "frio"):
-        seccion = data.get(tipo, {})
-        for categoria, factores in seccion.items():
-            if not isinstance(factores, dict):
-                continue
-            for clave, info in factores.items():
-                if isinstance(info, dict) and not info.get("implementado"):
-                    pendientes.append({
-                        "clave": clave,
-                        "tipo": tipo,
-                        "categoria": categoria,
-                        "nombre": info.get("nombre", clave),
-                        "coeficiente": info.get("coef"),
-                        "doi": info.get("doi"),
-                        "calidad": info.get("calidad", "baja"),
-                    })
-    return pendientes
+    """Lee factores con implementado=false de SQLite."""
+    return _db.factores_pendientes()
 
 
 @app.get("/api/pending-factors")
 async def api_pending_factors():
     return {
-        "count": len(_get_pending_factors()),
-        "factors": _get_pending_factors(),
+        "count": len(f := _get_pending_factors()),
+        "factors": f,
     }
 
 
@@ -548,19 +506,8 @@ async def api_approve_factor(body: dict):
     if errors:
         return {"success": False, "error": f"Faltan campos: {', '.join(errors)}"}
 
-    try:
-        data = json.loads(_FACTORES_JSON.read_text(encoding="utf-8"))
-    except Exception as e:
-        return {"success": False, "error": f"No se pudo leer JSON: {e}"}
-
-    seccion = data.get(tipo, {})
-    factores = seccion.get(categoria, {})
-    if clave not in factores:
-        return {"success": False, "error": f"No se encontró '{clave}' en {tipo}/{categoria}"}
-
-    factores[clave]["implementado"] = True
-    _FACTORES_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return {"success": True, "factor": clave}
+    result = _db.aprobar_factor(tipo, categoria, clave)
+    return result
 
 
 @app.post("/api/predict")
@@ -568,13 +515,34 @@ async def api_predict(body: dict):
     provincia = body.get("provincia", "Madrid")
     lat = body.get("lat")
     lon = body.get("lon")
-    perfil = _normalize_perfil(body.get("perfil") or {})
+    raw_perfil = body.get("perfil") or {}
+    perfil_id = raw_perfil.get("perfil_id")
+    perfil = _normalize_perfil(raw_perfil)
 
     try:
         from climasafeai.models.ensemble import predict_ensemble
         result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil)
     except Exception as exc:
         return {"error": str(exc)}
+
+    # Guardar perfil en SQLite (sin perfil_id en los datos)
+    datos_perfil = {k: v for k, v in raw_perfil.items() if k != "perfil_id"}
+    if perfil_id:
+        _db.actualizar_perfil(perfil_id, datos_perfil)
+    else:
+        perfil_id = _db.crear_perfil(datos_perfil)
+    result["perfil_id"] = perfil_id
+
+    # Guardar consulta
+    clase = result.get("clase_final_label", result.get("clase_final"))
+    tipo = result.get("tipo", "calor")
+    indice_orig = result.get("explicacion", {}).get("indice_original")
+    indice_pers = result.get("explicacion", {}).get("indice_personalizado")
+    _db.guardar_consulta(
+        perfil_id=perfil_id, provincia=provincia, lat=lat, lon=lon,
+        tipo_riesgo=tipo, indice_original=indice_orig,
+        indice_personalizado=indice_pers, clase_final=clase,
+    )
 
     result["perfil_usuario"] = perfil
     result["weather"] = _get_weather_summary(result)
@@ -589,6 +557,31 @@ async def api_predict(body: dict):
     result["weather"].pop("df_features", None)
 
     return result
+
+
+@app.get("/api/perfil/{perfil_id}")
+async def api_get_perfil(perfil_id: int):
+    """Devuelve un perfil guardado (escalares + arrays)."""
+    p = _db.obtener_perfil(perfil_id)
+    if p is None:
+        return {"error": "Perfil no encontrado"}
+    # Quitar campos internos
+    for k in ("id", "created_at", "updated_at", "aclimatado_actualizado_en"):
+        p.pop(k, None)
+    # Devolver arrays como listas para el frontend
+    return p
+
+
+@app.post("/api/perfil")
+async def api_save_perfil(body: dict):
+    """Guarda un perfil (sin predecir). Si incluye perfil_id, actualiza."""
+    perfil_id = body.get("perfil_id")
+    datos = {k: v for k, v in body.items() if k != "perfil_id"}
+    if perfil_id:
+        _db.actualizar_perfil(perfil_id, datos)
+    else:
+        perfil_id = _db.crear_perfil(datos)
+    return {"perfil_id": perfil_id}
 
 
 @app.websocket("/ws")

@@ -306,8 +306,12 @@
         </div>
       </div>
       <div id="factor-sections"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span id="profile-indicator" style="display:none;font-size:0.8rem;color:var(--text-light)"></span>
+      </div>
       <div class="btn-row">
         <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
+        <button class="btn btn-outline" onclick="guardarPerfil()" style="background:#2ecc71;color:#fff">Guardar perfil</button>
         <button class="btn" onclick="predecir()" id="btn-predict">Predecir riesgo</button>
       </div>
     </div>
@@ -539,6 +543,9 @@ async function predecir() {
       body: JSON.stringify({ provincia, lat, lon, perfil }),
     });
     const data = await res.json();
+    if (data.perfil_id) {
+      localStorage.setItem('climasafe_perfil_id', data.perfil_id);
+    }
     document.getElementById('step2').classList.remove('visible');
     document.getElementById('dot2').classList.remove('active');
     document.getElementById('dot2').classList.add('done');
@@ -550,6 +557,33 @@ async function predecir() {
     loading.classList.remove('active');
     btn.disabled = false;
   }
+}
+
+function guardarPerfil() {
+  const pid = localStorage.getItem('climasafe_perfil_id');
+  const perfil = getPerfil();
+  perfil.perfil_id = pid ? parseInt(pid) : undefined;
+  fetch('/api/perfil', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(perfil),
+  }).then(r => r.json()).then(data => {
+    if (data.perfil_id) {
+      localStorage.setItem('climasafe_perfil_id', data.perfil_id);
+      mostrarPerfilGuardado(data.perfil_id);
+    }
+  }).catch(() => alert('Error al guardar perfil'));
+}
+
+function borrarPerfil() {
+  localStorage.removeItem('climasafe_perfil_id');
+  document.getElementById('profile-indicator').style.display = 'none';
+}
+
+function mostrarPerfilGuardado(pid) {
+  const el = document.getElementById('profile-indicator');
+  el.style.display = 'inline';
+  el.innerHTML = 'Perfil #' + pid + ' guardado <a href="#" onclick="borrarPerfil();return false" style="color:var(--text-light)">[borrar]</a>';
 }
 
 function nuevaConsulta() {
@@ -593,9 +627,18 @@ function mostrarClima(w) {
 function mostrarFinal(d) {
   document.getElementById('final-card').style.display = 'block';
   const label = d.clase_final_label ?? '?';
+  const det = d.explicacion?.modelo_determinante;
+  let sub = 'Escenario mas restrictivo';
+  if (det) {
+    if (det.startsWith('Override')) {
+      sub = det.replace('Override — ', '');
+    } else {
+      sub = 'Determinado por: ' + det;
+    }
+  }
   document.getElementById('final-result').className = 'final-result bg-' + label;
   document.getElementById('final-result').innerHTML = '<div class="class class-' + label + '">' + label + '</div>'
-    + '<div class="sub">' + (d.explicacion?.modelo_determinante ? 'Determinado por: ' + d.explicacion.modelo_determinante : 'Escenario mas restrictivo') + '</div>';
+    + '<div class="sub">' + sub + '</div>';
 }
 
 function mostrarPerfilHorario(d) {
@@ -697,7 +740,14 @@ function mostrarExplicacion(ex, modelos) {
   let html = '';
 
   if (ex.modelo_determinante) {
-    html += '<p style="margin-bottom:10px"><strong>Modelo determinante:</strong> ' + ex.modelo_determinante + '</p>';
+    let label = ex.modelo_determinante;
+    // Mostrar más claro cuando es override
+    if (label.startsWith('Override')) {
+      label = label.replace('Override — ', '');
+      html += '<p style="margin-bottom:10px"><strong>Criterio de seguridad:</strong> ' + label + '</p>';
+    } else {
+      html += '<p style="margin-bottom:10px"><strong>Modelo determinante:</strong> ' + label + '</p>';
+    }
   }
 
   for (const [mod, det] of Object.entries(ex.detalles ?? {})) {
@@ -882,13 +932,46 @@ async function loadPendingList() {
   } catch (_) {}
 }
 
+function cargarPerfil() {
+  const pid = localStorage.getItem('climasafe_perfil_id');
+  if (!pid) return;
+  fetch('/api/perfil/' + pid).then(r => r.json()).then(p => {
+    if (p.error) return;
+    if (p.edad) document.getElementById('edad').value = p.edad;
+    if (p.sexo) document.getElementById('sexo').value = p.sexo;
+    if (p.porcentaje_grasa != null) document.getElementById('porcentaje_grasa').value = p.porcentaje_grasa;
+    if (p.nivel_actividad) document.getElementById('nivel_actividad').value = p.nivel_actividad;
+    if (p.hora_inicio != null) document.getElementById('hora_inicio').value = p.hora_inicio;
+    if (p.duracion_actividad_h != null) document.getElementById('duracion_actividad_h').value = p.duracion_actividad_h;
+    if (p.aclimatado != null) document.getElementById('aclimatado').value = p.aclimatado ? 'si' : 'no';
+    if (p.fototipo) document.getElementById('fototipo').value = p.fototipo;
+    // Checkboxes dinámicos
+    document.querySelectorAll('.checkbox-grid[data-field]').forEach(grid => {
+      const field = grid.dataset.field;
+      const vals = p[field] || [];
+      grid.querySelectorAll('.chk-dynamic').forEach(c => {
+        if (vals.includes(c.value)) c.checked = true;
+      });
+      // Uncheck "ninguna" si hay selecciones
+      const none = grid.querySelector('.chk-none');
+      if (none && vals.length) none.checked = false;
+    });
+    // Checkboxes booleanos
+    document.querySelectorAll('.chk-boolean').forEach(c => {
+      if (p[c.dataset.field]) c.checked = true;
+    });
+    mostrarPerfilGuardado(pid);
+  }).catch(() => {});
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   initMap(40.4168, -3.7038);
-  renderFactorSections();
   checkPendingFactors();
   document.getElementById('pending-modal').addEventListener('click', function(e) {
     if (e.target === this) closePendingModal();
   });
+  // Cargar perfil después de que los checkboxes dinámicos existan
+  renderFactorSections().then(cargarPerfil);
 });
 </script>
 </body>

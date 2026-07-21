@@ -29,6 +29,15 @@ from climasafeai.utils.paths import MODELS_DIR, ARTIFACTS_DIR
 from climasafeai.models.explicabilidad import explicar_ensemble
 from climasafeai.models.recomendaciones import generar_recomendaciones
 
+# Cache de modelos para no recargar en cada predicción
+_MODEL_CACHE: dict[str, object] = {}
+
+
+def _cargar_modelo(path: str) -> object:
+    if path not in _MODEL_CACHE:
+        _MODEL_CACHE[path] = joblib.load(MODELS_DIR / path)
+    return _MODEL_CACHE[path]
+
 CLASES = ["SEGURO", "PRECAUCION", "PELIGRO"]
 
 _FACTORES_RIESGO_EDAD = {
@@ -81,7 +90,7 @@ def _predecir_tabular(
     provincia: str | None = None,
     grupo_edad: str = "todos",
 ) -> dict:
-    model = joblib.load(MODELS_DIR / model_path)
+    model = _cargar_modelo(model_path)
     df_input = df_features.copy()
     if provincia:
         df_input["provincia"] = provincia
@@ -130,6 +139,16 @@ def _predecir_tabular(
     }
 
 
+_LSTM_CACHE: object | None = None
+
+
+def _cargar_lstm():
+    global _LSTM_CACHE
+    if _LSTM_CACHE is None:
+        _LSTM_CACHE = load_lstm_province_hybrid(LSTM_PROVINCE_HYBRID_MODEL_PATH, device="cpu")
+    return _LSTM_CACHE
+
+
 def _predecir_lstm(
     df_hora: pd.DataFrame,
     df_features: pd.DataFrame,
@@ -137,7 +156,7 @@ def _predecir_lstm(
     grupo_edad: str = "todos",
 ) -> dict:
     try:
-        model = load_lstm_province_hybrid(LSTM_PROVINCE_HYBRID_MODEL_PATH, device="cpu")
+        model = _cargar_lstm()
     except Exception as e:
         return {"error": f"No se pudo cargar LSTM: {e}"}
 
@@ -261,6 +280,11 @@ def predict_ensemble(
     for key, res in resultados.items():
         if isinstance(res, dict) and "error" in res:
             continue
+        # Formula no vota en el ensemble — solo actúa como override de seguridad
+        # vía HI_peak más abajo. Así los modelos ML son el determinante real
+        # y el usuario no ve "Formula" cuando XGBoost/LSTM ya acertaron.
+        if key == "Formula":
+            continue
         if "calor" in res and isinstance(res["calor"], dict):
             c = res["calor"]
             todas_clases.append(c.get("clase_threshold") or c.get("clase", 0))
@@ -296,7 +320,18 @@ def predict_ensemble(
     UV = weather.get("uv_index")
     HI = HI_current
     if perfil_horario:
-        HI = max(h["HI"] for h in perfil_horario)
+        # HI_peak: si el usuario especificó hora_inicio+duración, solo considerar esa ventana
+        inicio = perfil.get("hora_inicio")
+        duracion = perfil.get("duracion_actividad_h")
+        if inicio is not None and duracion is not None:
+            fin = inicio + duracion
+            ventana = [h for h in perfil_horario if inicio <= h["hora"] < fin]
+            if ventana:
+                HI = max(h["HI"] for h in ventana)
+            else:
+                HI = max(h["HI"] for h in perfil_horario)
+        else:
+            HI = max(h["HI"] for h in perfil_horario)
 
     clase_ml_original = int(clase_final)
 
@@ -305,14 +340,14 @@ def predict_ensemble(
         override_fisico = {
             "clase_ml": clase_ml_original,
             "clase_final": 1,
-            "razon": f"HI_peak={HI:.1f}C>=27, riesgo por calor",
+            "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>=27 → PRECAUCION",
         }
     if HI is not None and HI >= 39 and clase_final < 2:
         clase_final = 2
         override_fisico = {
             "clase_ml": clase_ml_original,
             "clase_final": 2,
-            "razon": f"HI_peak={HI:.1f}C>=39, peligro por calor",
+            "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>=39 → PELIGRO",
         }
 
     if (
@@ -325,9 +360,9 @@ def predict_ensemble(
         razon_extra = ""
         if clase_final == 2:
             nueva_clase = 1
-            razon_extra = " (PELIGRO→PRECAUCION: condiciones fisicas actuales seguras)"
+            razon_extra = f" → PRECAUCION (ML={CLASES[clase_ml_original]}, pero sin calor actual)"
         elif clase_final == 1:
-            razon_extra = " (se mantiene PRECAUCION: modelos ML detectan tendencia de riesgo)"
+            razon_extra = " (ML detecta tendencia de riesgo aunque sin calor ahora)"
         override_fisico = {
             "clase_ml": clase_ml_original,
             "clase_final": int(nueva_clase),
@@ -371,15 +406,18 @@ def predict_ensemble(
     }
 
     # Clase desde probabilidad personalizada
+    # t1 (PRECAUCION) alineado con el ML; t2 (PELIGRO) es más exigente
+    # porque prob_pers es P(riesgo), no P(peligro) del ML
     prob_pers = max(
         res_calor["indice_personalizado"],
         res_frio["indice_personalizado"],
     )
+    umbral_pers = CLASS_THRESHOLDS_RECOMENDADOS.get("calor", {"t1": 0.25, "t2": 0.40})
     clase_pers = 0
-    if prob_pers >= 0.45:
-        clase_pers = 1
-    if prob_pers >= 0.65:
+    if prob_pers >= 0.55:
         clase_pers = 2
+    elif prob_pers >= umbral_pers["t1"]:
+        clase_pers = 1
 
     # Si hay override por HI, prevalece (seguridad)
     # Si no, la clase final viene de la probabilidad personalizada

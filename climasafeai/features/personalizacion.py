@@ -27,54 +27,17 @@ Dos puntos de diseño clave:
 
 from __future__ import annotations
 
-import json
-import warnings
-from pathlib import Path
+from climasafeai.db.manager import DBManager
 
-# ── Factores desde JSON (data/factores_riesgo.json) ──────────────────────
-# Los coeficientes simples (comorbilidades, fármacos, situación social) se
-# leen de este archivo. Los factores complejos (edad, actividad, duración,
-# hora, fatiga acumulada) siguen siendo funciones de código.
-# El scout añade factores nuevos con implementado=false para revisión manual.
-
-_FACTORES_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "factores_riesgo.json"
+_DB = DBManager()
 _FACTORES_CACHE: dict | None = None
-
-
-def _cargar_factores() -> dict:
-    global _FACTORES_CACHE
-    if _FACTORES_CACHE is not None:
-        return _FACTORES_CACHE
-    if not _FACTORES_PATH.exists():
-        _FACTORES_CACHE = {"version": 1, "cap_factores": 3.0}
-        return _FACTORES_CACHE
-    with open(_FACTORES_PATH) as f:
-        _FACTORES_CACHE = json.load(f)
-
-    # Warning si hay factores pendientes de implementar
-    pendientes = 0
-    for tipo in ("calor", "frio"):
-        for categoria, factores in _FACTORES_CACHE.get(tipo, {}).items():
-            if not isinstance(factores, dict):
-                continue
-            for clave, info in factores.items():
-                if isinstance(info, dict) and not info.get("implementado"):
-                    pendientes += 1
-    if pendientes:
-        warnings.warn(
-            f"⚠️  {pendientes} factor(es) de riesgo pendiente(s) de revisión. "
-            f"Ejecuta: uv run python -m agents scout --review",
-            stacklevel=2,
-        )
-
-    return _FACTORES_CACHE
 
 
 def _factores_implementados(tipo: str, categoria: str) -> dict:
     """Devuelve {clave: {coef, nombre, doi}} solo con implementado=true."""
-    data = _cargar_factores()
-    factores = data.get(tipo, {}).get(categoria, {})
-    return {k: v for k, v in factores.items() if v.get("implementado")}
+    raw = _DB.obtener_factores(solo_implementados=True, tipo=tipo)
+    items = raw.get(tipo, {}).get(categoria, [])
+    return {i["clave"]: {"coef": i["coef"], "nombre": i["nombre"], "doi": i.get("doi")} for i in items}
 
 
 # Cap del PRODUCTO de factores: los factores no son independientes (mayor +
@@ -156,6 +119,23 @@ def _factor_hora_frio(hora_inicio: float | None, duracion: float | None) -> floa
     return 1.0
 
 
+# Duración mínima de actividad en calor para que la fatiga acumulada
+# sea relevante, según intensidad. A mayor intensidad, menos tiempo
+# para que la producción metabólica de calor sature la termorregulación.
+# Fuente: adaptado de umbrales NIOSH (ACGIH TLV para trabajo en calor).
+_UMBRAL_DURACION_FATIGA = {
+    "muy_intensa": 1,   # ej. esprint, fútbol competitivo
+    "intensa": 2,       # ej. correr, ciclismo rápido
+    "moderada": 3,      # ej. caminata rápida, bici suave
+}
+
+_FACTOR_FATIGA_BASE = {
+    "muy_intensa": 1.35,
+    "intensa": 1.2,
+    "moderada": 1.1,
+}
+
+
 def _factor_fatiga_acumulada(perfil: dict) -> tuple[str, float] | None:
     hora_inicio = perfil.get("hora_inicio")
     duracion = perfil.get("duracion_actividad_h")
@@ -164,6 +144,9 @@ def _factor_fatiga_acumulada(perfil: dict) -> tuple[str, float] | None:
     if any(v is None for v in (hora_inicio, duracion, perfil_horario)):
         return None
     if actividad not in _ACTIVIDADES_ESFUERZO:
+        return None
+    umbral = _UMBRAL_DURACION_FATIGA.get(actividad, 4)
+    if duracion < umbral:
         return None
     fin = hora_inicio + duracion
     window = [h for h in perfil_horario if hora_inicio <= h["hora"] < fin]
@@ -174,10 +157,15 @@ def _factor_fatiga_acumulada(perfil: dict) -> tuple[str, float] | None:
     if peak_HI < 27:
         return None
     horas_hasta_pico = peak["hora"] - hora_inicio
-    if horas_hasta_pico < 4:
-        return None
-    label = f"fatiga acumulada ({horas_hasta_pico:.0f}h trabajo al llegar a {peak_HI:.1f}C)"
-    factor = 1.3 if horas_hasta_pico >= 6 else 1.2
+    factor_base = _FACTOR_FATIGA_BASE.get(actividad, 1.1)
+    # Bonus si el pico de calor cae avanzada la actividad
+    fraccion_pico = horas_hasta_pico / duracion if duracion > 0 else 0
+    bonus = 0.05 * max(0, fraccion_pico - 0.3)
+    factor = min(factor_base + bonus, 1.5)
+    label = (
+        f"fatiga acumulada ({horas_hasta_pico:.0f}/{duracion:.0f}h de "
+        f"{actividad}, HI pico {peak_HI:.1f}C)"
+    )
     return (label, factor)
 
 

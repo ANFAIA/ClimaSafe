@@ -120,6 +120,13 @@
         "doi": "10.1056/NEJM199607113350203",
         "calidad": "alta",
         "implementado": true
+      },
+      "sin_aire_acondicionado": {
+        "coef": 2.5,
+        "nombre": "sin aire acondicionado en casa",
+        "doi": "10.1056/NEJM199607113350203",
+        "calidad": "alta",
+        "implementado": true
       }
     },
     "ocupacional": {

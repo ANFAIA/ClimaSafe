@@ -45,7 +45,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DOCS_DIR = BASE_DIR / "documentacion"
 PAPERS_DIR = DOCS_DIR / "papers"
 MODELOS_DIR = DOCS_DIR / "modelos"
-FACTORES_JSON_PATH = BASE_DIR / "data" / "factores_riesgo.json"
 
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
 DEFAULT_LLM_MODEL = os.getenv("PAPER_SCOUT_MODEL", "gemini-2.0-flash")
@@ -668,12 +667,11 @@ def _update_indices(all_papers: list[ScoutPaper]) -> list[Path]:
     return updated
 
 
-# ── Factores de riesgo JSON ──────────────────────────────────────────────────
+# ── Factores de riesgo (SQLite) ───────────────────────────────────────────────
 
-def _factores_json_cargar() -> dict:
-    if FACTORES_JSON_PATH.exists():
-        return json.loads(FACTORES_JSON_PATH.read_text(encoding="utf-8"))
-    return {"version": 1, "cap_factores": 3.0, "calor": {}, "frio": {}}
+from climasafeai.db.manager import DBManager
+
+_SCOUT_DB = DBManager()
 
 
 def _agregar_factor_json(
@@ -684,52 +682,46 @@ def _agregar_factor_json(
     nombre: str,
     doi: str | None = None,
     calidad: str = "baja",
+    poblacion: str | None = None,
 ) -> bool:
-    """Añade o actualiza un factor en el JSON.
+    """Añade o actualiza un factor en SQLite.
 
-    - Si calidad es "alta" y hay DOI → auto-aprobado (implementado=True)
-    - Si el factor ya existe y el nuevo es de mayor calidad → actualiza coef y doi
+    - Si calidad es "alta" y hay DOI → auto-aprobado (implementado=1)
+    - Si el factor ya existe y el nuevo es de mayor calidad → actualiza
     - Si el factor ya existe y está implementado → no lo toca
     """
-    data = _factores_json_cargar()
-    if tipo not in ("calor", "frio"):
-        return False
-    seccion = data.setdefault(tipo, {})
-    sub = seccion.setdefault(categoria, {})
-
     auto_approve = calidad == "alta" and bool(doi)
-    existente = sub.get(clave)
 
-    if existente:
-        if existente.get("implementado"):
-            if auto_approve and _calidad_mayor(calidad, existente.get("calidad", "baja")):
-                existente["coef"] = coeficiente
-                existente["doi"] = doi
-                existente["calidad"] = calidad
-                existente["nombre"] = nombre
-            else:
-                return False
+    existente = _SCOUT_DB.obtener_factores(solo_implementados=False, tipo=tipo)
+    existente_items = existente.get(tipo, {}).get(categoria, [])
+    existente_match = next((f for f in existente_items if f["clave"] == clave), None)
+
+    if existente_match:
+        if existente_match.get("implementado"):
+            if auto_approve and _calidad_mayor(calidad, existente_match.get("calidad", "baja")):
+                _SCOUT_DB.actualizar_factor(tipo, categoria, clave,
+                                     coef=coeficiente,
+                                     nombre=nombre,
+                                     calidad=calidad,
+                                     poblacion=poblacion)
+                return True
+            return False
         else:
-            existente["coef"] = coeficiente
-            existente["nombre"] = nombre
-            if doi:
-                existente["doi"] = doi
+            _SCOUT_DB.actualizar_factor(tipo, categoria, clave,
+                                 coef=coeficiente,
+                                 nombre=nombre,
+                                 doi=doi,
+                                 calidad=calidad,
+                                 poblacion=poblacion)
             if auto_approve:
-                existente["implementado"] = True
+                _SCOUT_DB.aprobar_factor(tipo, categoria, clave)
+            return True
     else:
-        sub[clave] = {
-            "coef": coeficiente,
-            "nombre": nombre,
-            "doi": doi,
-            "calidad": calidad,
-            "implementado": auto_approve,
-        }
-
-    FACTORES_JSON_PATH.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    return True
+        result = _SCOUT_DB.sugerir_factor(tipo, categoria, clave, nombre,
+                                   coeficiente, doi, calidad, poblacion)
+        if auto_approve:
+            _SCOUT_DB.aprobar_factor(tipo, categoria, clave)
+        return result.get("success", True)
 
 
 def _calidad_mayor(nueva: str, actual: str) -> bool:
@@ -739,52 +731,40 @@ def _calidad_mayor(nueva: str, actual: str) -> bool:
 
 def _review_pendientes() -> list[dict]:
     """Devuelve lista de factores con implementado=false para revisión."""
-    data = _factores_json_cargar()
-    pendientes: list[dict] = []
-    for tipo in ("calor", "frio"):
-        for categoria, factores in data.get(tipo, {}).items():
-            if not isinstance(factores, dict):
-                continue
-            for clave, info in factores.items():
-                if isinstance(info, dict) and not info.get("implementado"):
-                    pendientes.append({
-                        "tipo": tipo,
-                        "categoria": categoria,
-                        "clave": clave,
-                        "coeficiente": info.get("coef"),
-                        "nombre": info.get("nombre", clave),
-                        "doi": info.get("doi"),
-                        "calidad": info.get("calidad", "baja"),
-                    })
-    return pendientes
+    return _SCOUT_DB.factores_pendientes()
 
 
 def _aprobar_factor(clave: str, tipo: str, categoria: str) -> bool:
     """Marca un factor como implementado=true."""
-    data = _factores_json_cargar()
-    factor = data.get(tipo, {}).get(categoria, {}).get(clave)
-    if factor is None:
-        return False
-    factor["implementado"] = True
-    FACTORES_JSON_PATH.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    return True
+    return _SCOUT_DB.aprobar_factor(tipo, categoria, clave).get("success", False)
 
 
 def _rechazar_factor(clave: str, tipo: str, categoria: str) -> bool:
-    """Elimina un factor del JSON."""
-    data = _factores_json_cargar()
-    seccion = data.get(tipo, {}).get(categoria, {})
-    if clave not in seccion:
-        return False
-    del seccion[clave]
-    FACTORES_JSON_PATH.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    return True
+    """Elimina un factor de la BBDD."""
+    return _SCOUT_DB.rechazar_factor(tipo, categoria, clave).get("success", False)
+
+
+def _factores_json_cargar() -> dict:
+    """Compatibilidad: devuelve dict con la misma estructura que el JSON antiguo."""
+    data = _SCOUT_DB.obtener_factores(solo_implementados=False)
+    # Convertir formato de listas a dicts como el JSON legacy
+    result: dict = {"version": 2, "cap_factores": 3.0}
+    for tipo in ("calor", "frio"):
+        t_result: dict = {}
+        for categoria, items in data.get(tipo, {}).items():
+            cat_result: dict = {}
+            for item in items:
+                cat_result[item["clave"]] = {
+                    "coef": item["coef"],
+                    "nombre": item["nombre"],
+                    "doi": item.get("doi"),
+                    "calidad": item.get("calidad", "baja"),
+                    "implementado": item.get("implementado", False),
+                }
+            if cat_result:
+                t_result[categoria] = cat_result
+        result[tipo] = t_result
+    return result
 
 
 # ── CLI principal ─────────────────────────────────────────────────────────────

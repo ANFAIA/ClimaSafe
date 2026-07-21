@@ -150,6 +150,9 @@ graphify-out/cache/
 # --- LLM ---
 .claude
 .opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+*.bak
 opencode.json
 
 # --- MLflow local DB ---

@@ -22,7 +22,7 @@ import mlflow.sklearn
 import shap
 from climasafeai.utils.paths import FIGURES_DIR, MODELS_DIR, REPORTS_DIR, ARTIFACTS_DIR
 
-# Umbral de decisión. Bajar (e.g. 0.3) aumenta recall de clase minoritaria.
+# Umbral de decisión para eval binaria. Bajar aumenta recall.
 DECISION_THRESHOLD: float = 0.5
 
 # ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ DECISION_THRESHOLD: float = 0.5
 #     en otro caso              -> 0 (seguro)
 # Con class_thresholds=None todo sigue funcionando como siempre (argmax).
 CLASS_THRESHOLDS_RECOMENDADOS: dict = {
-    "calor": {"t1": 0.50, "t2": 0.45},
+    "calor": {"t1": 0.25, "t2": 0.40},
     # FRIO: calibrados sobre probabilidades post-isotonic (ver conformal_prediction.md).
     # Al usar estos thresholds, predict_new carga y aplica isotonic automáticamente.
     "frio":  {"t1": 0.21, "t2": 0.20},
@@ -47,7 +47,7 @@ CLASS_THRESHOLDS_RECOMENDADOS: dict = {
 # Thresholds óptimos para LSTM province_hybrid (con peso_riesgo_extra=8.0).
 # Calibrados independientemente de los de los modelos tabulares.
 CLASS_THRESHOLDS_LSTM: dict = {
-    "calor": {"t1": 0.60, "t2": 0.55},
+    "calor": {"t1": 0.25, "t2": 0.45},
     "frio":  {"t1": 0.40, "t2": 0.35},
 }
 

@@ -332,22 +332,26 @@ def explicar_ensemble(
 def _modelo_mas_restrictivo(resultado: dict) -> str:
     modelos = resultado.get("modelos", {})
     clase_final = resultado.get("clase_final", 0)
+
+    ml_match: str | None = None
+    lstm_match = False
+
     for nombre, res in modelos.items():
         if isinstance(res, dict) and "error" in res:
             continue
         if nombre == "LSTM":
             c = res.get("calor", {}).get("clase_threshold") or res.get("frio", {}).get("clase_threshold", 0)
             if c == clase_final:
-                return "LSTM"
+                lstm_match = True
         elif nombre == "Formula":
-            c = res.get("calor", {}).get("clase", 0)
-            if c == clase_final:
-                return "Formula"
-            c = res.get("frio", {}).get("clase", 0)
-            if c == clase_final:
-                return "Formula"
+            continue  # Formula no vota en el ensemble
         else:
             c = res.get("clase_threshold", 0)
             if c == clase_final:
-                return nombre
+                ml_match = nombre
+
+    if ml_match:
+        return ml_match
+    if lstm_match:
+        return "LSTM"
     return "multiple"
