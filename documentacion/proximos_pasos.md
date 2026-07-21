@@ -58,6 +58,7 @@
 | 10 | **Inyectar markdown de perfil** como contexto inicial del LLM | MCP server + `chat/app.py` | #1 |
 | 11 | **Endpoint web para aprobar factores** — alternativa gráfica al CLI `scout --review` | `chat/app.py` + `index.html` | — |
 | 12 | **Dockerizar stack completo** (api + llm-proxy + SQLite persistente) | `Dockerfile`, `docker-compose.yml` | #1 |
+| 13 | **Paper scout: probar extracción estructurada de factores** — se mejoró prompt para extraer `clave`, `nombre`, `categoria`, `tipo`, `coef`, `poblacion`, pero la cuota gratuita de Gemini API se agotó en las pruebas. Pendiente verificar que el LLM genera los factores estructurados correctamente y añadirlos al JSON con `implementado: false`. | `agents/paper_scout.py` (prompt + parsing) | — |
 
 ---
 

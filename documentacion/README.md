@@ -1,9 +1,26 @@
-# Ayuda
+# Documentación
 
-Carpeta para recursos de referencia del proyecto. Papers, cheatsheets, notas
-metodológicas o cualquier documentación de apoyo que no forme parte del código.
+Estructura general de la documentación del proyecto.
 
 ---
+
+## Índice de contenidos
+
+| Carpeta | Qué hay | Enlaces |
+|---------|---------|---------|
+| `arquitectura/` | Decisiones de diseño: modelo, fuentes externas, agentes IA, estratificación | `diseño_modelo.md`, `agentes_ia.md`, `evaluacion_fuentes_externas.md` |
+| `ml/` | Experimentos,结论es, problemas conocidos, feature engineering | `conclusiones_modelos.md`, `problemas_conocidos.md`, `calibracion_umbrales.md` |
+| `riesgo/` | Fórmulas deterministas, coeficientes extraídos de papers, personalización | `coeficientes_personalizacion_riesgo.md`, `formulas_riesgo_deterministico.md` |
+| `modelos/` | Papers de modelos alternativos explorados (Transformers, GNN, N-BEATS, Diffusion) + modelos actuales en producción | `actuales/`, `transformers/`, `gnn/`, `nbeats/`, `diffusion/` |
+| `papers/` | Papers del dominio: factores de riesgo, índices, ocupacional, planes de acción, aclimatación | `factores-riesgo/`, `ocupacional/`, `indices-biometeorologicos/`, `planes-accion/`, `aclimatacion/` |
+
+## Documentos raíz
+
+| Archivo | Contenido |
+|---------|-----------|
+| `proximos_pasos.md` | Roadmap y tareas pendientes priorizadas |
+| `conclusion-base-conocimiento.md` | Decisión técnica sobre SQLite + MCP |
+| `conformal_prediction.md` | Metodología de predicción conforme |
 
 ## Comandos esenciales
 
@@ -24,52 +41,25 @@ make smoke        # tests de humo (rápidos)
 make lint         # ruff check
 make format       # ruff format
 
-# Debug de rendimiento
-make profile      # cProfile → reports/profile.prof
-                  # luego: snakeviz reports/profile.prof
+# MLflow
+make mlflow       # UI en http://localhost:5000
 
-# Limpieza
-make clean        # __pycache__ y cachés
-make clean-models # borra .joblib / .pt
-make clean-all    # todo
-
-```
-
----
-
-## Tipo de ML: `supervisado` · Tarea: `clasificacion` · MLflow activo
-
-### MLflow
-
-```bash
-make mlflow        # UI en http://localhost:5000
-```
-
-Cada entrenamiento crea un run en el experimento `climasafeai`.
-Los modelos se registran en el Model Registry como `climasafeai_<NombreModelo>`.
-Artifacts: pesos `.joblib` / `.pt` + figuras de evaluacion.
-
-
-### Comandos Docker
-
-```bash
+# Docker
 make docker-run     # construir imagen + arrancar contenedor
-make docker-update  # reconstruir con los ultimos cambios
+make docker-update  # reconstruir con los últimos cambios
 make docker-down    # parar y eliminar contenedores
 ```
 
-### Comandos disponibles en el chat
+## Comandos del chat web
 
-| Comando | Descripcion |
-|---|---|
+| Comando | Descripción |
+|---------|-------------|
 | `status` | Estado del sistema y modelos cargados |
-| `predict` | Prediccion interactiva paso a paso |
+| `predict` | Predicción interactiva paso a paso |
 | `info` | Detalle de features y clases |
 | `train` | Lanzar entrenamiento desde el chat |
 | `reload` | Recargar modelos del disco |
 | `help` | Mostrar ayuda |
-
----
 
 ## Estructura de outputs
 
@@ -77,8 +67,6 @@ make docker-down    # parar y eliminar contenedores
 reports/
 ├── figures/
 │   ├── cm_<modelo>.png        # matriz de confusión
-│   └── proba_dist_*.png     # distribución de probabilidades (binario)
-└── resultados.csv            # métricas comparativas
+│   └── proba_dist_*.png       # distribución de probabilidades (binario)
+└── resultados.csv             # métricas comparativas
 ```
-
----

@@ -4,6 +4,8 @@
 > **DOI:** 10.1016/j.ebiom.2016.02.034  
 > **URL:** https://doi.org/10.1016/j.ebiom.2016.02.034  
 > **Año:** 2016
+> **Calidad:** 🟢 alta
+> **Journal:** EBioMedicine
 
 **Autores:** Aditi Bunker, Jan Wildenhain, Alina Vandenbergh, Nicholas Henschke, Joacim Rocklöv et al.
 
@@ -13,4 +15,4 @@ INTRODUCTION: Climate change and rapid population ageing are significant public 
 
 ---
 
-_Clasificado automáticamente como **factor-riesgo** el 2026-07-20. Razón: Tasa limitada (429) incluso tras reintento_
+_Clasificado automáticamente como **factor-riesgo** el 2026-07-21. Razón: Tasa limitada (429) incluso tras reintento_

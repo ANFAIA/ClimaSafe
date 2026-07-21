@@ -44,11 +44,11 @@ Esto evita escrituras inconsistentes del LLM y da control al usuario.
 | 1 | Definir esquema SQLite de perfiles (campos, tipos, relaciones) | Alta |
 | 2 | Implementar MCP server con tools: `get_profile`, `suggest_update`, `confirm_update` | Alta |
 | 3 | Añadir sqlite-vec para búsqueda semántica de perfiles | Media |
-| 4 | Integrar lógica temporal de aclimatación (≥14 días, ver `papers/aclimatacion/aclimatacion-calor-tiempos.md`) | Media |
+| 4 | Integrar lógica temporal de aclimatación (≥14 días, ver `papers/aclimatacion/time-course-of-natural-heat-acclimatization-in-well-trained-cyclists-during-a-2.md`) | Media |
 | 5 | Inyectar markdown de perfil como contexto inicial del LLM | Media |
 
 ## Documentación relacionada
 
 - `proximos_pasos.md` — hoja de ruta general
-- `papers/aclimatacion/aclimatacion-calor-tiempos.md` — evidencia de aclimatación
+- `papers/aclimatacion/time-course-of-natural-heat-acclimatization-in-well-trained-cyclists-during-a-2.md` — evidencia de aclimatación
 - `arquitectura/agentes_ia.md` — arquitectura de agentes existente

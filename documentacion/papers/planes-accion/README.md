@@ -13,10 +13,9 @@ Papers encontrados automáticamente por el agente scout.
 | [Heat Watch/Warning Systems Save Lives: Estimated Costs and B...](heat-watch-warning-systems-save-lives-estimated-costs-and-benefits-for-philadelp.md) | 2004 | openalex | 0.71 | factor-riesgo |
 | [Modular Deep-Learning-Based Early Warning System for Deadly ...](modular-deep-learning-based-early-warning-system-for-deadly-heatwave-prediction.md) | 2025 | arxiv | 0.71 | factor-riesgo |
 | [The Imperative for Climate Action to Protect Health](the-imperative-for-climate-action-to-protect-health.md) | 2019 | openalex | 0.57 | factor-riesgo |
-| [Scientists' warning on climate change and insects](scientists-warning-on-climate-change-and-insects.md) | 2022 | openalex | 0.57 | factor-riesgo |
 | [The Heat Health Warning System in Germany—Application and Wa...](the-heat-health-warning-system-in-germany-application-and-warnings-for-2005-to-2.md) | 2020 | openalex | 0.57 | factor-riesgo |
 | [Machine learning approaches to identify thresholds in a heat...](machine-learning-approaches-to-identify-thresholds-in-a-heat-health-warning-syst.md) | 2021 | arxiv | 0.57 | factor-riesgo |
 | [Heat-related mortality in Europe during the summer of 2022](heat-related-mortality-in-europe-during-the-summer-of-2022.md) | 2023 | openalex | 0.29 | factor-riesgo |
-| [Climate change and mental health: risks, impacts and priorit...](climate-change-and-mental-health-risks-impacts-and-priority-actions.md) | 2018 | openalex | 0.29 | factor-riesgo |
+
 
 _Última actualización: 2026-07-17 12:25_
