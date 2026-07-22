@@ -31,11 +31,11 @@ NIOSH gradúa la exposición por carga de trabajo: **ligera / moderada / pesada 
 muy pesada** — equivalente a las categorías MET del proyecto. El umbral WBGT
 **baja** al subir la carga: a más actividad, menos calor ambiental hace falta
 para el mismo riesgo. Base fisiológica del factor `nivel_actividad` de
-`coeficientes_personalizacion_riesgo.md`.
+`personalizacion_individual.md`.
 
 ## Uso en el proyecto
 
 - Coeficiente ×1.6 (aclimatación) y factores de nivel/duración de actividad de
   la tabla de personalización.
 - Aproximación WBGT desde Heat Index (Bernard & Iheanacho 2015) en
-  `formulas_riesgo_deterministico.md` §1.4.
+  `formulas_deterministas.md` §1.4.

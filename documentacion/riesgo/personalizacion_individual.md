@@ -1,6 +1,8 @@
 # Coeficientes de personalización individual del riesgo
 
-**Fecha:** 2026-07-10 · **Estado:** propuesta para revisión (no implementado)
+**Fecha:** 2026-07-10 · **Última actualización:** 2026-07-22 · **Estado:** implementado en `climasafeai/features/personalizacion.py`
+
+Ver también: `documentacion/arquitectura/pipeline_prediccion.md` (cómo se usa en el ensemble), `documentacion/ml/contrafactuales.md` (cómo se generan recomendaciones de cambio)
 
 ## Qué es esto y cómo encaja
 
@@ -16,7 +18,7 @@ Este documento propone la tabla de factores multiplicativos, con su fuente en
 literatura epidemiológica. **No sale del entrenamiento** (MoMo no tiene
 atributos individuales): son coeficientes documentados, exactamente como el
 ×1.6 de "sin aclimatación" (NIOSH RAL/REL) que el proyecto ya usa en
-`formulas_riesgo_deterministico.md` §1.4.
+`formulas_deterministas.md` §1.4.
 
 ## Cómo se compone (la matemática importa)
 

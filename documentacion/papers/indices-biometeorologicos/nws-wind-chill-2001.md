@@ -35,5 +35,5 @@ https://www.weather.gov/media/safety/windchillchart3.pdf
 
 ## Uso en el proyecto
 
-Es la fórmula base de `wind_chill_c` (ver `formulas_riesgo_deterministico.md`
+Es la fórmula base de `wind_chill_c` (ver `formulas_deterministas.md`
 §2.1 y `climasafeai/features/weather_indices.py`).

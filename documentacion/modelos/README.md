@@ -44,7 +44,25 @@ para exploración en notebook.
 4. Si es prometedor → se diseña un experimento formal vs baseline actual.
 5. Si se adopta → se actualiza `../ml/conclusiones_modelos.md` con la comparativa.
 
+## Mejoras futuras (evaluadas, no implementadas)
+
+Técnicas exploradas conceptualmente o en notebook (`0-5-experimentos.ipynb`)
+pero no integradas en producción. Se documentan para no perder la evaluación.
+
+| Técnica | Dónde se exploró | Estado | Motivo del descarte / aplazamiento |
+|---------|-----------------|--------|-------------------------------------|
+| **Procesos Gaussianos (GP)** | Prototipo | El GP clásico escala O(n³), inviable con el dataset real (~20k filas). Un SVGP sparse sería viable para el índice personalizado (~1000 consultas), pero conformal prediction (ya implementado) cubre la misma necesidad sin añadir dependencias. |
+| **TFT / N-BEATS** | Descartado | Forecast multi-horizonte para un problema que solo necesita predicción a 1-2 días. La LSTM actual es suficiente. Ver `../arquitectura/diseño_modelo.md` §7.2. |
+| **RL (PPO puro + curriculum)** | Prototipo | Entorno sintético con reglas escritas a mano. Para que RL tuviera sentido necesitaría un ciclo de feedback real (usuarios → recomendaciones → resultado), que hoy no existe. |
+| **Aprendizaje por refuerzo (RL)** | Conversación | Descartado | Misma razón: sin bucle de feedback real, RL es una solución en busca de problema. |
+| **Teoría causal (Pearl, Do-calculus)** | Conversación | Marco mental | No hay nada que implementar. Es un marco conceptual que cambia cómo se diseñan features y se interpretan resultados, no una librería. |
+| **Explicaciones contrafactuales** | Conversación | Pendiente de evaluar | Sí tendría valor real: "si hoy trabajaras a la sombra, tu riesgo bajaría de peligro a precaución". Se implementaría con `scipy.optimize` sobre los factores de `personalizacion.py`. Pendiente de priorizar. |
+
+**Criterio general:** ninguna de estas técnicas se descarta para siempre. Si el proyecto crece (más usuarios, feedback real, datos a nivel de calle), algunas podrían re-evaluarse. Por ahora, las prioridades son las que están en `../proximos_pasos.md`.
+
 ## Ver también
 
 - `../ml/conclusiones_modelos.md` — comparativa de modelos actuales (XGBoost, RF, LSTM).
-- `../proximos_pasos.md` §5 — hoja de ruta de investigación de modelos.
+- `../proximos_pasos.md` — hoja de ruta y próximos pasos.
+- `0-5-experimentos.ipynb` — notebook con prototipos de GP y RL.
+- `../arquitectura/diseño_modelo.md` — decisiones de arquitectura y modelos descartados.

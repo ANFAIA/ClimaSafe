@@ -167,7 +167,7 @@ fórmula, que sigue evaluando el riesgo individual real.
 Por eso, en cada consulta se calculan siempre las tres estimaciones —
 modelo ML de calor, modelo ML de frío, y la **fórmula científica
 determinista** (Heat Index / Wind Chill / UV, con tiempo de exposición y
-fototipo de piel — ver `../riesgo/formulas_riesgo_deterministico.md`) sobre los datos
+fototipo de piel — ver `../riesgo/formulas_deterministas.md`) sobre los datos
 meteorológicos del momento (Open-Meteo) — y se toma como resultado final
 el criterio más restrictivo de las tres. La fórmula cubre exactamente el
 hueco que el ML no puede cubrir por diseño (individual, universal, sin
@@ -200,7 +200,7 @@ Esto significa que la fórmula seguiría siendo necesaria como componente
 del sistema incluso si se dispusiera de CMBD actualizado — no es solo un
 sustituto temporal mientras no hay acceso a esa fuente.
 
-Ver `../riesgo/formulas_riesgo_deterministico.md` para el detalle de implementación de la
+Ver `../riesgo/formulas_deterministas.md` para el detalle de implementación de la
 fórmula (tablas Heat Index/Wind Chill del NWS, fórmula de tiempo hasta
 eritema de la OMS por fototipo, y código de referencia).
 
@@ -320,10 +320,17 @@ de 64 miembros y horizonte de 15 días.
 - Para España peninsular la mejora sobre Open-Meteo es marginal
 - No es auto-hosteable sin infraestructura Google Cloud
 
-### 7.2 TimesFM 2.5 y Granite TTM-R3 — capa de predicción por series temporales
+### 7.2 TimesFM 2.5, Granite TTM-R3, TFT y N-BEATS — forecast multi-horizonte
 
-Foundation models de propósito general entrenados en millones de series temporales
-de dominios diversos, candidatos a sustituir la LSTM.
+Modelos de forecast multi-día que se evaluaron como alternativas a la LSTM:
+
+- **TimesFM 2.5 / Granite TTM-R3:** foundation models de propósito general entrenados
+  en millones de series. Descartados por GPU, licencia NC-SA y rendimientos decrecientes.
+- **TFT (Temporal Fusion Transformer) / N-BEATS:** modelos de forecast interpretable
+  con atención (TFT) o descomposición por bloques (N-BEATS). Descartados porque el
+  caso de uso no necesita predicción a 7 días — el usuario decide sobre el riesgo
+  *actual*, no sobre una previsión lejana. Para forecast multi-día la LSTM actual
+  es suficiente.
 
 **Descartados porque:**
 - Son modelos de propósito general; los modelos actuales (XGBoost, RF, LSTM) están
@@ -333,8 +340,10 @@ de dominios diversos, candidatos a sustituir la LSTM.
   objetivo de ejecución en CPU.
 - Granite TTM-R3 (1.4M params) corre en CPU pero su licencia R3 es CC-BY-NC-SA
   (no comercial), incompatible con cualquier uso fuera de investigación.
-- Añadir un quinto modelo al ensemble actual tiene rendimientos decrecientes
-  frente al coste de integración.
+- TFT/N-BEATS resolverían un problema que no tenemos: forecast a 5-7 días.
+  El usuario necesita el riesgo *hoy* o *mañana*, con precisión e incertidumbre,
+  no horizontes lejanos.
+- Añadir más modelos al ensemble actual tiene rendimientos decrecientes.
 
 ### 7.3 Prithvi-EO-2.0 (IBM/NASA) — capa geoespacial
 
@@ -356,7 +365,7 @@ Todo el stack de ClimaSafeAI se mantiene dentro de este principio:
 | Componente | Elegido | Alternativa evaluada | Motivo del descarte |
 |---|---|---|---|
 | Datos meteorológicos | Open-Meteo (gratis, sin API key) | WeatherNext (Vertex AI) | Coste, resolución temporal |
-| Predicción ML | XGBoost, RF, LSTM (CPU, entrenados con MoMo) | TimesFM 2.5, TTM-R3 | GPU, licencia, especialización |
+| Predicción ML | XGBoost, RF, LSTM (CPU, entrenados con MoMo) | TimesFM 2.5, TTM-R3, TFT, N-BEATS | GPU, licencia, forecast lejano innecesario |
 | Datos satelitales | No usado | Prithvi-EO-2.0 | Complejidad, resolución innecesaria |
 
 Ninguna fuente de pago, ningún API key obligatorio, ningún modelo con requisitos

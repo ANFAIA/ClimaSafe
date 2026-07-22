@@ -43,6 +43,6 @@ HI = 0.5 · {T + 61.0 + [(T-68.0)·1.2] + (RH·0.094)}
 
 ## Uso en el proyecto
 
-Es la fórmula base de `heat_index_c` (ver `formulas_riesgo_deterministico.md`
+Es la fórmula base de `heat_index_c` (ver `formulas_deterministas.md`
 §1.1 y `climasafeai/features/weather_indices.py`). El proyecto trabaja en °C:
 convierte `T(°F)=T(°C)·9/5+32` antes y `T(°C)=(HI(°F)-32)·5/9` después.

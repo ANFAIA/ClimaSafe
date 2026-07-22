@@ -27,6 +27,6 @@ transmitidas por vectores y agroquímicos.
 ## Uso en el proyecto
 
 Contexto de magnitud del problema (mencionado en la base científica del README
-y `formulas_riesgo_deterministico.md` §1.3). No aporta coeficientes
+y `formulas_deterministas.md` §1.3). No aporta coeficientes
 individuales, sí respalda la relevancia del riesgo por calor en población
 trabajadora (conexión con el factor `nivel_actividad`).

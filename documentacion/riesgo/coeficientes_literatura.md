@@ -5,7 +5,7 @@ de los papers en `papers/`. Organizado por factor de riesgo. Cada coeficiente
 incluye su cita al paper original.
 
 > **Propósito:** servir como fuente de verdad para la tabla de factores de
-> personalización (`coeficientes_personalizacion_riesgo.md`) y para calibrar o
+> personalización (`personalizacion_individual.md`) y para calibrar o
 > contrastar las predicciones del modelo ML.
 
 ---

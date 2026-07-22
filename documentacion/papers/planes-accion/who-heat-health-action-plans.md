@@ -36,7 +36,7 @@ Personas mayores, bebés y niños pequeños, personas con enfermedades crónicas
 (cardiovasculares, respiratorias, mentales), personas que toman ciertos
 medicamentos, aisladas socialmente o en viviendas mal aisladas, y quienes
 trabajan al aire libre. — Coincide con los factores de
-`coeficientes_personalizacion_riesgo.md`.
+`personalizacion_individual.md`.
 
 ## Uso en el proyecto
 

@@ -34,7 +34,7 @@ Las 4 estimaciones se combinan en `climasafeai/models/ensemble.py` con el criter
 | XGBoost (calor) | `models/XGBoost_calor.joblib` | Riesgo poblacional calor (MoMo) |
 | RandomForest (frío) | `models/RandomForest_frio.joblib` | Riesgo poblacional frío (MoMo) |
 | LSTM province_hybrid | `models/LSTM_province_hybrid_seed42.pt` | Correlación temporal HI/WC ↔ mortalidad |
-| Fórmula determinista | `formulas_riesgo_deterministico.md` | Riesgo individual (NWS/OMS) |
+| Fórmula determinista | `formulas_deterministas.md` | Riesgo individual (NWS/OMS) |
 
 ### Guardarraíl físico
 - Ya NO anula completamente. PELIGRO(2)→PRECAUCION(1), PRECAUCION(1) se mantiene.

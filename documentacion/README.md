@@ -8,9 +8,9 @@ Estructura general de la documentación del proyecto.
 
 | Carpeta | Qué hay | Enlaces |
 |---------|---------|---------|
-| `arquitectura/` | Decisiones de diseño: modelo, fuentes externas, agentes IA, estratificación | `diseño_modelo.md`, `agentes_ia.md`, `evaluacion_fuentes_externas.md` |
-| `ml/` | Experimentos,结论es, problemas conocidos, feature engineering | `conclusiones_modelos.md`, `problemas_conocidos.md`, `calibracion_umbrales.md` |
-| `riesgo/` | Fórmulas deterministas, coeficientes extraídos de papers, personalización | `coeficientes_personalizacion_riesgo.md`, `formulas_riesgo_deterministico.md` |
+| `arquitectura/` | Decisiones de diseño: modelo, fuentes externas, agentes IA, estratificación | `README.md` interno |
+| `ml/` | Experimentos, conclusiones, problemas conocidos, feature engineering, active learning, contrafactuales | `README.md` interno |
+| `riesgo/` | Fórmulas deterministas, coeficientes extraídos de papers, personalización | `README.md` interno |
 | `modelos/` | Papers de modelos alternativos explorados (Transformers, GNN, N-BEATS, Diffusion) + modelos actuales en producción | `actuales/`, `transformers/`, `gnn/`, `nbeats/`, `diffusion/` |
 | `papers/` | Papers del dominio: factores de riesgo, índices, ocupacional, planes de acción, aclimatación | `factores-riesgo/`, `ocupacional/`, `indices-biometeorologicos/`, `planes-accion/`, `aclimatacion/` |
 
@@ -21,6 +21,10 @@ Estructura general de la documentación del proyecto.
 | `proximos_pasos.md` | Roadmap y tareas pendientes priorizadas |
 | `conclusion-base-conocimiento.md` | Decisión técnica sobre SQLite + MCP |
 | `conformal_prediction.md` | Metodología de predicción conforme |
+| `arquitectura/pipeline_prediccion.md` | Flujo completo de predicción (ensemble, override, personalización) |
+| `arquitectura/base_datos.md` | Esquema SQLite, DBManager, RAG semántico |
+| `ml/contrafactuales.md` | Explicaciones contrafactuales (cómo reducir el riesgo) |
+| `ml/active_learner.md` | Aprendizaje activo para el paper scout |
 
 ## Comandos esenciales
 

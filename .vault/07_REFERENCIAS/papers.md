@@ -33,7 +33,7 @@ status: active
 - **Referencia:** Bernard TE, Iheanacho IA. *J. Occup. Environ. Hyg.*, 2015.
 - **Aporte:** Aproximación simplificada del WBGT a partir del Heat Index: `WBGT = -0.0034·HI°F² + 0.96·HI°F - 34`. Precisión ±2°C respecto al WBGT instrumental.
 - **Uso:** Base de la columna `wbgt_c` en `weather_indices.py`. Permite aplicar los límites ocupacionales NIOSH/INSST sin tener WBGT instrumental.
-- **Documentación completa:** incluida en `documentacion/riesgo/formulas_riesgo_deterministico.md` §1.4
+- **Documentación completa:** incluida en `documentacion/riesgo/formulas_deterministas.md` §1.4
 
 ---
 
@@ -117,4 +117,4 @@ status: active
 
 - [[02_DATOS/fuentes]]
 - [[02_DATOS/features]] — implementación de las fórmulas
-- [formulas_riesgo_deterministico.md](../../documentacion/riesgo/formulas_riesgo_deterministico.md) — fórmulas detalladas (en `documentacion/`)
+- [formulas_deterministas.md](../../documentacion/riesgo/formulas_deterministas.md) — fórmulas detalladas (en `documentacion/`)
