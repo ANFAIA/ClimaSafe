@@ -91,8 +91,17 @@ CREATE TABLE IF NOT EXISTS historial_consultas (
 CREATE INDEX idx_historial_perfil ON historial_consultas(perfil_id);
 CREATE INDEX idx_historial_fecha ON historial_consultas(created_at);
 
--- ── Perfil horario embedido (usado por sqlite-vec en el futuro) ────
--- CREATE VIRTUAL TABLE IF NOT EXISTS perfiles_vec USING vec0(
---     embedding float[384] distance_metric=cosine
--- );
--- Se descomentará cuando se añada sqlite-vec.
+-- ── Aprendizaje activo (scout) ──────────────────────────────────────
+CREATE TABLE IF NOT EXISTS scout_entrenamiento (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo       TEXT NOT NULL,
+    abstract     TEXT NOT NULL,
+    embedding    BLOB,
+    veredicto    TEXT NOT NULL CHECK(veredicto IN ('aceptable', 'irrelevante')),
+    fuente       TEXT NOT NULL DEFAULT 'llm',
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Las tablas vec0 (factores_vec, factores_vec_src) se crean desde
+-- RAG.initialize() con sqlite-vec cargado. No incluirlas aquí
+-- porque DBManager.initialize() ejecuta este script sin la extensión.

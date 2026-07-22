@@ -209,6 +209,7 @@ def fetch_weather_data(
     lat: float | None = None,
     lon: float | None = None,
     provincia: str | None = None,
+    target_date: date | None = None,
 ) -> dict:
     if lat is None or lon is None:
         if provincia:
@@ -216,37 +217,57 @@ def fetch_weather_data(
         else:
             lat, lon = 40.4168, -3.7038
 
-    current = fetch_current_weather(lat, lon)
-    df_hora_forecast = fetch_hourly_forecast(lat, lon, hours=48)
-    df_hora_hist = fetch_historical_hourly(lat, lon, days=14)
+    today = date.today()
+    if target_date is None:
+        target_date = today
 
+    is_today = target_date == today
+
+    df_hora_hist = fetch_historical_hourly(lat, lon, days=14)
     if df_hora_hist is not None and len(df_hora_hist) > 0:
         last_hist_date = pd.to_datetime(df_hora_hist["datetime"]).dt.date.max()
     else:
         last_hist_date = None
 
+    if is_today:
+        current = fetch_current_weather(lat, lon)
+    else:
+        current = {}
+
+    df_hora_forecast = fetch_hourly_forecast(lat, lon, hours=48)
+
     if df_hora_forecast is not None and len(df_hora_forecast) > 0:
         df_hora_forecast["fecha"] = pd.to_datetime(df_hora_forecast["datetime"]).dt.date
-        today = date.today()
-        df_hora_today = df_hora_forecast[df_hora_forecast["fecha"] == today].copy()
-        if len(df_hora_today) < 24 and last_hist_date is not None and last_hist_date >= today:
-            if df_hora_hist is not None and len(df_hora_hist) > 0:
-                hist_today_mask = pd.to_datetime(df_hora_hist["datetime"]).dt.date == today
-                hist_today = df_hora_hist[hist_today_mask]
-                if len(hist_today) > 0:
-                    df_hora_today = pd.concat([df_hora_today, hist_today]).drop_duplicates(subset="datetime")
-        elif len(df_hora_today) < 24:
-            tomorrow = today + pd.Timedelta(days=1) if hasattr(today, "__add__") else date.today() + timedelta(days=1)
-            df_hora_today = df_hora_forecast[
-                (df_hora_forecast["fecha"] == today) | (df_hora_forecast["fecha"] == tomorrow)
-            ].copy()
-    else:
-        df_hora_today = pd.DataFrame()
+        df_hora_target = df_hora_forecast[df_hora_forecast["fecha"] == target_date].copy()
 
-    if len(df_hora_today) == 0:
+        if not is_today and len(df_hora_target) > 0:
+            midday = df_hora_target.iloc[len(df_hora_target) // 2]
+            current = {
+                "t2m_c": float(midday["t2m_c"]),
+                "rh": float(midday["rh"]),
+                "wind_speed_kmh": float(midday["wind_speed_kmh"]),
+                "sp": float(midday["sp"]),
+            }
+
+        if is_today:
+            if len(df_hora_target) < 24 and last_hist_date is not None and last_hist_date >= today:
+                if df_hora_hist is not None and len(df_hora_hist) > 0:
+                    hist_today_mask = pd.to_datetime(df_hora_hist["datetime"]).dt.date == today
+                    hist_today = df_hora_hist[hist_today_mask]
+                    if len(hist_today) > 0:
+                        df_hora_target = pd.concat([df_hora_target, hist_today]).drop_duplicates(subset="datetime")
+            elif len(df_hora_target) < 24:
+                tomorrow = today + timedelta(days=1)
+                df_hora_target = df_hora_forecast[
+                    (df_hora_forecast["fecha"] == today) | (df_hora_forecast["fecha"] == tomorrow)
+                ].copy()
+    else:
+        df_hora_target = pd.DataFrame()
+
+    if len(df_hora_target) == 0:
         if current:
             now = datetime.now()
-            df_hora_today = pd.DataFrame([{
+            df_hora_target = pd.DataFrame([{
                 "datetime": now,
                 "t2m_c": current.get("t2m_c", 20.0),
                 "rh": current.get("rh", 50.0),
@@ -254,17 +275,19 @@ def fetch_weather_data(
                 "sp": current.get("sp", 1013.0),
             }])
 
-    try:
-        uv_data = download_openuv(lat, lon, filename=f"openuv_{lat}_{lon}.csv")
-        if isinstance(uv_data, pd.DataFrame) and not uv_data.empty:
-            uv_col = [c for c in uv_data.columns if "uv" in c.lower()]
-            uv_index = float(uv_data[uv_col[0]].iloc[0]) if uv_col else None
-        else:
+    if is_today:
+        try:
+            uv_data = download_openuv(lat, lon, filename=f"openuv_{lat}_{lon}.csv")
+            if isinstance(uv_data, pd.DataFrame) and not uv_data.empty:
+                uv_index = float(uv_data["uv_max"].iloc[0]) if "uv_max" in uv_data.columns else None
+            else:
+                uv_index = None
+        except Exception:
             uv_index = None
-    except Exception:
+    else:
         uv_index = None
 
-    df_features, df_hora_proc = _generar_features_completas(df_hora_today, df_hora_hist)
+    df_features, df_hora_proc = _generar_features_completas(df_hora_target, df_hora_hist)
 
     return {
         "lat": lat,
@@ -273,6 +296,7 @@ def fetch_weather_data(
         "df_hora": df_hora_proc,
         "df_features": df_features,
         "uv_index": uv_index,
+        "target_date": target_date.isoformat(),
     }
 
 

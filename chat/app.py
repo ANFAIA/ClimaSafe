@@ -423,34 +423,16 @@ _db = DBManager()
 
 
 def _normalize_perfil(perfil: dict) -> dict:
-    """Traduce claves del frontend a las que espera personalizacion.py."""
+    """Convierte listas del frontend a sets."""
     p = dict(perfil)
 
     comorb = p.get("comorbilidades")
     if isinstance(comorb, list):
-        mapped = set()
-        for c in comorb:
-            if c == "respiratorio":
-                mapped.add("respiratoria")
-            elif c == "hipertension":
-                mapped.add("cardiovascular")
-            elif c in ("obesidad", "renal", ""):
-                continue
-            else:
-                mapped.add(c)
-        p["comorbilidades"] = mapped
+        p["comorbilidades"] = {c for c in comorb if c}
 
     social = p.get("situacion_social")
     if isinstance(social, list):
-        mapped = set()
-        for s in social:
-            if s in ("baja_movilidad", "trabajo_exterior", "deporte_exterior", ""):
-                continue
-            mapped.add(s)
-        p["situacion_social"] = mapped
-
-    if "fototipo" in p:
-        del p["fototipo"]
+        p["situacion_social"] = {s for s in social if s}
 
     return p
 
@@ -465,6 +447,7 @@ def _get_weather_summary(result: dict) -> dict:
         "current": w.get("current"),
         "perfil_horario": w.get("perfil_horario"),
         "provincia": w.get("provincia"),
+        "target_date": w.get("target_date"),
     }
 
 
@@ -510,8 +493,21 @@ async def api_approve_factor(body: dict):
     return result
 
 
+@app.post("/api/rag-search")
+async def api_rag_search(body: dict):
+    query = body.get("query", "")
+    k = body.get("k", 5)
+    if not query.strip():
+        return {"success": False, "error": "query vacía"}
+    try:
+        results = _db.search_factores(query, k=k)
+        return {"success": True, "results": results, "total": len(results)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/api/predict")
-async def api_predict(body: dict):
+async def api_predict(body: dict, date: str | None = None):
     provincia = body.get("provincia", "Madrid")
     lat = body.get("lat")
     lon = body.get("lon")
@@ -519,9 +515,22 @@ async def api_predict(body: dict):
     perfil_id = raw_perfil.get("perfil_id")
     perfil = _normalize_perfil(raw_perfil)
 
+    target_date = None
+    if date:
+        try:
+            from datetime import date as date_type, timedelta
+            target_date = date_type.fromisoformat(date)
+            today = date_type.today()
+            if target_date < today:
+                return {"error": f"La fecha {date} ya pasó. Solo se aceptan hoy o el futuro."}
+            if (target_date - today).days > 2:
+                return {"error": f"Fecha {date} está a más de 2 días vista. Horizonte máximo: 2 días."}
+        except ValueError:
+            return {"error": f"Fecha inválida: '{date}'. Usa formato ISO: YYYY-MM-DD"}
+
     try:
         from climasafeai.models.ensemble import predict_ensemble
-        result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil)
+        result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=target_date)
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -546,6 +555,8 @@ async def api_predict(body: dict):
 
     result["perfil_usuario"] = perfil
     result["weather"] = _get_weather_summary(result)
+    if target_date:
+        result["target_date"] = target_date.isoformat()
 
     for mod_name, mod_res in result.get("modelos", {}).items():
         if isinstance(mod_res, dict):
@@ -582,6 +593,44 @@ async def api_save_perfil(body: dict):
     else:
         perfil_id = _db.crear_perfil(datos)
     return {"perfil_id": perfil_id}
+
+
+@app.post("/api/contrafactuales")
+async def api_contrafactuales(body: dict):
+    from climasafeai.models.explicabilidad import generar_contrafactuales
+
+    provincia = body.get("provincia", "Madrid")
+    lat = body.get("lat")
+    lon = body.get("lon")
+    raw_perfil = body.get("perfil") or {}
+    perfil = _normalize_perfil(raw_perfil)
+
+    from climasafeai.models.ensemble import predict_ensemble
+    result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil)
+
+    cfs = generar_contrafactuales(result)
+    perfil_aplicado = result.get("perfil", {})
+    prob_pers = max(
+        (perfil_aplicado.get("calor") or {}).get("prob_personalizada", 0),
+        (perfil_aplicado.get("frio") or {}).get("prob_personalizada", 0),
+    )
+    PERS_THRESHOLD_PELIGRO = 0.55
+    umbral_t1 = 0.25
+    if prob_pers >= PERS_THRESHOLD_PELIGRO:
+        clase_pers_idx = 2
+    elif prob_pers >= umbral_t1:
+        clase_pers_idx = 1
+    else:
+        clase_pers_idx = 0
+    clase_pers_label = ["SEGURO", "PRECAUCION", "PELIGRO"][clase_pers_idx]
+    return {
+        "clase_final_sistema": result.get("clase_final_label"),
+        "clase_personalizada": clase_pers_label,
+        "probabilidad_personalizada": round(prob_pers, 4),
+        "contrafactuales": cfs,
+        "total": len(cfs),
+        "nota": "La 'clase_final_sistema' puede incluir un override por HI/UV que prevalece sobre la probabilidad personalizada." if result.get("override_fisico") else None,
+    }
 
 
 @app.websocket("/ws")

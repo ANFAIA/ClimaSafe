@@ -38,6 +38,8 @@ dependencies = [
     "openai",          # Paper Scout: clasificación LLM de papers
     "torch-geometric>=2.8.0",
     "mcp>=1.28.1",
+    # ── RAG vector search ─────────────────────────────────────────────
+    "sqlite-vec>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +51,10 @@ dev = [
     "pytest-cov",
     "sphinx",
     "snakeviz",
+]
+
+rag = [
+    "sentence-transformers>=2.2.0",
 ]
 
 # ML supervisado: clasificación + regresión

@@ -344,14 +344,172 @@ def _modelo_mas_restrictivo(resultado: dict) -> str:
             if c == clase_final:
                 lstm_match = True
         elif nombre == "Formula":
-            continue  # Formula no vota en el ensemble
+            continue
         else:
             c = res.get("clase_threshold", 0)
             if c == clase_final:
                 ml_match = nombre
 
+    _ETIQUETAS = {
+        "XGBoost_calor": "XGBoost",
+        "RandomForest_frio": "RandomForest",
+        "LSTM": "LSTM híbrida",
+    }
+
+    if clase_final == 0 and ml_match:
+        return _ETIQUETAS.get(ml_match, ml_match)
+    if clase_final == 0 and lstm_match:
+        return _ETIQUETAS.get("LSTM")
     if ml_match:
-        return ml_match
+        return _ETIQUETAS.get(ml_match, ml_match)
     if lstm_match:
-        return "LSTM"
-    return "multiple"
+        return _ETIQUETAS.get("LSTM")
+    return "múltiples"
+
+
+# ──────────────────────────────────────────────
+# Contrafactuales
+# ──────────────────────────────────────────────
+
+PERS_THRESHOLD_PELIGRO = 0.55
+
+CAMBIOS_ACCIONABLES = [
+    {
+        "id": "nivel_actividad",
+        "descripcion": "Reducir la intensidad del esfuerzo",
+        "condicion": lambda p: p.get("nivel_actividad") in ("intensa", "muy_intensa", "moderada", "ligera"),
+        "aplicar": lambda p: _cambiar(p, "nivel_actividad",
+            {"muy_intensa": "intensa", "intensa": "moderada", "moderada": "ligera", "ligera": "reposo"}
+            .get(p.get("nivel_actividad", ""), p["nivel_actividad"])),
+    },
+    {
+        "id": "aclimatado",
+        "descripcion": "Aclimatarse al calor (14 días de exposición gradual)",
+        "condicion": lambda p: p.get("aclimatado") is False,
+        "aplicar": lambda p: _cambiar(p, "aclimatado", True),
+    },
+    {
+        "id": "falta_sueno",
+        "descripcion": "Descansar adecuadamente la noche anterior",
+        "condicion": lambda p: p.get("falta_sueno") is True,
+        "aplicar": lambda p: _cambiar(p, "falta_sueno", False),
+    },
+    {
+        "id": "enfermedad_reciente",
+        "descripcion": "Esperar a recuperarse completamente de la enfermedad",
+        "condicion": lambda p: p.get("enfermedad_reciente") is True,
+        "aplicar": lambda p: _cambiar(p, "enfermedad_reciente", False),
+    },
+    {
+        "id": "hora_inicio",
+        "descripcion": "Realizar la actividad en horas más frescas",
+        "condicion": lambda p: _hora_en_peak(p.get("hora_inicio")),
+        "aplicar": lambda p: _cambiar(p, "hora_inicio",
+            8 if p.get("hora_inicio", 12) >= 12 else 19),
+    },
+    {
+        "id": "duracion_actividad",
+        "descripcion": "Acortar la duración de la actividad",
+        "condicion": lambda p: (p.get("duracion_actividad_h") or 0) > 1,
+        "aplicar": lambda p: _cambiar(p, "duracion_actividad_h", 1.0),
+    },
+]
+
+
+def _cambiar(perfil: dict, clave: str, valor) -> dict:
+    copia = dict(perfil)
+    copia[clave] = valor
+    return copia
+
+
+def _hora_en_peak(hora: float | None) -> bool:
+    if hora is None:
+        return False
+    return 12 <= hora <= 17
+
+
+def _clase_desde_prob(prob: float) -> int:
+    umbral = CLASS_THRESHOLDS_RECOMENDADOS.get("calor", {"t1": 0.25})
+    if prob >= PERS_THRESHOLD_PELIGRO:
+        return 2
+    if prob >= umbral["t1"]:
+        return 1
+    return 0
+
+
+def _factor_total_desde_original(perfil_aplicado: dict, tipo: str = "calor") -> float:
+    """Reconstruye el factor_total que se aplicó originalmente."""
+    p = (perfil_aplicado.get(tipo) or {})
+    return p.get("factor_total", p.get("producto_bruto", 1.0))
+
+
+def _pers_pair(
+    prob_calor: float, prob_frio: float, perfil: dict, cap: float
+) -> tuple[float, float]:
+    from climasafeai.features.personalizacion import personalizar_riesgo
+    rc = personalizar_riesgo(prob_calor, perfil, tipo="calor", cap_factores=cap)
+    rf = personalizar_riesgo(prob_frio, perfil, tipo="frio", cap_factores=cap)
+    prob = max(rc["indice_personalizado"], rf["indice_personalizado"])
+    ft = rc["factor_total"]
+    return prob, ft
+
+
+def _pers_pair_nocap(prob_calor, prob_frio, perfil):
+    return _pers_pair(prob_calor, prob_frio, perfil, 10.0)
+
+
+def generar_contrafactuales(result: dict) -> list[dict]:
+    perfil: dict = result.get("perfil_usuario") or {}
+    perfil_aplicado: dict = result.get("perfil", {})
+    prob_calor = (perfil_aplicado.get("calor") or {}).get("prob_poblacional", 0.5)
+    prob_frio = (perfil_aplicado.get("frio") or {}).get("prob_poblacional", 0.5)
+
+    prob_pers_orig_cap, ft_orig_cap = _pers_pair(prob_calor, prob_frio, perfil, 3.0)
+    prob_pers_orig_nocap, ft_orig_nocap = _pers_pair_nocap(prob_calor, prob_frio, perfil)
+    clase_orig = _clase_desde_prob(prob_pers_orig_nocap)
+
+    contrafactuales = []
+
+    for cambio in CAMBIOS_ACCIONABLES:
+        if not cambio["condicion"](perfil):
+            continue
+
+        perfil_mod = cambio["aplicar"](perfil)
+
+        prob_nueva_cap, ft_nueva_cap = _pers_pair(prob_calor, prob_frio, perfil_mod, 3.0)
+        prob_nueva_nocap, _ = _pers_pair_nocap(prob_calor, prob_frio, perfil_mod)
+
+        diff = prob_pers_orig_nocap - prob_nueva_nocap
+        if diff <= 0.001:
+            continue
+
+        contrafactuales.append({
+            "id": cambio["id"],
+            "descripcion": cambio["descripcion"],
+            "probabilidad_sin_cap": {
+                "actual": round(prob_pers_orig_nocap, 4),
+                "tras_cambio": round(prob_nueva_nocap, 4),
+            },
+            "probabilidad_con_cap": {
+                "actual": round(prob_pers_orig_cap, 4),
+                "tras_cambio": round(prob_nueva_cap, 4),
+            },
+            "clase_actual": _CLASE_LABEL[clase_orig],
+            "clase_tras_cambio": _CLASE_LABEL[_clase_desde_prob(prob_nueva_nocap)],
+            "mejora_porcentual_puntos": round(diff * 100, 1),
+            "enmascarado_por_cap": ft_orig_cap >= 2.99 and ft_nueva_cap >= 2.99,
+            "factor_total_actual": round(ft_orig_nocap, 3),
+            "factor_total_tras_cambio": round(ft_nueva_cap, 3),
+            "producto_bruto_tras_cambio": None,  # filled below
+        })
+
+        # Get producto_bruto for informational purposes
+        from climasafeai.features.personalizacion import personalizar_riesgo
+        r_full = personalizar_riesgo(prob_calor, perfil_mod, tipo="calor", cap_factores=10.0)
+        contrafactuales[-1]["producto_bruto_tras_cambio"] = round(r_full["producto_bruto"], 3)
+
+    contrafactuales.sort(key=lambda x: x["mejora_porcentual_puntos"], reverse=True)
+    return contrafactuales
+
+
+_CLASE_LABEL = ["SEGURO", "PRECAUCION", "PELIGRO"]

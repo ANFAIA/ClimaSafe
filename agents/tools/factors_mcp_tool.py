@@ -128,9 +128,18 @@ try:
         """Marca como aclimatados los perfiles que cumplan el criterio temporal. Si perfil_id se omite, actualiza todos los que cumplan. Devuelve resumen de cuántos se aclimataron."""
         return json.dumps(_db().auto_aclimatar(perfil_id=perfil_id, dias=dias), indent=2, default=str)
 
+    @_mcp.tool()
+    def search_factors_mcp(query: str, k: int = 5) -> str:
+        """Búsqueda semántica sobre factores de riesgo usando sqlite-vec. Devuelve los k factores más relevantes para la consulta con su distancia coseno."""
+        return json.dumps(_db().search_factores(query, k=k), indent=2, default=str)
+
     _HAS_MCP = True
 except ImportError:
     _HAS_MCP = False
+
+
+def search_factors(query: str, k: int = 5) -> list[dict]:
+    return _db().search_factores(query, k=k)
 
 
 def run_mcp_server(host: str = "0.0.0.0", port: int = 8100) -> None:

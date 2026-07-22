@@ -3,11 +3,14 @@ agents.paper_scout — Búsqueda programada de papers con clasificación LLM.
 
 Flujo:
   1. Para cada temática del proyecto, busca papers en arXiv y OpenAlex.
-  2. Clasifica cada paper con LLM (LiteLLM + Gemini): factor de riesgo,
+  2. Filtro activo: clasificador ligero (ActiveLearner) descarta irrelevantes
+     sin llamar al LLM. Mejora con cada approve/reject del usuario.
+  3. Clasifica cada paper con LLM (LiteLLM + Gemini): factor de riesgo,
      modelo alternativo, o no relevante.
-  3. Genera resumen en markdown y lo guarda en documentacion/papers/<categoria>/
+  4. Almacena cada veredicto como ejemplo de entrenamiento.
+  5. Genera resumen en markdown y lo guarda en documentacion/papers/<categoria>/
      o documentacion/modelos/<modelo>/.
-  4. Retorna resumen de lo encontrado.
+  6. Retorna resumen de lo encontrado.
 
 Uso:
     uv run python -m agents scout
@@ -31,6 +34,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agents.tools.research_tool import ResearchTool  # noqa: E402
+
+try:
+    from climasafeai.ml.active_learner import ActiveLearner
+    _ACTIVE_LEARNER = ActiveLearner()
+    _ACTIVE_LEARNER.retrain()
+except ImportError:
+    _ACTIVE_LEARNER = None
 
 try:
     from openai import OpenAI, RateLimitError as _RateLimitError
@@ -267,6 +277,7 @@ class ScoutResult:
     by_category: dict[str, int] = field(default_factory=dict)
     saved_files: list[Path] = field(default_factory=list)
     llm_calls: int = 0
+    learner_filtered: int = 0
 
 
 # ── LLM helper (batch) ────────────────────────────────────────────────────────
@@ -803,6 +814,7 @@ def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> Sco
     ]
 
     all_relevant: list[ScoutPaper] = []
+    learner_filtered = 0
 
     for qinfo in active_queries:
         try:
@@ -816,9 +828,36 @@ def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> Sco
 
         result.total_found += len(papers)
 
+        # ── Filtro activo: clasificador ligero antes del LLM ──────────
+        if _ACTIVE_LEARNER is not None and _ACTIVE_LEARNER._n_samples >= 5:
+            filtered = []
+            for p in papers:
+                veredicto, conf, info = _ACTIVE_LEARNER.predict(p.title, p.abstract)
+                if veredicto == "irrelevante":
+                    learner_filtered += 1
+                    continue
+                filtered.append(p)
+            papers = filtered
+
+        if not papers:
+            continue
+
         # Clasificar lote
         classified = _classify_batch(papers)
         result.llm_calls += 1
+
+        # ── Almacenar ejemplos para el aprendiz activo ────────────────
+        if _ACTIVE_LEARNER is not None:
+            examples = []
+            for p in classified:
+                veredicto = "aceptable" if p.classification != "irrelevante" else "irrelevante"
+                examples.append({
+                    "titulo": p.title,
+                    "abstract": p.abstract,
+                    "veredicto": veredicto,
+                    "fuente": "llm",
+                })
+            _ACTIVE_LEARNER.store_many(examples)
 
         relevant = [p for p in classified if p.classification != "irrelevante"]
 
@@ -832,6 +871,11 @@ def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> Sco
             for p in relevant:
                 path = _save_paper(p)
                 result.saved_files.append(path)
+
+    if _ACTIVE_LEARNER is not None and _ACTIVE_LEARNER.count_labels() >= 5:
+        _ACTIVE_LEARNER.retrain()
+
+    result.learner_filtered = learner_filtered
 
     if not dry_run and all_relevant:
         _update_indices(all_relevant)
@@ -884,6 +928,15 @@ def scout_run(*, dry_run: bool = False, queries: list[str] | None = None) -> Sco
                         doi=p.doi,
                         calidad=p.calidad,
                     )
+
+    if not dry_run:
+        try:
+            from agents.tools.graphify_tool import GraphifyTool
+            root = Path(__file__).resolve().parent.parent
+            if GraphifyTool.is_available(root):
+                GraphifyTool.build(root, timeout=300)
+        except Exception:
+            pass
 
     return result
 

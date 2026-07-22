@@ -26,6 +26,29 @@ _FACTORES_JSON = Path(__file__).resolve().parent.parent.parent / "data" / "facto
 class DBManager:
     def __init__(self, db_path: str | Path | None = None):
         self.db_path = Path(db_path) if db_path else _DB_PATH
+        self._rag: Any = None
+
+    @property
+    def rag(self):
+        if self._rag is None:
+            try:
+                from climasafeai.db.rag import RAG as _RAG
+                self._rag = _RAG(self.db_path)
+            except ImportError:
+                pass
+        return self._rag
+
+    def init_rag(self) -> dict:
+        if self.rag is None:
+            return {"success": False, "error": "sqlite-vec no disponible (pip install '.[rag]')"}
+        self.rag.initialize()
+        stats = self.rag.stats()
+        return {"success": True, "stats": stats}
+
+    def search_factores(self, query: str, k: int = 5) -> list[dict]:
+        if self.rag is None:
+            return []
+        return self.rag.search_factores(query, k=k)
 
     # ── Conexión ────────────────────────────────────────────────────
 

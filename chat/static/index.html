@@ -214,6 +214,14 @@
   .collapse-body { overflow:hidden; max-height:0; transition:max-height 0.3s ease; }
   .collapse-body.open { max-height:2000px; }
 
+  .btn-date {
+    background: transparent; border: none; padding: 6px 16px; border-radius: 6px;
+    font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--text-light);
+    transition: all 0.2s;
+  }
+  .btn-date.active { background: #fff; color: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .btn-date:hover:not(.active) { color: var(--text); }
+
   @media (max-width: 600px) {
     .form-group { min-width: 100%; }
     header h1 { font-size: 1.3rem; }
@@ -279,7 +287,7 @@
       <div class="form-row">
         <div class="form-group"><label>Edad</label><input type="number" id="edad" min="0" max="120"></div>
         <div class="form-group"><label>Sexo</label><select id="sexo"><option value="">-</option><option value="hombre">Hombre</option><option value="mujer">Mujer</option></select></div>
-        <div class="form-group"><label>% Grasa</label><input type="number" id="porcentaje_grasa" min="0" max="70" step="0.1"></div>
+        <div class="form-group"><label>% Grasa <span style="font-weight:400;color:var(--text-light);font-size:0.7rem">(solo aplica en esfuerzo)</span></label><input type="number" id="porcentaje_grasa" min="0" max="70" step="0.1"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Actividad</label>
@@ -308,6 +316,14 @@
       <div id="factor-sections"></div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span id="profile-indicator" style="display:none;font-size:0.8rem;color:var(--text-light)"></span>
+      </div>
+      <div class="form-row" style="margin-top:12px;align-items:center">
+        <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
+        <div style="display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:2px;border:1px solid var(--border)">
+          <button class="btn-date active" data-date="" onclick="setDate(this, '')">Hoy</button>
+          <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')">Mañana</button>
+        </div>
+        <input type="hidden" id="target-date" value="">
       </div>
       <div class="btn-row">
         <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
@@ -352,6 +368,12 @@
     <div class="card" id="recs-card" style="display:none">
       <div class="card-title">Recomendaciones</div>
       <ul class="rec-list" id="rec-list"></ul>
+    </div>
+
+    <div class="card" id="cf-card" style="display:none">
+      <div class="card-title">Como reducir tu riesgo</div>
+      <div id="cf-list"></div>
+      <div id="cf-loading" style="text-align:center;padding:12px;color:var(--text-light);font-size:0.85rem">Calculando impacto de cada cambio...</div>
     </div>
 
     <div class="card" id="opt-card" style="display:none">
@@ -485,6 +507,19 @@ function toggleNone(el) {
   if (el.checked) checks.forEach(c => c.checked = false);
 }
 
+function setDate(btn, val) {
+  document.querySelectorAll('.btn-date').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const today = new Date();
+  if (val === 'tomorrow') {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('target-date').value = tomorrow.toISOString().split('T')[0];
+  } else {
+    document.getElementById('target-date').value = '';
+  }
+}
+
 function getPerfil() {
   const p = {};
   const edad = document.getElementById('edad').value;
@@ -536,8 +571,11 @@ async function predecir() {
     lon = parseFloat(coordMatch[2]);
   }
 
+  const targetDate = document.getElementById('target-date').value;
+  const url = '/api/predict' + (targetDate ? '?date=' + targetDate : '');
+
   try {
-    const res = await fetch('/api/predict', {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provincia, lat, lon, perfil }),
@@ -551,6 +589,7 @@ async function predecir() {
     document.getElementById('dot2').classList.add('done');
     document.getElementById('dot3').classList.add('active');
     mostrarResultados(data);
+    fetchContrafactuales({ provincia, lat, lon, perfil });
   } catch (e) {
     alert('Error al conectar con el servidor: ' + e.message);
   } finally {
@@ -616,11 +655,19 @@ function mostrarClima(w) {
   if (!w) return;
   document.getElementById('weather-card').style.display = 'block';
   const c = w.current || {};
+  const fecha = w.target_date ? new Date(w.target_date + 'T12:00:00') : null;
+  let fechaLabel = 'Clima actual';
+  if (fecha) {
+    const hoy = new Date();
+    const diff = Math.round((fecha - hoy) / 86400000);
+    fechaLabel = 'Pronóstico ' + (diff === 0 ? 'hoy' : diff === 1 ? 'mañana' : fecha.toLocaleDateString('es-ES'));
+  }
+  document.getElementById('weather-card').querySelector('.card-title').textContent = fechaLabel;
   document.getElementById('weather-strip').innerHTML = [
     { v: (c.t2m_c ?? '?') + 'C', l: 'Temperatura' },
     { v: (c.rh ?? '?') + '%', l: 'Humedad' },
     { v: (c.wind_speed_kmh ?? '?') + ' km/h', l: 'Viento' },
-    { v: w.uv_index != null ? Number(w.uv_index).toFixed(1) : '?', l: 'UV' },
+    { v: w.uv_index != null ? Number(w.uv_index).toFixed(1) : 'N/D', l: 'UV' },
   ].map(x => '<div class="weather-item"><div class="value">' + x.v + '</div><div class="label">' + x.l + '</div></div>').join('');
 }
 
@@ -756,8 +803,8 @@ function mostrarExplicacion(ex, modelos) {
     if (prob < 0.35 && mod !== 'Formula') continue;
 
     if (mod === 'XGBoost_calor' || mod === 'RandomForest_frio') {
-      const label = mod === 'XGBoost_calor' ? 'XGBoost calor' : 'RandomForest frio';
-      html += '<div style="margin-top:10px"><strong>Riesgo por tendencia meteorologica (' + label + '):</strong></div>';
+      const label = 'XGBoost';
+      html += '<div style="margin-top:10px"><strong>Riesgo por tendencia meteorológica (modelo ' + label + '):</strong></div>';
       if (det.top_features?.length) {
         const allZero = det.top_features.every(t => (t.importancia ?? 0) === 0);
         if (allZero) {
@@ -826,6 +873,48 @@ function mostrarRecomendaciones(recs) {
   if (!recs || !recs.length) return;
   document.getElementById('recs-card').style.display = 'block';
   document.getElementById('rec-list').innerHTML = recs.map(r => '<li>' + r + '</li>').join('');
+}
+
+async function fetchContrafactuales(payload) {
+  document.getElementById('cf-card').style.display = 'block';
+  document.getElementById('cf-loading').style.display = 'block';
+  document.getElementById('cf-list').innerHTML = '';
+  try {
+    const res = await fetch('/api/contrafactuales', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    mostrarContrafactuales(data);
+  } catch {
+    document.getElementById('cf-card').style.display = 'none';
+  }
+}
+
+function mostrarContrafactuales(data) {
+  const list = document.getElementById('cf-list');
+  document.getElementById('cf-loading').style.display = 'none';
+  const cfs = data.contrafactuales;
+  if (!cfs || !cfs.length) {
+    list.innerHTML = '<div style="padding:8px;color:var(--text-light);font-size:0.85rem">Ningun cambio individual es suficiente para reducir tu riesgo significativamente.</div>';
+    return;
+  }
+  const clase = data.clase_final_sistema;
+  const claseColor = { SEGURO: 'var(--seguro)', PRECAUCION: 'var(--precaucion)', PELIGRO: 'var(--peligro)' }[clase] || 'var(--text)';
+  const override = data.nota ? '<div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px">' + data.nota + '</div>' : '';
+  list.innerHTML = override + cfs.map(cf => {
+    const nc = cf.probabilidad_sin_cap;
+    const mejora = cf.mejora_porcentual_puntos;
+    const cColor = { SEGURO: 'var(--seguro)', PRECAUCION: 'var(--precaucion)', PELIGRO: 'var(--peligro)' }[cf.clase_tras_cambio] || 'var(--text)';
+    const enm = cf.enmascarado_por_cap ? '<span style="font-size:0.75rem;color:var(--text-light)"> (se necesita combinar varios cambios para efecto notable)</span>' : '';
+    return '<div style="border-left:3px solid ' + cColor + ';padding:8px 12px;margin-bottom:6px;background:var(--bg);border-radius:6px">'
+      + '<div style="font-weight:600;font-size:0.9rem">' + cf.descripcion + '</div>'
+      + '<div style="font-size:0.85rem;margin-top:2px">'
+      + '<span style="color:' + cColor + ';font-weight:700">' + cf.clase_tras_cambio + '</span>'
+      + ' (riesgo: ' + (nc.actual * 100).toFixed(0) + '% → ' + (nc.tras_cambio * 100).toFixed(0) + '%, mejora ' + mejora + 'pp)'
+      + enm
+      + '</div></div>';
+  }).join('');
 }
 
 function toggleFactors() {

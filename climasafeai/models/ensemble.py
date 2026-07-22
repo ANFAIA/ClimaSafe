@@ -245,13 +245,17 @@ def _predecir_formulas(current: dict) -> dict:
     }
 
 
+from datetime import date as date_type
+
+
 def predict_ensemble(
     lat: float | None = None,
     lon: float | None = None,
     provincia: str = "Madrid",
     perfil: dict | None = None,
+    target_date: date_type | None = None,
 ) -> dict:
-    weather = fetch_weather_data(lat=lat, lon=lon, provincia=provincia)
+    weather = fetch_weather_data(lat=lat, lon=lon, provincia=provincia, target_date=target_date)
 
     if perfil is None:
         perfil = {}
@@ -336,12 +340,13 @@ def predict_ensemble(
     clase_ml_original = int(clase_final)
 
     if HI is not None and HI >= 27 and clase_final < 1:
-        clase_final = 1
-        override_fisico = {
-            "clase_ml": clase_ml_original,
-            "clase_final": 1,
-            "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>=27 → PRECAUCION",
-        }
+        if HI >= 32 or (UV is not None and UV > 3):
+            clase_final = 1
+            override_fisico = {
+                "clase_ml": clase_ml_original,
+                "clase_final": 1,
+                "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>={'32' if HI>=32 else '27'}+UV>3 → PRECAUCION",
+            }
     if HI is not None and HI >= 39 and clase_final < 2:
         clase_final = 2
         override_fisico = {
@@ -371,8 +376,12 @@ def predict_ensemble(
         clase_final = nueva_clase
 
     def _personalizar_si_hay(prob_poblacional, tipo):
-        if perfil and any(v is not None for v in perfil.values()):
-            res_pers = personalizar_riesgo(prob_poblacional, perfil, tipo=tipo)
+        perfil_uv = dict(perfil) if perfil else {}
+        uv = weather.get("uv_index")
+        if uv is not None:
+            perfil_uv["_uv_index"] = uv
+        if perfil_uv and any(v is not None for v in perfil_uv.values()):
+            res_pers = personalizar_riesgo(prob_poblacional, perfil_uv, tipo=tipo)
             return res_pers
         return {
             "indice_personalizado": prob_poblacional,
@@ -406,15 +415,17 @@ def predict_ensemble(
     }
 
     # Clase desde probabilidad personalizada
-    # t1 (PRECAUCION) alineado con el ML; t2 (PELIGRO) es más exigente
-    # porque prob_pers es P(riesgo), no P(peligro) del ML
+    # t1 (PRECAUCION) alineado con el ML (CLASS_THRESHOLDS_RECOMENDADOS.calor.t1).
+    # t2 (PELIGRO) es más exigente porque prob_pers es P(riesgo) = P(1)+P(2),
+    # no P(peligro)=P(2) del ML. Usamos un umbral propio y fijo.
+    PERS_THRESHOLD_PELIGRO = 0.55
     prob_pers = max(
         res_calor["indice_personalizado"],
         res_frio["indice_personalizado"],
     )
-    umbral_pers = CLASS_THRESHOLDS_RECOMENDADOS.get("calor", {"t1": 0.25, "t2": 0.40})
+    umbral_pers = CLASS_THRESHOLDS_RECOMENDADOS.get("calor", {"t1": 0.25})
     clase_pers = 0
-    if prob_pers >= 0.55:
+    if prob_pers >= PERS_THRESHOLD_PELIGRO:
         clase_pers = 2
     elif prob_pers >= umbral_pers["t1"]:
         clase_pers = 1

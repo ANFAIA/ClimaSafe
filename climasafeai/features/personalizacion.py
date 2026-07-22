@@ -247,12 +247,21 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
         f.append((fatiga[0], "fisiologico", fatiga[1]))
 
     sociales = set(perfil.get("situacion_social", []))
-    if perfil.get("alcohol_reciente"):
-        sociales.add("alcohol")
     presentes = [(k, social_cal[k]) for k in sociales if k in social_cal]
     if presentes:
         nombre, mejor = max(presentes, key=lambda kv: kv[1]["coef"])
         f.append((f"aislamiento/dependencia ({mejor['nombre']})", "situacional", mejor["coef"]))
+
+    # Factor UV según fototipo (solo si hay índice UV disponible)
+    uv_index = perfil.get("_uv_index")
+    fototipo = perfil.get("fototipo")
+    if uv_index is not None and fototipo is not None and uv_index > 3:
+        foto_map = {"1": 1.3, "2": 1.2, "3": 1.1, "4": 1.0, "5": 0.9, "6": 0.85}
+        uv_factor = foto_map.get(str(fototipo), 1.0)
+        intensidad = uv_index / 11.0
+        factor = 1.0 + (uv_factor - 1.0) * intensidad
+        if factor > 1.0:
+            f.append((f"UV {uv_index:.1f} + fototipo {fototipo}", "fisiologico", round(factor, 2)))
 
     # Factores ocupacionales
     ocupacional_cal = _factores_implementados("calor", "ocupacional")
