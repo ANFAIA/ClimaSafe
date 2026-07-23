@@ -239,6 +239,7 @@ def explicar_formula(
     formula_result: dict,
     perfil_horario: list[dict] | None = None,
     perfil: dict | None = None,
+    clase_final: int | None = None,
 ) -> dict:
     explicaciones = []
     calor = formula_result.get("calor", {})
@@ -248,12 +249,19 @@ def explicar_formula(
 
     ventana = _hi_en_ventana_actividad(perfil_horario, perfil)
     if ventana and ventana["hi_peak"] >= 27:
-        explicaciones.append(
-            f"Condiciones actuales seguras (HI={hi}C), pero durante la actividad "
-            f"prevista ({ventana['hora_inicio']}:00-{ventana['hora_fin']}:00) se esperan "
-            f"HI entre {ventana['hi_min']} y {ventana['hi_max']}C, "
-            f"lo que justifica el nivel de riesgo."
-        )
+        if clase_final and clase_final > 0:
+            explicaciones.append(
+                f"Condiciones actuales seguras (HI={hi}C), pero durante la actividad "
+                f"prevista ({ventana['hora_inicio']}:00-{ventana['hora_fin']}:00) se esperan "
+                f"HI entre {ventana['hi_min']} y {ventana['hi_max']}C, "
+                f"lo que justifica el nivel de riesgo."
+            )
+        else:
+            explicaciones.append(
+                f"HI alcanzara {ventana['hi_peak']}C durante la actividad "
+                f"({ventana['hora_inicio']}:00-{ventana['hora_fin']}:00), "
+                f"pero tu perfil personalizado indica riesgo bajo."
+            )
     else:
         if hi is not None:
             if hi >= 39:
@@ -320,7 +328,40 @@ def explicar_ensemble(
             current, modelos.get("Formula", {}),
             perfil_horario=weather.get("perfil_horario"),
             perfil=perfil_usuario,
+            clase_final=resultado.get("clase_final", 0),
         )
+
+    clase_final = resultado.get("clase_final", 0)
+    if clase_final > 0:
+        try:
+            modelos = resultado.get("modelos", {})
+            calor_clase = max(
+                modelos.get("XGBoost_calor", {}).get("clase_threshold", 0),
+                modelos.get("LSTM", {}).get("calor", {}).get("clase_threshold", 0),
+                modelos.get("Formula", {}).get("calor", {}).get("clase", 0),
+            )
+            frio_clase = max(
+                modelos.get("RandomForest_frio", {}).get("clase_threshold", 0),
+                modelos.get("LSTM", {}).get("frio", {}).get("clase_threshold", 0),
+                modelos.get("Formula", {}).get("frio", {}).get("clase", 0),
+            )
+            clase_bayes = "calor" if calor_clase >= frio_clase else "frio"
+
+            from climasafeai.models.bayes import BayesianRiskDiagnosis
+            _BAYES_PATH = str(ARTIFACTS_DIR / f"bayes_risk_diagnosis_{clase_bayes}.joblib")
+            bd = BayesianRiskDiagnosis(clase=clase_bayes)
+            bd.load(_BAYES_PATH)
+            bayes_diag = bd.diagnosis_inverso(int(clase_final))
+            explicaciones["Bayes"] = bayes_diag
+            if perfil_usuario:
+                temp = current.get("temp") or current.get("t2m_c")
+                grasa = perfil_usuario.get("grasa_corporal") or perfil_usuario.get("grasa")
+                edad = perfil_usuario.get("edad")
+                if temp is not None:
+                    cf = bd.contrafactual(temp, grasa or 20.0, edad or 40)
+                    explicaciones["Bayes"]["contrafactuales"] = cf["escenarios"]
+        except Exception:
+            pass
 
     modelo_determinante = _modelo_mas_restrictivo(resultado)
     return {

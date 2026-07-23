@@ -98,7 +98,7 @@ def _predecir_tabular(
 
     proba = model.predict_proba(X)
 
-    # Calibración isotónica post-hoc para frío
+    # Calibración isotónica post-hoc (solo frío, en calor reduce sensibilidad en provincias frías)
     _calibrado = False
     if clase == "frio":
         try:
@@ -116,7 +116,7 @@ def _predecir_tabular(
 
     u_global = CLASS_THRESHOLDS_RECOMENDADOS.get(clase, {"t1": 0.5, "t2": 0.4})
     u = dict(u_global)
-    if provincia and not _calibrado:
+    if provincia:
         try:
             umb_path = ARTIFACTS_DIR / f"umbrales_provincia_{clase}.joblib"
             if umb_path.exists():
@@ -129,12 +129,25 @@ def _predecir_tabular(
     pred_th = int(apply_class_thresholds(proba, **u)[0])
     prob_riesgo = float(1.0 - proba[0, 0])
 
+    conformal_conf = None
+    try:
+        from climasafeai.models.conformal import SplitConformalCalibrator, confidence_label
+        _conformal_path = ARTIFACTS_DIR / f"conformal_{clase}.joblib"
+        if _conformal_path.exists():
+            cal = SplitConformalCalibrator()
+            cal.load(str(_conformal_path))
+            conf, sizes = cal.confidence(proba)
+            conformal_conf = confidence_label(int(sizes[0]))
+    except Exception:
+        pass
+
     return {
         "clase_argmax": pred_argmax,
         "clase_threshold": pred_th,
         "probabilidades": proba[0].round(4).tolist(),
         "prob_riesgo": round(prob_riesgo, 4),
         "thresholds_usados": u,
+        "conformal_confianza": conformal_conf,
         "_X": X,
     }
 
@@ -285,8 +298,9 @@ def predict_ensemble(
         if isinstance(res, dict) and "error" in res:
             continue
         # Formula no vota en el ensemble — solo actúa como override de seguridad
-        # vía HI_peak más abajo. Así los modelos ML son el determinante real
-        # y el usuario no ve "Formula" cuando XGBoost/LSTM ya acertaron.
+        # vía HI_peak después de personalización. Así los modelos ML son el
+        # determinante real y el usuario no ve "Formula" cuando XGBoost/LSTM
+        # ya acertaron.
         if key == "Formula":
             continue
         if "calor" in res and isinstance(res["calor"], dict):
@@ -339,47 +353,18 @@ def predict_ensemble(
 
     clase_ml_original = int(clase_final)
 
-    if HI is not None and HI >= 27 and clase_final < 1:
-        if HI >= 32 or (UV is not None and UV > 3):
-            clase_final = 1
-            override_fisico = {
-                "clase_ml": clase_ml_original,
-                "clase_final": 1,
-                "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>={'32' if HI>=32 else '27'}+UV>3 → PRECAUCION",
-            }
-    if HI is not None and HI >= 39 and clase_final < 2:
-        clase_final = 2
-        override_fisico = {
-            "clase_ml": clase_ml_original,
-            "clase_final": 2,
-            "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>=39 → PELIGRO",
-        }
-
-    if (
-        HI is not None and HI < 27
-        and WC is not None and WC > 0
-        and (UV is None or UV < 6)
-        and clase_final > 0
-    ):
-        nueva_clase = clase_final
-        razon_extra = ""
-        if clase_final == 2:
-            nueva_clase = 1
-            razon_extra = f" → PRECAUCION (ML={CLASES[clase_ml_original]}, pero sin calor actual)"
-        elif clase_final == 1:
-            razon_extra = " (ML detecta tendencia de riesgo aunque sin calor ahora)"
-        override_fisico = {
-            "clase_ml": clase_ml_original,
-            "clase_final": int(nueva_clase),
-            "razon": f"HI_peak={HI:.1f}C<27, WC={WC:.1f}C>0, UV<6{razon_extra}",
-        }
-        clase_final = nueva_clase
-
     def _personalizar_si_hay(prob_poblacional, tipo):
         perfil_uv = dict(perfil) if perfil else {}
         uv = weather.get("uv_index")
         if uv is not None:
             perfil_uv["_uv_index"] = uv
+        _current = weather.get("current", {})
+        ws = _current.get("wind_speed_kmh")
+        if ws is not None:
+            perfil_uv["_wind_speed_kmh"] = ws
+        rh = _current.get("rh")
+        if rh is not None:
+            perfil_uv["_rh"] = rh
         if perfil_uv and any(v is not None for v in perfil_uv.values()):
             res_pers = personalizar_riesgo(prob_poblacional, perfil_uv, tipo=tipo)
             return res_pers
@@ -430,13 +415,87 @@ def predict_ensemble(
     elif prob_pers >= umbral_pers["t1"]:
         clase_pers = 1
 
-    # Si hay override por HI, prevalece (seguridad)
-    # Si no, la clase final viene de la probabilidad personalizada
-    if override_fisico is None:
-        clase_final = clase_pers
+    # Seguridad física por HI: se aplica después de personalización.
+    # Solo sobre-escribe clase_pers si el perfil tiene factores de riesgo
+    # significativos (edad avanzada, no aclimatado, comorbilidades, factor alto,
+    # o si chocó el cap de factores).
+    if HI is not None and override_fisico is None:
+        if HI >= 39 and clase_pers < 2:
+            override_fisico = {
+                "clase_ml": clase_ml_original,
+                "clase_final": 2,
+                "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>=39 → PELIGRO",
+            }
+        elif HI >= 27 and clase_pers < 1:
+            _edad_vulnerable = (
+                (perfil or {}).get("edad", 0) >= 60
+                and not (
+                    (perfil or {}).get("entrenado")
+                    and (perfil or {}).get("aclimatado")
+                )
+            )
+            _vulnerable_calor = (
+                (perfil or {}).get("comorbilidades")
+                or (perfil or {}).get("farmacos")
+                or _edad_vulnerable
+                or (perfil or {}).get("aclimatado") is False
+                or res_calor["factor_total"] > 1.8
+                or res_calor.get("capado")
+            )
+            if _vulnerable_calor and (HI >= 32 or (UV is not None and UV > 3)):
+                override_fisico = {
+                    "clase_ml": clase_ml_original,
+                    "clase_final": 1,
+                    "razon": f"ML={CLASES[clase_ml_original]}, HI_peak={HI:.1f}C>={'32' if HI>=32 else '27'}+UV>3 → PRECAUCION",
+                }
+
+    # Seguridad física por frío (wind chill): análogo al override por HI.
+    if WC is not None and override_fisico is None and clase_pers < 2:
+        if WC <= -25:
+            override_fisico = {
+                "clase_ml": clase_ml_original,
+                "clase_final": 2,
+                "razon": f"ML={CLASES[clase_ml_original]}, WC={WC:.1f}C<=-25 → PELIGRO (riesgo de congelación)",
+            }
+        elif WC <= -10 and clase_pers < 1:
+            _edad_vulnerable_frio = (
+                (perfil or {}).get("edad", 0) >= 60
+                and not (perfil or {}).get("entrenado")
+            )
+            _vulnerable_frio = (
+                (perfil or {}).get("comorbilidades")
+                or _edad_vulnerable_frio
+                or (perfil or {}).get("situacion_social", set()) & {"vive_solo", "no_sale", "vivienda_fria"}
+                or res_frio["factor_total"] > 1.8
+                or res_frio.get("capado")
+            )
+            if _vulnerable_frio:
+                override_fisico = {
+                    "clase_ml": clase_ml_original,
+                    "clase_final": 1,
+                    "razon": f"ML={CLASES[clase_ml_original]}, WC={WC:.1f}C<=-10 → PRECAUCION",
+                }
+
+    # Downgrade por ausencia de calor real
+    if HI is not None and HI < 27 and WC is not None and WC > 0 and (UV is None or UV < 6) and clase_pers > 0:
+        if override_fisico is None:
+            if clase_pers == 2:
+                override_fisico = {
+                    "clase_ml": clase_ml_original,
+                    "clase_final": 1,
+                    "razon": f"HI_peak={HI:.1f}C<27, WC={WC:.1f}C>0, UV<6 → PRECAUCION (ML={CLASES[clase_ml_original]}, pero sin calor actual)",
+                }
+            elif clase_pers == 1:
+                override_fisico = {
+                    "clase_ml": clase_ml_original,
+                    "clase_final": 1,
+                    "razon": f"HI_peak={HI:.1f}C<27, WC={WC:.1f}C>0, UV<6 (ML detecta tendencia de riesgo aunque sin calor ahora)",
+                }
+
+    if override_fisico:
+        clase_final = override_fisico["clase_final"]
     else:
-        # Override ya forzó clase_final más arriba, mantener
-        pass
+        clase_final = clase_pers
 
     weather_result = {
         "lat": weather["lat"],

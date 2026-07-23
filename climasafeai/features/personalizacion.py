@@ -48,6 +48,45 @@ CAP_FACTORES_DEFECTO: float = 3.0
 
 _ACTIVIDADES_ESFUERZO = {"moderada", "intensa", "muy_intensa"}
 
+# Porcentaje graso de referencia por edad y sexo (población española)
+# Fuente: CUN-BAE (Clin Univ Navarra), ENPE, EXERNET multi-céntrico.
+# Valores suavizados entre estudios; la grasa corporal aumenta hasta ~60 años
+# y luego se estabiliza o reduce ligeramente.
+_REF_GRASA_MUJER = [(18, 24.0), (30, 25.5), (40, 27.0), (50, 28.0), (60, 28.0), (70, 27.5), (80, 27.0), (100, 26.0)]
+_REF_GRASA_HOMBRE = [(18, 16.0), (30, 18.5), (40, 20.5), (50, 22.5), (60, 23.5), (70, 24.0), (80, 24.0), (100, 23.5)]
+
+
+def _grasa_referencia(edad: float, sexo: str = "hombre") -> float:
+    tabla = _REF_GRASA_MUJER if sexo == "mujer" else _REF_GRASA_HOMBRE
+    if edad <= tabla[0][0]:
+        return tabla[0][1]
+    if edad >= tabla[-1][0]:
+        return tabla[-1][1]
+    for i in range(len(tabla) - 1):
+        x1, y1 = tabla[i]
+        x2, y2 = tabla[i + 1]
+        if x1 <= edad <= x2:
+            t = (edad - x1) / (x2 - x1)
+            return y1 + t * (y2 - y1)
+    return tabla[-1][1]
+
+
+def _factor_grasa_relativa(grasa: float, edad: float, sexo: str | None) -> float:
+    """Devuelve factor 0.85–1.15 según desviación de la media poblacional por edad/sexo.
+
+    El modelo MOMO se entrenó mayoritariamente con población >70a (grasa ~media
+    de ese grupo). Para un joven, el factor de edad (×0.6 del ensemble) ya reduce
+    el riesgo; este factor solo mide desviación intra-grupo de edad — no repite
+    el ajuste entre grupos.
+    """
+    if sexo not in ("hombre", "mujer"):
+        sexo = "mujer"
+    ref = _grasa_referencia(edad, sexo)
+    if ref <= 0:
+        return 1.0
+    ratio = grasa / ref
+    return max(0.85, min(1.15, 1.0 + (ratio - 1.0) * 0.3))
+
 
 def _factor_edad_calor(edad: int) -> float:
     if edad >= 85:
@@ -73,6 +112,36 @@ _ACTIVIDAD_CALOR = {"reposo": 1.0, "ligera": 1.1, "moderada": 1.3, "intensa": 1.
 # En frío la actividad moderada GENERA calor (protectora); la intensa con
 # sudor+viento empapa la ropa y acelera la pérdida (perjudicial).
 _ACTIVIDAD_FRIO = {"reposo": 1.0, "ligera": 0.95, "moderada": 0.9, "intensa": 1.2, "muy_intensa": 1.2}
+
+# Exposición laboral al calor — niveles progresivos
+# Basado en: Annual Reviews 2024 (agriculture/construction highest HRI),
+# CDC/NIOSH (delivery workers risk), Cal/OSHA HRI rates.
+# Agricultura 35× más mortalidad que población general (Sokas 2023);
+# Construcción 36% muertes laborales por calor con 6% fuerza laboral.
+_OCUPACION_NIVELES: dict[str, tuple[float, str]] = {
+    "oficina":      (1.00, "Trabajo sedentario (oficina, interior climatizado)"),
+    "reparto":      (1.35, "Reparto / conducción (vehículo, carga ligera, descensos)"),
+    "mantenimiento":(1.70, "Mantenimiento exterior / jardinería (continua, carga moderada)"),
+    "construccion": (2.20, "Construcción / albañilería (carga pesada, PPE, sol directo)"),
+    "campo":        (2.70, "Campo / agricultura (máxima exposición, pieza, sin sombra)"),
+}
+
+# Umbral de viento (km/h) a partir del cual el sudor en frío acelera la pérdida
+# de calor (efecto wind-chill sobre ropa húmeda). Basado en NWS Wind Chill:
+# a 0°C con viento de 20 km/h la sensación térmica equivale a -5°C.
+_VIENTO_FRIO_UMBRAL = 10.0  # km/h, viento perceptible que empapa la ropa
+_VIENTO_FRIO_MAX = 40.0     # km/h, saturación del factor
+
+
+def _factor_viento_frio(viento_kmh: float | None, actividad: str) -> float:
+    if viento_kmh is None:
+        return 1.0
+    if actividad not in ("intensa", "muy_intensa"):
+        return 1.0
+    if viento_kmh <= _VIENTO_FRIO_UMBRAL:
+        return 1.0
+    fraccion = min((viento_kmh - _VIENTO_FRIO_UMBRAL) / (_VIENTO_FRIO_MAX - _VIENTO_FRIO_UMBRAL), 1.0)
+    return 1.0 + 0.5 * fraccion
 
 
 def _factor_duracion_calor(horas: float) -> float:
@@ -174,14 +243,26 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
     f: list[tuple[str, str, float]] = []
 
     fisio_cal = _factores_implementados("calor", "fisiologico")
-    if perfil.get("sexo") == "mujer":
-        sm = fisio_cal.get("sexo_mujer")
-        if sm:
-            f.append((sm["nombre"], "fisiologico", sm["coef"]))
+    if (sx := perfil.get("sexo")) in ("hombre", "mujer"):
+        v = 0.96 if sx == "hombre" else 1.04
+        f.append((f"sexo {sx}", "fisiologico", v))
+
+    if (edad := perfil.get("edad")) is not None:
+        v = _factor_edad_calor(edad)
+        if v != 1.0:
+            f.append((f"edad {int(edad)} años", "fisiologico", v))
 
     actividad = perfil.get("nivel_actividad", "reposo")
-    if (v := _ACTIVIDAD_CALOR.get(actividad, 1.0)) != 1.0:
-        f.append((f"actividad {actividad}", "fisiologico", v))
+    v_act = _ACTIVIDAD_CALOR.get(actividad, 1.0)
+    if v_act != 1.0:
+        if perfil.get("entrenado") and actividad in _ACTIVIDADES_ESFUERZO:
+            v_act = 1.0 + (v_act - 1.0) * 0.5
+        label = f"actividad {actividad}"
+        if perfil.get("entrenado") and actividad in _ACTIVIDADES_ESFUERZO:
+            label += " (entrenado)"
+        if dep := perfil.get("deporte"):
+            label = f"{dep} ({label})"
+        f.append((label, "fisiologico", round(v_act, 3)))
 
     if (horas := perfil.get("duracion_actividad_h")) is not None:
         v = _factor_duracion_calor(horas)
@@ -195,17 +276,13 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
 
     grasa = perfil.get("porcentaje_grasa")
     sexo = perfil.get("sexo")
-    if grasa is not None:
-        umbral_alto = 25 if sexo == "hombre" else 32
-        umbral_bajo = 12 if sexo == "hombre" else 20
-        if grasa >= umbral_alto and actividad in _ACTIVIDADES_ESFUERZO:
-            gae = fisio_cal.get("grasa_alta_esfuerzo")
-            if gae:
-                f.append((f"{gae['nombre']} ({grasa}%)", "fisiologico", gae["coef"]))
-        elif grasa < umbral_bajo:
-            gbp = fisio_cal.get("grasa_baja_protector")
-            if gbp:
-                f.append((f"{gbp['nombre']} ({grasa}%)", "fisiologico", gbp["coef"]))
+    edad = perfil.get("edad")
+    if grasa is not None and edad is not None:
+        v = _factor_grasa_relativa(grasa, edad, sexo)
+        if v != 1.0:
+            ref = _grasa_referencia(edad, sexo or "mujer")
+            direccion = "superior" if grasa > ref else "inferior"
+            f.append((f"grasa corporal {grasa}% (ref. {ref:.0f}% para {int(edad)}a/{sexo or '?'}: {direccion})", "fisiologico", round(v, 3)))
 
     comorb_cal = _factores_implementados("calor", "comorbilidades")
     farmacos_cal = _factores_implementados("calor", "farmacos")
@@ -247,7 +324,11 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
         f.append((fatiga[0], "fisiologico", fatiga[1]))
 
     sociales = set(perfil.get("situacion_social", []))
-    presentes = [(k, social_cal[k]) for k in sociales if k in social_cal]
+    if perfil.get("fiesta"):
+        f.append(("fiesta / consumo de alcohol reciente", "situacional", 1.8))
+    elif "fiesta" in sociales:
+        f.append(("fiesta / consumo de alcohol reciente", "situacional", 1.8))
+    presentes = [(k, social_cal[k]) for k in sociales if k in social_cal and k != "fiesta"]
     if presentes:
         nombre, mejor = max(presentes, key=lambda kv: kv[1]["coef"])
         f.append((f"aislamiento/dependencia ({mejor['nombre']})", "situacional", mejor["coef"]))
@@ -263,13 +344,11 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
         if factor > 1.0:
             f.append((f"UV {uv_index:.1f} + fototipo {fototipo}", "fisiologico", round(factor, 2)))
 
-    # Factores ocupacionales
-    ocupacional_cal = _factores_implementados("calor", "ocupacional")
-    if perfil.get("ocupacional"):
-        ocups_perfil = set(perfil["ocupacional"])
-        for k in ocups_perfil:
-            if k in ocupacional_cal:
-                f.append((ocupacional_cal[k]["nombre"], "ocupacional", ocupacional_cal[k]["coef"]))
+    # Exposición laboral al calor
+    if (ocp := perfil.get("ocupacion")) and ocp in _OCUPACION_NIVELES:
+        coef, label = _OCUPACION_NIVELES[ocp]
+        if coef != 1.0:
+            f.append((f"trabajo {label}", "ocupacional", coef))
 
     return f
 
@@ -278,14 +357,31 @@ def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
     f: list[tuple[str, str, float]] = []
 
     fisio_frio = _factores_implementados("frio", "fisiologico")
-    if perfil.get("sexo") == "mujer":
-        sm = fisio_frio.get("sexo_mujer")
-        if sm:
-            f.append((sm["nombre"], "fisiologico", sm["coef"]))
+    if (sx := perfil.get("sexo")) in ("hombre", "mujer"):
+        v = 1.15 if sx == "hombre" else 0.87
+        f.append((f"sexo {sx}", "fisiologico", v))
+
+    if (edad := perfil.get("edad")) is not None:
+        v = _factor_edad_frio(edad)
+        if v != 1.0:
+            f.append((f"edad {int(edad)} años", "fisiologico", v))
 
     actividad = perfil.get("nivel_actividad", "reposo")
-    if (v := _ACTIVIDAD_FRIO.get(actividad, 1.0)) != 1.0:
-        f.append((f"actividad {actividad}", "fisiologico", v))
+    v_act = _ACTIVIDAD_FRIO.get(actividad, 1.0)
+    v_viento = _factor_viento_frio(perfil.get("_wind_speed_kmh"), actividad)
+    v = v_act * v_viento
+    if v != 1.0:
+        if perfil.get("entrenado") and actividad in _ACTIVIDADES_ESFUERZO:
+            v_act = 1.0 + (v_act - 1.0) * 0.5
+            v = v_act * v_viento
+        label = f"actividad {actividad}"
+        if perfil.get("entrenado") and actividad in _ACTIVIDADES_ESFUERZO:
+            label += " (entrenado)"
+        if dep := perfil.get("deporte"):
+            label = f"{dep} ({label})"
+        if v_viento > 1.0:
+            label += f" + viento {perfil.get('_wind_speed_kmh', '?')} km/h"
+        f.append((label, "fisiologico", round(v, 2)))
 
     v = _factor_hora_frio(perfil.get("hora_inicio"), perfil.get("duracion_actividad_h"))
     if v != 1.0:
@@ -294,17 +390,13 @@ def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
 
     grasa = perfil.get("porcentaje_grasa")
     sexo = perfil.get("sexo")
-    if grasa is not None:
-        umbral_bajo = 12 if sexo == "hombre" else 20
-        umbral_alto = 25 if sexo == "hombre" else 32
-        if grasa < umbral_bajo:
-            gb = fisio_frio.get("grasa_baja")
-            if gb:
-                f.append((f"{gb['nombre']} ({grasa}%)", "fisiologico", gb["coef"]))
-        elif grasa >= umbral_alto:
-            gp = fisio_frio.get("grasa_alta_protector")
-            if gp:
-                f.append((f"{gp['nombre']} ({grasa}%)", "fisiologico", gp["coef"]))
+    edad = perfil.get("edad")
+    if grasa is not None and edad is not None:
+        v = _factor_grasa_relativa(grasa, edad, sexo)
+        if v != 1.0:
+            ref = _grasa_referencia(edad, sexo or "mujer")
+            direccion = "superior" if grasa > ref else "inferior"
+            f.append((f"grasa corporal {grasa}% (ref. {ref:.0f}% para {int(edad)}a/{sexo or '?'}: {direccion})", "fisiologico", round(v, 3)))
 
     comorb_frio = _factores_implementados("frio", "comorbilidades")
     comorb = perfil.get("comorbilidades", set())
@@ -313,8 +405,12 @@ def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
             f.append((comorb_frio[k]["nombre"], "medico", comorb_frio[k]["coef"]))
 
     social_frio = _factores_implementados("frio", "situacional")
-    social = perfil.get("situacion_social", set())
-    presentes = [(k, social_frio[k]) for k in social if k in social_frio]
+    social = set(perfil.get("situacion_social", []))
+    if perfil.get("fiesta"):
+        f.append(("fiesta / consumo de alcohol reciente", "situacional", 1.8))
+    elif "fiesta" in social:
+        f.append(("fiesta / consumo de alcohol reciente", "situacional", 1.8))
+    presentes = [(k, social_frio[k]) for k in social if k in social_frio and k != "fiesta"]
     if presentes:
         nombre, mejor = max(presentes, key=lambda kv: kv[1]["coef"])
         f.append((f"aislamiento/vivienda fría ({mejor['nombre']})", "situacional", mejor["coef"]))
@@ -345,6 +441,7 @@ def personalizar_riesgo(
         farmacos:set{"antipsicoticos","diureticos_asa"},
         situacion_social:set{"vive_solo","encamado","no_sale","vivienda_fria"},
         alcohol_reciente:bool (añade "alcohol" a situacion_social),
+        entrenado:bool (reduce a la mitad el factor de actividad si ≥moderada),
         ocupacional:set{"estres_termico_laboral","esfuerzo_termico_laboral"},
         _perfil_horario:list[{"hora":int, "HI":float}] (opcional, usado por _factor_fatiga_acumulada).
     tipo : "calor" | "frio"
@@ -365,6 +462,11 @@ def personalizar_riesgo(
         raise ValueError(f"indice debe estar en [0, 1], no {indice}")
     if tipo not in ("calor", "frio"):
         raise ValueError(f"tipo debe ser 'calor' o 'frio', no {tipo!r}")
+
+    perfil = dict(perfil)
+    for alias_key, canonical_key in [("grasa_corporal", "porcentaje_grasa"), ("grasa", "porcentaje_grasa")]:
+        if alias_key in perfil and canonical_key not in perfil:
+            perfil[canonical_key] = perfil.pop(alias_key)
 
     factores = _factores_calor(perfil) if tipo == "calor" else _factores_frio(perfil)
 

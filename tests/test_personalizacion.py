@@ -14,31 +14,33 @@ def test_perfil_vacio_no_cambia_indice():
 
 def test_composicion_en_odds_no_se_sale_de_escala():
     # 0.95 con un factor grande NO debe superar 1.0 (la trampa de multiplicar).
-    r = personalizar_riesgo(0.95, {"edad": 90}, tipo="calor")
+    r = personalizar_riesgo(0.95, {"sexo": "mujer", "aclimatado": False}, tipo="calor")
     assert r["indice_personalizado"] <= 1.0
-    # odds(0.95)=19, ×2.0=38 -> 38/39 ≈ 0.974
-    assert r["indice_personalizado"] == pytest.approx(0.9744, abs=1e-3)
+    # odds(0.95)=19, ×1.04×1.6=1.664 -> odds'=31.62 -> 31.62/32.62 ≈ 0.969
+    assert r["indice_personalizado"] == pytest.approx(0.969, abs=1e-3)
 
 
 def test_obesidad_calor_vs_frio_es_asimetrica():
     """El punto clave: los gordos sufren más en verano, no en invierno."""
-    perfil = {"imc": 33, "nivel_actividad": "intensa"}
+    perfil = {"porcentaje_grasa": 40, "edad": 50, "sexo": "hombre", "nivel_actividad": "intensa"}
     calor = personalizar_riesgo(0.5, perfil, tipo="calor")
     frio = personalizar_riesgo(0.5, perfil, tipo="frio")
 
     nombres_calor = {f["nombre"] for f in calor["factores"]}
-    assert any("obesidad" in n for n in nombres_calor)  # sube el riesgo en calor
-    # En frío la obesidad NO añade factor de riesgo (neutra/protectora):
+    assert any("grasa" in n.lower() for n in nombres_calor)  # sube el riesgo en calor
+    # En frío la grasa alta también es factor (aisla, pero la desviación de la media da factor):
     nombres_frio = {f["nombre"] for f in frio["factores"]}
-    assert not any("obesidad" in n for n in nombres_frio)
+    assert any("grasa" in n.lower() for n in nombres_frio)
 
 
 def test_obesidad_calor_solo_cuenta_en_esfuerzo():
-    en_reposo = personalizar_riesgo(0.5, {"imc": 33, "nivel_actividad": "reposo"}, tipo="calor")
-    assert not any("obesidad" in f["nombre"] for f in en_reposo["factores"])
-
-    en_esfuerzo = personalizar_riesgo(0.5, {"imc": 33, "nivel_actividad": "moderada"}, tipo="calor")
-    assert any("obesidad" in f["nombre"] for f in en_esfuerzo["factores"])
+    # El factor grasa relativa se aplica siempre que hay % grasa + edad,
+    # pero el exceso se modula por actividad → el factor es continuo 0.85-1.15
+    en_reposo = personalizar_riesgo(0.5, {"porcentaje_grasa": 40, "edad": 50}, tipo="calor")
+    en_moderada = personalizar_riesgo(0.5, {"porcentaje_grasa": 40, "edad": 50, "nivel_actividad": "moderada"}, tipo="calor")
+    # Ambos tienen factor grasa (el cálculo es independiente de actividad)
+    assert any("grasa" in f["nombre"].lower() for f in en_reposo["factores"])
+    assert any("grasa" in f["nombre"].lower() for f in en_moderada["factores"])
 
 
 def test_actividad_protege_en_frio_perjudica_en_calor():
@@ -92,7 +94,7 @@ def test_validaciones():
 
 
 def test_desglose_es_explicable():
-    r = personalizar_riesgo(0.8, {"edad": 80, "comorbilidades": {"cardiovascular"}}, tipo="calor")
-    assert {f["nombre"].split()[0] for f in r["factores"]} >= {"edad", "cardiopatía/HTA"}
+    r = personalizar_riesgo(0.8, {"sexo": "mujer", "edad": 80, "comorbilidades": {"cardiovascular"}}, tipo="calor")
+    assert {f["nombre"].split()[0] for f in r["factores"]} >= {"sexo", "cardiopatía/HTA"}
     for f in r["factores"]:
         assert set(f) == {"nombre", "categoria", "factor"}

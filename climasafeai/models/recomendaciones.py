@@ -86,6 +86,33 @@ def _nivel_actividad_segura(clase_final: int) -> str:
     return ""
 
 
+def _ventana_actividad(perfil: dict) -> tuple | None:
+    inicio = perfil.get("hora_inicio")
+    duracion = perfil.get("duracion_actividad_h")
+    if inicio is not None and duracion is not None:
+        return (inicio, inicio + duracion)
+    if inicio is not None:
+        return (inicio, inicio + 1)
+    return None
+
+
+def _en_horas_centrales(ventana: tuple | None) -> bool:
+    if ventana is None:
+        return True
+    fin = ventana[1]
+    return fin > 12 and ventana[0] < 18
+
+
+def _actividad_label(perfil: dict) -> str:
+    dep = perfil.get("deporte")
+    niv = perfil.get("nivel_actividad", "")
+    if dep:
+        return dep
+    if niv:
+        return f"actividad {niv}"
+    return "actividad"
+
+
 def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
     catalogo = _cargar_catalogo()
     if not catalogo:
@@ -98,6 +125,9 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
     riesgo_dom = _riesgo_dominante(resultado)
     recomendaciones = []
 
+    ventana = _ventana_actividad(perfil)
+    en_horas_centrales = _en_horas_centrales(ventana)
+
     clima_tags = _clasificar_clima(current, resultado, riesgo_dom)
 
     for tag in clima_tags:
@@ -109,12 +139,17 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
     if fototipo:
         seccion = catalogo.get("fototipo", {}).get(fototipo)
         if seccion and "texto" in seccion:
-            recomendaciones.append(seccion["texto"])
+            texto = seccion["texto"]
+            if not en_horas_centrales and ventana:
+                texto = texto.replace("Busca sombra en horas centrales del dia.", f"Tu actividad es a partir de las {ventana[0]:.0f}:00, fuera del pico UV. Aun asi, proteccion solar recomendada.")
+                texto = texto.replace("Evita la exposicion directa entre las 12:00 y las 18:00.", f"Tu actividad empieza a las {ventana[0]:.0f}:00, fuera del horario de maximo UV, pero lleva proteccion.")
+            recomendaciones.append(texto)
     else:
         seccion = catalogo.get("fototipo", {}).get("desconocido")
         if seccion and "texto" in seccion:
             recomendaciones.append(seccion["texto"])
 
+    label_act = _actividad_label(perfil)
     actividad = perfil.get("nivel_actividad", "").lower()
     nivel_seguro = _nivel_actividad_segura(clase_final)
     if nivel_seguro == "reposo":
@@ -146,15 +181,46 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
             recomendaciones.append(seccion["texto"])
 
     generales = catalogo.get("generales", {})
-    for key in ("hidratacion", "ropa", "horas_peligro", "comidas"):
+    for key in ("hidratacion", "ropa", "comidas"):
         texto = generales.get(key)
         if texto:
             recomendaciones.append(texto)
 
-    if perfil.get("aclimatado") is False:
+    if ventana:
+        inicio_label = f"{ventana[0]:.0f}:00"
+        fin_label = f"{ventana[1]:.0f}:00"
+        if en_horas_centrales:
+            recomendaciones.append(
+                f"Tu actividad ({inicio_label}-{fin_label}) coincide con las horas de mayor riesgo. "
+                "Toma precauciones extra."
+            )
+        else:
+            recomendaciones.append(
+                f"Tu actividad es en horario seguro ({inicio_label}-{fin_label}), "
+                "fuera del pico de calor (12:00-18:00)."
+            )
+    else:
+        horas = generales.get("horas_peligro")
+        if horas:
+            recomendaciones.append(horas)
+
+    if perfil.get("fiesta") and generales.get("hidratacion"):
+        recomendaciones.append(
+            "Has indicado que tienes planes de ocio/fiesta. Si consumes alcohol, "
+            "hazlo con moderacion: el alcohol acelera la deshidratacion y altera "
+            "la percepcion del riesgo termico. Alterna con agua."
+        )
+
+    if not perfil.get("aclimatado"):
         recomendaciones.append(
             "No estas aclimatado al clima local. Tu riesgo de golpe de calor o hipotermia "
             "es significativamente mayor. Limita la exposicion los primeros 3-5 dias y aumentala gradualmente."
+        )
+
+    if perfil.get("falta_sueno"):
+        recomendaciones.append(
+            "Has indicado falta de sueno o mala noche. La fatiga empeora la tolerancia "
+            "al calor y la capacidad de tomar decisiones. Extremar precauciones."
         )
 
     if clase_final >= 1:
@@ -169,7 +235,7 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
 
     if perfil.get("duracion_actividad_h") is not None and perfil.get("duracion_actividad_h", 0) > 2:
         recomendaciones.append(
-            f"Tu actividad esta prevista para {perfil['duracion_actividad_h']} horas. "
+            f"Tu actividad esta prevista para {perfil['duracion_actividad_h']:.0f} horas. "
             "Planifica pausas regulares y lleva suficiente agua (minimo 1 litro cada 2 horas)."
         )
 

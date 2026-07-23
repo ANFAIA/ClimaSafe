@@ -1,7 +1,7 @@
 """
 calibrate.py — Calibración post-hoc de probabilidades con Isotonic Regression.
 
-Solo para RandomForest_frio. XGBoost_calor ya está bien calibrado (Brier 0.057).
+Se usa para RandomForest_frio y XGBoost_calor (calibra prob de PELIGRO).
 """
 import joblib
 import numpy as np

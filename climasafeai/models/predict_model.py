@@ -38,7 +38,8 @@ DECISION_THRESHOLD: float = 0.5
 #     en otro caso              -> 0 (seguro)
 # Con class_thresholds=None todo sigue funcionando como siempre (argmax).
 CLASS_THRESHOLDS_RECOMENDADOS: dict = {
-    "calor": {"t1": 0.25, "t2": 0.40},
+    # t2 bajo para priorizar recall de PELIGRO (falsos negativos duelen más que falsos positivos)
+    "calor": {"t1": 0.25, "t2": 0.10},
     # FRIO: calibrados sobre probabilidades post-isotonic (ver conformal_prediction.md).
     # Al usar estos thresholds, predict_new carga y aplica isotonic automáticamente.
     "frio":  {"t1": 0.21, "t2": 0.20},
@@ -47,7 +48,7 @@ CLASS_THRESHOLDS_RECOMENDADOS: dict = {
 # Thresholds óptimos para LSTM province_hybrid (con peso_riesgo_extra=8.0).
 # Calibrados independientemente de los de los modelos tabulares.
 CLASS_THRESHOLDS_LSTM: dict = {
-    "calor": {"t1": 0.25, "t2": 0.45},
+    "calor": {"t1": 0.50, "t2": 0.10},
     "frio":  {"t1": 0.40, "t2": 0.35},
 }
 
