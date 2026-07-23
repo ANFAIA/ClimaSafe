@@ -175,15 +175,23 @@ def run_full_pipeline() -> None:
 
     print("  --- XGBoost — Calor ---")
     xgb_cal = XGBClassifier(
-        n_estimators=300, max_depth=6, learning_rate=0.05,
-        subsample=0.8, colsample_bytree=0.8,
-        reg_alpha=0.1, reg_lambda=1.0,
-        eval_metric="logloss", random_state=42, n_jobs=-1,
+        n_estimators=1000, max_depth=8, learning_rate=0.02,
+        subsample=0.7, colsample_bytree=0.7,
+        reg_alpha=0.05, reg_lambda=2.0, min_child_weight=3,
+        eval_metric="mlogloss", early_stopping_rounds=50,
+        random_state=42, n_jobs=-1,
     )
-    xgb_cal.fit(X_tr_cal, y_tr_cal,
-                sample_weight=compute_sample_weight("balanced", y_tr_cal))
+    X_tr_cal_ar = np.asarray(X_tr_cal)
+    y_tr_cal_ar = np.asarray(y_tr_cal)
+    n_val = max(1, int(len(y_tr_cal) * 0.15))
+    xgb_cal.fit(
+        X_tr_cal_ar, y_tr_cal_ar,
+        sample_weight=compute_sample_weight("balanced", y_tr_cal_ar),
+        eval_set=[(X_tr_cal_ar[-n_val:], y_tr_cal_ar[-n_val:])],
+        verbose=False,
+    )
     joblib.dump(xgb_cal, MODELS_DIR / "XGBoost_calor.joblib")
-    print(f"    Guardado → XGBoost_calor.joblib")
+    print(f"    Guardado → XGBoost_calor.joblib (best_iter={xgb_cal.best_iteration})")
 
     print("  --- RandomForest — Frío ---")
     rf_frio = RandomForestClassifier(
@@ -221,12 +229,16 @@ def run_full_pipeline() -> None:
             if not r:
                 continue
             bp = {"rec": -1}
+            t2_min = 0.05 if clase == "calor" else 0.15
             for t1 in np.arange(0.20, 0.95, 0.05):
-                for t2 in np.arange(0.15, min(t1, 0.85), 0.05):
+                for t2 in np.arange(t2_min, min(t1, 0.85), 0.05):
                     pred = np.zeros(len(p), dtype=int)
                     pred[p[:, 2] >= t2] = 2
                     pred[(pred == 0) & (p[:, 1] + p[:, 2] >= t1)] = 1
-                    rec = recall_score(y, pred, labels=r, average="macro", zero_division=0)
+                    if clase == "calor" and 2 in r:
+                        rec = recall_score(y, pred, labels=[2], average=None, zero_division=0)[0]
+                    else:
+                        rec = recall_score(y, pred, labels=r, average="macro", zero_division=0)
                     if rec > bp["rec"]:
                         bp = {"t1": t1, "t2": t2, "rec": rec}
             umbrales[prov] = bp
@@ -254,6 +266,84 @@ def run_full_pipeline() -> None:
         peso_riesgo_extra=8.0,
         seed=42,
     )
+
+    # ------------------------------------------------------------------
+    # 6.5. Entrenar red bayesiana para diagnóstico inverso
+    # ------------------------------------------------------------------
+    print("\n6.5 Entrenando red bayesiana para diagnóstico inverso...")
+    try:
+        from climasafeai.models.bayes import BayesianRiskDiagnosis
+        rng = np.random.default_rng(42)
+
+        # Distribuciones realistas: población española
+        # Edad: media ~52, std ~18 (INE 2024), truncada [0, 95]
+        # Grasa corporal: ~18-35 según edad (mayor→más grasa)
+        n_cal = len(X_tr_cal)
+        n_frio = len(X_tr_frio)
+
+        edad_cal = rng.normal(52, 18, n_cal).clip(0, 95)
+        edad_frio = rng.normal(52, 18, n_frio).clip(0, 95)
+
+        grasa_cal = np.where(
+            edad_cal < 35, rng.normal(20, 4, n_cal).clip(12, 35),
+            np.where(edad_cal < 60, rng.normal(24, 5, n_cal).clip(14, 38),
+                     rng.normal(27, 5, n_cal).clip(15, 40))
+        )
+        grasa_frio = np.where(
+            edad_frio < 35, rng.normal(20, 4, n_frio).clip(12, 35),
+            np.where(edad_frio < 60, rng.normal(24, 5, n_frio).clip(14, 38),
+                     rng.normal(27, 5, n_frio).clip(15, 40))
+        )
+
+        # Temperatura real del dataset (t2m, no t2m_c)
+        temp_cal = df_calor.sort_values("fecha")["t2m"].values[:n_cal]
+        temp_frio = df_frio.sort_values("fecha")["t2m"].values[:n_frio]
+
+        # Riesgo continuo desde el modelo entrenado
+        prob_calor_tr = xgb_cal.predict_proba(X_tr_cal)
+        riesgo_cal = prob_calor_tr[:, 1] + prob_calor_tr[:, 2]
+        prob_frio_tr = rf_frio.predict_proba(X_tr_frio)
+        riesgo_frio = prob_frio_tr[:, 1] + prob_frio_tr[:, 2]
+
+        for clase, temp, edad, grasa, riesgo, label in [
+            ("calor", temp_cal, edad_cal, grasa_cal, riesgo_cal, "bayes_risk_diagnosis_calor"),
+            ("frio", temp_frio, edad_frio, grasa_frio, riesgo_frio, "bayes_risk_diagnosis_frio"),
+        ]:
+            bd = BayesianRiskDiagnosis(clase=clase)
+            bd.fit_from_continuous(temp, grasa, edad, riesgo)
+            path = str(ARTIFACTS_DIR / f"{label}.joblib")
+            bd.save(path)
+            print(f"    {clase}: guardado → {label}.joblib  |  CPDs: {bd.cpd_info}")
+    except Exception as e:
+        print(f"    No se pudo entrenar red bayesiana: {e}")
+        import traceback; traceback.print_exc()
+
+    # ------------------------------------------------------------------
+    # 6.6. Entrenar conformal prediction (split conformal)
+    # ------------------------------------------------------------------
+    print("\n6.6 Entrenando conformal prediction...")
+    try:
+        from climasafeai.models.conformal import SplitConformalCalibrator
+        from climasafeai.models.calibrate import load_isotonic, calibrate_proba
+
+        for clase, model, X_tr, y_tr in [
+            ("calor", xgb_cal, X_tr_cal, y_tr_cal),
+            ("frio", rf_frio, X_tr_frio, y_tr_frio),
+        ]:
+            _n = max(1, len(y_tr) // 3)
+            proba_cal = model.predict_proba(X_tr[-_n:])
+            # Solo frío usa isotonic (en calor es contraproducente)
+            if clase == "frio":
+                iso = load_isotonic("frio")
+                if iso:
+                    proba_cal = calibrate_proba(proba_cal, iso)
+            y_cal = y_tr.iloc[-_n:].values if hasattr(y_tr, 'iloc') else y_tr[-_n:]
+            cal = SplitConformalCalibrator(alpha=0.1)
+            cal.fit(proba_cal, y_cal)
+            cal.save(str(ARTIFACTS_DIR / f"conformal_{clase}.joblib"))
+            print(f"    {clase}: qhat={cal.qhat:.4f}")
+    except Exception as e:
+        print(f"    No se pudo entrenar conformal prediction: {e}")
 
     # ------------------------------------------------------------------
     # 7. Evaluar modelos desplegados (argmax + umbrales calibrados)

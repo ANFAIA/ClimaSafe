@@ -23,7 +23,14 @@ CREATE TABLE IF NOT EXISTS perfiles (
     falta_sueno     INTEGER,
     enfermedad_reciente INTEGER,
     alcohol_reciente INTEGER,
-    fototipo        INTEGER CHECK(fototipo IS NULL OR (fototipo >= 1 AND fototipo <= 6))
+    fototipo        INTEGER CHECK(fototipo IS NULL OR (fototipo >= 1 AND fototipo <= 6)),
+    entrenado       TEXT CHECK(entrenado IN ('si', 'no')),
+    deporte         TEXT,
+    ocupacion       TEXT CHECK(ocupacion IN ('oficina', 'reparto', 'mantenimiento', 'construccion', 'campo')),
+    fiesta          INTEGER,                       -- 0/1
+    lat             REAL,
+    lon             REAL,
+    provincia       TEXT
 );
 
 CREATE INDEX idx_perfiles_alias ON perfiles(alias);

@@ -534,9 +534,22 @@ async def api_predict(body: dict, date: str | None = None):
     except Exception as exc:
         return {"error": str(exc)}
 
-    # Guardar perfil en SQLite (sin perfil_id en los datos)
-    datos_perfil = {k: v for k, v in raw_perfil.items() if k != "perfil_id"}
-    if perfil_id:
+    # Guardar perfil en SQLite (sin perfil_id ni alias en datos)
+    alias = raw_perfil.get("alias")
+    datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
+    datos_perfil["lat"] = lat
+    datos_perfil["lon"] = lon
+    datos_perfil["provincia"] = provincia
+    if alias:
+        existente = _db.buscar_por_alias(alias)
+        if existente:
+            perfil_id = existente["id"]
+            datos_perfil["alias"] = alias
+            _db.actualizar_perfil(perfil_id, datos_perfil)
+        else:
+            datos_perfil["alias"] = alias
+            perfil_id = _db.crear_perfil(datos_perfil)
+    elif perfil_id:
         _db.actualizar_perfil(perfil_id, datos_perfil)
     else:
         perfil_id = _db.crear_perfil(datos_perfil)
@@ -570,6 +583,12 @@ async def api_predict(body: dict, date: str | None = None):
     return result
 
 
+@app.get("/api/perfiles")
+async def api_list_perfiles():
+    """Lista todos los perfiles (cabecera con alias, coordenadas)."""
+    return _db.listar_perfiles()
+
+
 @app.get("/api/perfil/{perfil_id}")
 async def api_get_perfil(perfil_id: int):
     """Devuelve un perfil guardado (escalares + arrays)."""
@@ -585,13 +604,25 @@ async def api_get_perfil(perfil_id: int):
 
 @app.post("/api/perfil")
 async def api_save_perfil(body: dict):
-    """Guarda un perfil (sin predecir). Si incluye perfil_id, actualiza."""
+    """Guarda un perfil (sin predecir). Si incluye alias, busca o crea."""
+    alias = body.get("alias")
     perfil_id = body.get("perfil_id")
-    datos = {k: v for k, v in body.items() if k != "perfil_id"}
-    if perfil_id:
+    datos = {k: v for k, v in body.items() if k not in ("perfil_id", "alias")}
+
+    if alias:
+        existente = _db.buscar_por_alias(alias)
+        if existente:
+            perfil_id = existente["id"]
+            datos["alias"] = alias
+            _db.actualizar_perfil(perfil_id, datos)
+        else:
+            datos["alias"] = alias
+            perfil_id = _db.crear_perfil(datos)
+    elif perfil_id:
         _db.actualizar_perfil(perfil_id, datos)
     else:
         perfil_id = _db.crear_perfil(datos)
+
     return {"perfil_id": perfil_id}
 
 

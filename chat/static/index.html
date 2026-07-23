@@ -274,6 +274,13 @@
           <input type="text" id="provincia" value="Madrid" placeholder="Madrid / 40.4168,-3.7038">
         </div>
       </div>
+      <div class="form-row" style="gap:8px;margin-bottom:8px">
+        <select id="perfil-select" style="flex:2;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+          <option value="">-- Cargar perfil --</option>
+        </select>
+        <button class="btn" onclick="cargarPerfilSeleccionado()" id="btn-load-profile" style="padding:8px 16px">Cargar</button>
+        <button class="btn btn-outline" onclick="borrarPerfil()" id="btn-delete-profile" style="padding:8px 16px;display:none">✕</button>
+      </div>
       <div id="map"></div>
       <div class="btn-row">
         <button class="btn" onclick="irPaso2()">Siguiente</button>
@@ -314,6 +321,16 @@
         </div>
       </div>
       <div id="factor-sections"></div>
+      <div id="profile-name-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:999;justify-content:center;align-items:center">
+        <div style="background:var(--card-bg);border-radius:12px;padding:24px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+          <div style="font-size:1rem;font-weight:600;margin-bottom:12px">Nombre del perfil</div>
+          <input type="text" id="profile-name-input" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1rem;box-sizing:border-box">
+          <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+            <button class="btn btn-outline" onclick="cerrarModalPerfil()" style="padding:8px 20px">Cancelar</button>
+            <button class="btn" onclick="guardarPerfilConNombre()" style="padding:8px 20px">Guardar</button>
+          </div>
+        </div>
+      </div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span id="profile-indicator" style="display:none;font-size:0.8rem;color:var(--text-light)"></span>
       </div>
@@ -449,7 +466,6 @@ const CATEGORY_MAP = {
   comorbilidades: { field: 'comorbilidades', label: 'Comorbilidades' },
   farmacos: { field: 'farmacos', label: 'Medicación' },
   situacional: { field: 'situacion_social', label: 'Situación social' },
-  ocupacional: { field: 'ocupacional', label: 'Exposición laboral' },
 };
 
 const FISIO_BOOLEANS = {
@@ -481,7 +497,7 @@ async function renderFactorSections() {
       html += '</div></div></div>';
     }
 
-    // Fisiologicos → booleans
+    // Fisiológicos → booleans
     const fisioItems = (calor.fisiologico || []).filter(f => !EXCLUDED.has(f.clave));
     if (fisioItems.length) {
       html += '<div class="form-row"><div class="form-group"><label>Factores adicionales</label>';
@@ -492,8 +508,39 @@ async function renderFactorSections() {
           html += '<label><input type="checkbox" value="' + bCfg.field + '" class="chk-boolean" data-field="' + bCfg.field + '"> ' + bCfg.label + '</label>';
         }
       }
+      html += '<label><input type="checkbox" value="fiesta" class="chk-boolean" data-field="fiesta"> Fiesta / celebración (alcohol + baile + horario nocturno)</label>';
       html += '</div></div></div>';
     }
+
+    // Selectores adicionales (ocupación, entrenado, deporte)
+    html += `<div class="form-row" style="margin-top:6px">
+      <div class="form-group"><label>Exposición laboral</label>
+        <select id="ocupacion">
+          <option value="">-</option>
+          <option value="oficina">Oficina / sedentario</option>
+          <option value="reparto">Reparto / conducción</option>
+          <option value="mantenimiento">Mantenimiento exterior / jardinería</option>
+          <option value="construccion">Construcción / albañilería</option>
+          <option value="campo">Campo / agricultura</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Entrenado / adaptado</label>
+        <select id="entrenado">
+          <option value="">-</option><option value="si">Sí</option><option value="no">No</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Deporte (etiqueta)</label>
+        <select id="deporte">
+          <option value="">-</option>
+          <option value="correr">Correr</option>
+          <option value="ciclismo">Ciclismo</option>
+          <option value="futbol">Fútbol</option>
+          <option value="tenis">Tenis</option>
+          <option value="padel">Pádel</option>
+          <option value="senderismo">Senderismo</option>
+        </select>
+      </div>
+    </div>`;
 
     container.innerHTML = html;
   } catch (_) {
@@ -530,14 +577,33 @@ function getPerfil() {
   if (grasa) p.porcentaje_grasa = parseFloat(grasa);
   const actividad = document.getElementById('nivel_actividad').value;
   if (actividad) p.nivel_actividad = actividad;
-  const h_ini = document.getElementById('hora_inicio').value;
-  if (h_ini) p.hora_inicio = parseFloat(h_ini);
-  const dur = document.getElementById('duracion_actividad_h').value;
-  if (dur) p.duracion_actividad_h = parseFloat(dur);
-  const acli = document.getElementById('aclimatado').value;
-  if (acli) p.aclimatado = acli === 'si';
-  const foto = document.getElementById('fototipo').value;
-  if (foto) p.fototipo = foto;
+  const h_ini = document.getElementById('hora_inicio');
+  if (h_ini) p.hora_inicio = parseFloat(h_ini.value);
+  const dur = document.getElementById('duracion_actividad_h');
+  if (dur) p.duracion_actividad_h = parseFloat(dur.value);
+  const acli = document.getElementById('aclimatado');
+  if (acli) p.aclimatado = acli.value === 'si';
+  const ent = document.getElementById('entrenado');
+  if (ent) p.entrenado = ent.value === 'si';
+  const foto = document.getElementById('fototipo');
+  if (foto) p.fototipo = foto.value;
+  const dep = document.getElementById('deporte');
+  if (dep) p.deporte = dep.value;
+  const ocp = document.getElementById('ocupacion');
+  if (ocp) p.ocupacion = ocp.value;
+
+  // Coordenadas desde el campo provincia (lat,lon)
+  const provVal = document.getElementById('provincia').value.trim();
+  if (provVal) {
+    const coordMatch = provVal.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/);
+    if (coordMatch) {
+      p.lat = parseFloat(coordMatch[1]);
+      p.lon = parseFloat(coordMatch[2]);
+      p.provincia = p.lat + ',' + p.lon;
+    } else {
+      p.provincia = provVal;
+    }
+  }
 
   // Checkboxes dinámicos tipo "set": se agrupan por data-field
   document.querySelectorAll('.checkbox-grid[data-field]').forEach(grid => {
@@ -574,6 +640,10 @@ async function predecir() {
   const targetDate = document.getElementById('target-date').value;
   const url = '/api/predict' + (targetDate ? '?date=' + targetDate : '');
 
+  // Incluir alias del perfil si está activo
+  const alias = localStorage.getItem('climasafe_perfil_alias');
+  if (alias) perfil.alias = alias;
+
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -583,6 +653,10 @@ async function predecir() {
     const data = await res.json();
     if (data.perfil_id) {
       localStorage.setItem('climasafe_perfil_id', data.perfil_id);
+      if (alias) {
+        localStorage.setItem('climasafe_perfil_alias', alias);
+        mostrarPerfilGuardado(alias);
+      }
     }
     document.getElementById('step2').classList.remove('visible');
     document.getElementById('dot2').classList.remove('active');
@@ -598,10 +672,26 @@ async function predecir() {
   }
 }
 
+function cerrarModalPerfil() {
+  document.getElementById('profile-name-modal').style.display = 'none';
+}
+
 function guardarPerfil() {
-  const pid = localStorage.getItem('climasafe_perfil_id');
+  const alias = localStorage.getItem('climasafe_perfil_alias') || '';
+  document.getElementById('profile-name-input').value = alias;
+  document.getElementById('profile-name-modal').style.display = 'flex';
+  document.getElementById('profile-name-input').focus();
+  document.getElementById('profile-name-input').onkeydown = function(e) {
+    if (e.key === 'Enter') guardarPerfilConNombre();
+  };
+}
+
+function guardarPerfilConNombre() {
+  const alias = document.getElementById('profile-name-input').value.trim();
+  if (!alias) return;
+  cerrarModalPerfil();
   const perfil = getPerfil();
-  perfil.perfil_id = pid ? parseInt(pid) : undefined;
+  perfil.alias = alias;
   fetch('/api/perfil', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -609,20 +699,25 @@ function guardarPerfil() {
   }).then(r => r.json()).then(data => {
     if (data.perfil_id) {
       localStorage.setItem('climasafe_perfil_id', data.perfil_id);
-      mostrarPerfilGuardado(data.perfil_id);
+      localStorage.setItem('climasafe_perfil_alias', alias);
+      mostrarPerfilGuardado(alias);
+      refrescarListaPerfiles();
     }
   }).catch(() => alert('Error al guardar perfil'));
 }
 
 function borrarPerfil() {
   localStorage.removeItem('climasafe_perfil_id');
+  localStorage.removeItem('climasafe_perfil_alias');
   document.getElementById('profile-indicator').style.display = 'none';
+  document.getElementById('btn-delete-profile').style.display = 'none';
+  document.getElementById('perfil-select').value = '';
 }
 
-function mostrarPerfilGuardado(pid) {
+function mostrarPerfilGuardado(nombre) {
   const el = document.getElementById('profile-indicator');
   el.style.display = 'inline';
-  el.innerHTML = 'Perfil #' + pid + ' guardado <a href="#" onclick="borrarPerfil();return false" style="color:var(--text-light)">[borrar]</a>';
+  el.innerHTML = 'Perfil: <strong>' + nombre + '</strong> <a href="#" onclick="borrarPerfil();return false" style="color:var(--text-light)">[borrar]</a>';
 }
 
 function nuevaConsulta() {
@@ -649,6 +744,29 @@ function mostrarResultados(d) {
   document.getElementById('opt-card').style.display = 'block';
   window._ultimoResultado = d;
   window.scrollTo({ top: document.getElementById('results').offsetTop - 20, behavior: 'smooth' });
+}
+
+const CONF_ICONOS = { alta: '&#9679;', media: '&#9675;', baja: '&#9888;' };
+const CONF_COLOR = { alta: 'var(--seguro)', media: 'var(--precaucion)', baja: 'var(--peligro)' };
+const CONF_LABEL = { alta: 'confianza alta', media: 'confianza media', baja: 'confianza baja' };
+
+function _confianzaHtml(conf) {
+  if (!conf || conf === 'desconocida') return '';
+  const icono = CONF_ICONOS[conf] || '&#9679;';
+  const color = CONF_COLOR[conf] || 'var(--text-light)';
+  return ' <span style="font-size:0.75rem;color:' + color + '" title="' + (CONF_LABEL[conf] || conf) + '">' + icono + '</span>';
+}
+
+function _confianzaGlobal(d) {
+  const confs = [];
+  for (const mod of ['XGBoost_calor', 'RandomForest_frio', 'LSTM']) {
+    const c = d.modelos?.[mod]?.conformal_confianza;
+    if (c && c !== 'desconocida') confs.push(c);
+  }
+  if (!confs.length) return null;
+  if (confs.includes('baja')) return 'baja';
+  if (confs.includes('media')) return 'media';
+  return 'alta';
 }
 
 function mostrarClima(w) {
@@ -683,8 +801,10 @@ function mostrarFinal(d) {
       sub = 'Determinado por: ' + det;
     }
   }
+  const conf = _confianzaGlobal(d);
+  const confHtml = _confianzaHtml(conf);
   document.getElementById('final-result').className = 'final-result bg-' + label;
-  document.getElementById('final-result').innerHTML = '<div class="class class-' + label + '">' + label + '</div>'
+  document.getElementById('final-result').innerHTML = '<div class="class class-' + label + '">' + label + confHtml + '</div>'
     + '<div class="sub">' + sub + '</div>';
 }
 
@@ -804,7 +924,8 @@ function mostrarExplicacion(ex, modelos) {
 
     if (mod === 'XGBoost_calor' || mod === 'RandomForest_frio') {
       const label = 'XGBoost';
-      html += '<div style="margin-top:10px"><strong>Riesgo por tendencia meteorológica (modelo ' + label + '):</strong></div>';
+      const confMod = modelos?.[mod]?.conformal_confianza;
+      html += '<div style="margin-top:10px"><strong>Riesgo por tendencia meteorológica (modelo ' + label + '):</strong>' + _confianzaHtml(confMod) + '</div>';
       if (det.top_features?.length) {
         const allZero = det.top_features.every(t => (t.importancia ?? 0) === 0);
         if (allZero) {
@@ -816,7 +937,8 @@ function mostrarExplicacion(ex, modelos) {
         }
       }
     } else if (mod === 'LSTM' && det.hora_mas_influyente !== undefined) {
-      html += '<div style="margin-top:10px"><strong>LSTM:</strong> hora mas influyente = ' + det.hora_mas_influyente + ':00</div>';
+      const confMod = modelos?.[mod]?.conformal_confianza;
+      html += '<div style="margin-top:10px"><strong>LSTM:</strong> hora mas influyente = ' + det.hora_mas_influyente + ':00' + _confianzaHtml(confMod) + '</div>';
       if (det.variables_top?.length) {
         for (const vt of det.variables_top) {
           html += '<div class="explain-item"><span>' + vt.feature + '</span><span>' + (vt.importancia * 100).toFixed(1) + '%</span></div>';
@@ -1021,36 +1143,82 @@ async function loadPendingList() {
   } catch (_) {}
 }
 
+function rellenarFormulario(p) {
+  if (p.error) return;
+  if (p.edad) document.getElementById('edad').value = p.edad;
+  if (p.sexo) document.getElementById('sexo').value = p.sexo;
+  if (p.porcentaje_grasa != null) document.getElementById('porcentaje_grasa').value = p.porcentaje_grasa;
+  if (p.nivel_actividad) document.getElementById('nivel_actividad').value = p.nivel_actividad;
+  if (p.hora_inicio != null) document.getElementById('hora_inicio').value = p.hora_inicio;
+  if (p.duracion_actividad_h != null) document.getElementById('duracion_actividad_h').value = p.duracion_actividad_h;
+  if (p.aclimatado != null) document.getElementById('aclimatado').value = p.aclimatado ? 'si' : 'no';
+  if (p.fototipo) document.getElementById('fototipo').value = p.fototipo;
+  if (p.entrenado != null) document.getElementById('entrenado').value = p.entrenado === 'si' || p.entrenado === true ? 'si' : 'no';
+  if (p.deporte) document.getElementById('deporte').value = p.deporte;
+  if (p.ocupacion) document.getElementById('ocupacion').value = p.ocupacion;
+  if (p.lat != null && p.lon != null) {
+    document.getElementById('provincia').value = p.lat + ',' + p.lon;
+    ponerMarcador(p.lat, p.lon);
+  } else if (p.provincia) {
+    document.getElementById('provincia').value = p.provincia;
+  }
+  document.querySelectorAll('.checkbox-grid[data-field]').forEach(grid => {
+    const field = grid.dataset.field;
+    const vals = p[field] || [];
+    grid.querySelectorAll('.chk-dynamic').forEach(c => {
+      if (vals.includes(c.value)) c.checked = true;
+    });
+    const none = grid.querySelector('.chk-none');
+    if (none && vals.length) none.checked = false;
+  });
+  document.querySelectorAll('.chk-boolean').forEach(c => {
+    if (p[c.dataset.field]) c.checked = true;
+  });
+}
+
 function cargarPerfil() {
+  const alias = localStorage.getItem('climasafe_perfil_alias');
   const pid = localStorage.getItem('climasafe_perfil_id');
+  if (pid) {
+    fetch('/api/perfil/' + pid).then(r => r.json()).then(p => {
+      if (p.error) return;
+      rellenarFormulario(p);
+      mostrarPerfilGuardado(p.alias || pid);
+    }).catch(() => {});
+  }
+}
+
+function refrescarListaPerfiles() {
+  fetch('/api/perfiles').then(r => r.json()).then(lista => {
+    const sel = document.getElementById('perfil-select');
+    const actual = localStorage.getItem('climasafe_perfil_alias') || '';
+    sel.innerHTML = '<option value="">-- Cargar perfil --</option>';
+    for (const pf of lista) {
+      const opt = document.createElement('option');
+      opt.value = pf.id;
+      opt.textContent = pf.alias || '#' + pf.id;
+      if (pf.alias === actual) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    const btnDel = document.getElementById('btn-delete-profile');
+    btnDel.style.display = actual ? 'inline' : 'none';
+  }).catch(() => {});
+}
+
+function cargarPerfilSeleccionado() {
+  const sel = document.getElementById('perfil-select');
+  const pid = sel.value;
   if (!pid) return;
   fetch('/api/perfil/' + pid).then(r => r.json()).then(p => {
-    if (p.error) return;
-    if (p.edad) document.getElementById('edad').value = p.edad;
-    if (p.sexo) document.getElementById('sexo').value = p.sexo;
-    if (p.porcentaje_grasa != null) document.getElementById('porcentaje_grasa').value = p.porcentaje_grasa;
-    if (p.nivel_actividad) document.getElementById('nivel_actividad').value = p.nivel_actividad;
-    if (p.hora_inicio != null) document.getElementById('hora_inicio').value = p.hora_inicio;
-    if (p.duracion_actividad_h != null) document.getElementById('duracion_actividad_h').value = p.duracion_actividad_h;
-    if (p.aclimatado != null) document.getElementById('aclimatado').value = p.aclimatado ? 'si' : 'no';
-    if (p.fototipo) document.getElementById('fototipo').value = p.fototipo;
-    // Checkboxes dinámicos
-    document.querySelectorAll('.checkbox-grid[data-field]').forEach(grid => {
-      const field = grid.dataset.field;
-      const vals = p[field] || [];
-      grid.querySelectorAll('.chk-dynamic').forEach(c => {
-        if (vals.includes(c.value)) c.checked = true;
-      });
-      // Uncheck "ninguna" si hay selecciones
-      const none = grid.querySelector('.chk-none');
-      if (none && vals.length) none.checked = false;
-    });
-    // Checkboxes booleanos
-    document.querySelectorAll('.chk-boolean').forEach(c => {
-      if (p[c.dataset.field]) c.checked = true;
-    });
-    mostrarPerfilGuardado(pid);
-  }).catch(() => {});
+    if (p.error) return alert(p.error);
+    rellenarFormulario(p);
+    const alias = sel.options[sel.selectedIndex].textContent;
+    localStorage.setItem('climasafe_perfil_id', pid);
+    localStorage.setItem('climasafe_perfil_alias', alias);
+    mostrarPerfilGuardado(alias);
+    refrescarListaPerfiles();
+    irPaso2();
+  }).catch(() => alert('Error al cargar perfil'));
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1060,7 +1228,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.target === this) closePendingModal();
   });
   // Cargar perfil después de que los checkboxes dinámicos existan
-  renderFactorSections().then(cargarPerfil);
+  renderFactorSections().then(() => {
+    cargarPerfil();
+    refrescarListaPerfiles();
+  });
 });
 </script>
 </body>

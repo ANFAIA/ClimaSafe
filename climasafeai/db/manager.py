@@ -98,9 +98,13 @@ class DBManager:
         escalares = {k: v for k, v in datos.items() if k not in array_fields}
 
         # Booleans: convertir True/False a 1/0
-        for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente"):
+        for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente", "fiesta"):
             if k in escalares:
                 escalares[k] = 1 if escalares[k] else 0
+
+        # Entrenado: de booleano a texto "si"/"no"
+        if "entrenado" in escalares:
+            escalares["entrenado"] = "si" if escalares["entrenado"] else "no"
 
         with self.conn() as c:
             if not escalares:
@@ -144,9 +148,13 @@ class DBManager:
 
             perfil = dict(row)
             # Booleans: convertir 1/0 a True/False
-            for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente"):
+            for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente", "fiesta"):
                 if perfil.get(k) is not None:
                     perfil[k] = bool(perfil[k])
+
+            # Entrenado: de texto "si"/"no" a booleano
+            if "entrenado" in perfil:
+                perfil["entrenado"] = perfil["entrenado"] == "si"
 
             # Arrays
             for campo, tabla in (
@@ -166,7 +174,7 @@ class DBManager:
         """Todos los perfiles (sin arrays, solo cabecera)."""
         with self.conn() as c:
             rows = c.execute(
-                "SELECT id, alias, edad, sexo, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
+                "SELECT id, alias, edad, sexo, lat, lon, provincia, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -180,9 +188,12 @@ class DBManager:
             nuevo_aclimatado = escalares["aclimatado"]
             escalares["aclimatado"] = 1 if escalares["aclimatado"] else 0
 
-        for k in ("falta_sueno", "enfermedad_reciente", "alcohol_reciente"):
+        for k in ("falta_sueno", "enfermedad_reciente", "alcohol_reciente", "fiesta"):
             if k in escalares:
                 escalares[k] = 1 if escalares[k] else 0
+
+        if "entrenado" in escalares:
+            escalares["entrenado"] = "si" if escalares["entrenado"] else "no"
 
         with self.conn() as c:
             if escalares:
@@ -220,6 +231,14 @@ class DBManager:
         with self.conn() as c:
             cur = c.execute("DELETE FROM perfiles WHERE id = ?", (perfil_id,))
             return cur.rowcount > 0
+
+    def buscar_por_alias(self, alias: str) -> dict | None:
+        """Busca un perfil por alias exacto."""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT id, alias, updated_at FROM perfiles WHERE alias = ?", (alias,)
+            ).fetchone()
+            return dict(row) if row else None
 
     # ── Factores de riesgo ──────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 # Coeficientes de personalización individual del riesgo
 
-**Fecha:** 2026-07-10 · **Última actualización:** 2026-07-22 · **Estado:** implementado en `climasafeai/features/personalizacion.py`
+**Fecha:** 2026-07-10 · **Última actualización:** 2026-07-23 · **Estado:** implementado en `climasafeai/features/personalizacion.py`
 
 Ver también: `documentacion/arquitectura/pipeline_prediccion.md` (cómo se usa en el ensemble), `documentacion/ml/contrafactuales.md` (cómo se generan recomendaciones de cambio)
 
@@ -50,12 +50,6 @@ La función `personalizar_riesgo` recibe un `perfil` con estos campos (todos
 opcionales — un campo ausente = factor neutro ×1.0, no penaliza por falta de
 dato).
 
-> **Nota:** `edad` y `sexo` se eliminaron de `personalizacion.py` porque ahora
-> se calibran mediante modelos separados por **estrato demográfico** (ver
-> `make_dataset.py` → `ESTRATOS`). Los valores `edad` y `sexo` en el perfil se
-> ignoran a efectos de personalización; son el estrato el que determina qué
-> modelo se usa.
-
 | Campo | Tipo | Valores | Confirmado por el usuario |
 |---|---|---|---|
 | `imc` | float | kg/m² | ✓ |
@@ -92,6 +86,10 @@ riesgos relativos / odds ratios publicados (columna RR/OR con su intervalo).
 | **Aislamiento / dependencia** | vive solo / no sale de casa / encamado | ×2.0 | OR 2.3 vive solo; 5.5 encamado; 6.7 no sale | Semenza 1996 (Chicago, NEJM) | Alta (pero situacional) |
 | **Obesidad** | IMC ≥30 (o % grasa ≥25/32 h/m) y actividad ≥moderada | ×1.2 † | ver nota  abajo | mixta | **Baja** |
 | **Fragilidad** | IMC <18.5 (o % grasa <12/20 h/m) | ×1.3 | IMC bajo en ancianos = fragilidad/desnutrición | Semenza 1996 (Chicago) | Media |
+| **Sexo** | hombre | ×0.96 | RR mujer 1.08 vs hombre (2024 meta-análisis, 11 estudios). Centrado en 1.0. | 2024 meta (PMC11516269): mujeres RR 1.08 (1.02–1.14) en olas de calor. Benmarhnia 2015: RRR hombre 0.99 (0.97–1.01). | Alta (calibración) |
+| | mujer | ×1.04 | íd. | íd. | Alta |
+| **Grasa corporal relativa** | continua (ver sección) | ×0.85–×1.15 según desviación de la media del grupo edad+sexo | mecanismo fisiológico (aislamiento en esfuerzo) + curvas CUN-BAE/ENPE | — | Media |
+| **Entrenado / adaptado a la actividad** | actividad ≥ moderada y entrenado=true | ×0.5 sobre exceso del factor actividad | el entrenamiento aumenta volumen plasmático, eficiencia cardiovascular y capacidad de sudoración | fisiología del ejercicio (aplicación directa, no RR poblacional) | Alta (fisiológica) |
 | **Fatiga acumulada** | ≥4h trabajo al llegar a HI≥27°C, actividad ≥moderada | ×1.2 / ×1.3 | NIOSH work/rest schedules: trabajo continuo sin recuperación acumula estrés; a 6h+ el riesgo sube | NIOSH 2017-127; Lancet Planetary Health 2018 (Flouris: 4× más riesgo en turno con calor) | **Media** |
 
 † El ×1.2 de obesidad **solo se aplica si `nivel_actividad` ≥ moderada** (ver nota).
@@ -147,6 +145,119 @@ física / exposición al aire libre**, y añadir un factor de **fragilidad
 (IMC<18.5 → ×1.3)** que la literatura sí respalda en reposo. Multiplicar por
 la grasa "a lo bruto" para todo el mundo sobreestimaría el riesgo de la mayoría.
 
+### Sexo como factor de calibración demográfica
+
+El sexo **no** se incluye como factor de vulnerabilidad fisiológica directa (como
+la edad), sino como **corrección de calibración**:
+
+1. El modelo ML se entrenó con datos de MoMo, que tiene una distribución por
+   sexo distinta según la provincia y el año (~45–55% mujeres).
+2. La literatura epidemiológica muestra sistemáticamente que las mujeres tienen
+   mayor mortalidad por calor (+5–30% RR según Benmarhnia 2015 meta-análisis)
+   y los hombres mayor mortalidad por frío.
+3. Si el modelo no captura ese desbalance, un usuario hombre recibe la misma
+   predicción que una mujer — cuando en realidad su riesgo es menor.
+
+Para evitar que el factor medio del perfil "típico" sesgue el índice (si
+aplicáramos ×1.0/×1.0, el usuario con mayor riesgo recibiría la misma
+predicción), los factores están **centrados en 1.0** con base en la
+literatura:
+
+**Calor** — la evidencia es mixta pero converge en un riesgo ligeramente mayor
+para mujeres:
+- **Benmarhnia 2015** (61 estudios, meta-análisis): RRR hombre = 0.99 (IC 0.97–1.01) — diferencia mínima, no significativa.
+- **Meta-análisis 2024** (11 estudios, PMC11516269): mujeres RR 1.08 (IC 1.02–1.14) en olas de calor.
+- **Efecto moderado**: se opta por ×**0.96** hombre / ×**1.04** mujer (ratio 1.083, centrado en 1.0).
+
+**Frío** — la evidencia es más clara: los hombres tienen sistemáticamente mayor
+mortalidad por frío:
+- **GBD 2019** (204 países, PMC11026037): hombres 1.38× tasa de mortalidad atribuible al frío vs mujeres.
+- **Efecto significativo**: se opta por ×**1.15** hombre / ×**0.87** mujer (ratio 1.322, ligeramente conservador respecto al 1.38 observado).
+
+### Grasa corporal relativa al grupo de edad y sexo
+
+En lugar del binario obeso/no-obeso con threshold fijo, el factor de grasa
+corporal se calcula de forma **continua** respecto a la media del grupo
+demográfico:
+
+```
+ref = f(edad, sexo)   # curva CUN-BAE/ENPE interpolada
+ratio = grasa / ref
+factor = 1.0 + (ratio - 1.0) × 0.3, capado a [0.85, 1.15]
+```
+
+Referencias poblacionales por edad y sexo (población española, fuente:
+CUN-BAE, ENPE, EXERNET):
+
+| Edad | Mujer (% grasa ref.) | Hombre (% grasa ref.) |
+|------|---------------------|----------------------|
+| 18   | 24.0                | 16.0                 |
+| 30   | 25.5                | 18.5                 |
+| 40   | 27.0                | 20.5                 |
+| 50   | 28.0                | 22.5                 |
+| 60   | 28.0                | 23.5                 |
+| 70   | 27.5                | 24.0                 |
+| 80   | 27.0                | 24.0                 |
+| 100  | 26.0                | 23.5                 |
+
+Esto reemplaza el threshold binario obeso/no-obeso: una persona con 25% grasa a
+los 50a tiene un factor distinto según sea hombre (25/22.5=1.11 → +3.3%) o mujer
+(25/28=0.89 → −3.3%). El factor penaliza estar por encima de la media de TU
+grupo demográfico, no respecto a un threshold universal.
+
+**Aplica igual en calor y en frío** (el efecto fisiológico del aislamiento
+graso es el mismo; lo que cambia es si perjudica o beneficia según la
+temperatura ambiente).
+
+### Factores sociales y contextuales compuestos
+
+Varios factores sociales se solapan (quien va a una fiesta bebe alcohol y baila
+y sale de noche). Modelarlos como producto independiente inflaría el riesgo.
+Reglas de diseño:
+
+**Máximo, no producto:** cuando varios factores sociales aplican a la misma
+persona, se toma el de mayor coeficiente. La categoría `situacional` agrupa
+estos factores: `vive_solo`, `encamado`, `no_sale`, `vivienda_fria`,
+`trabajo_exterior`, `deporte_exterior`, `alcohol`. Todos compiten por el mismo
+"slot" — solo gana el más grave.
+
+**Alcohol ya no es campo separado:** el campo booleano legacy `alcohol_reciente`
+se eliminó. Ahora se añade automáticamente `"alcohol"` a
+`situacion_social` cuando el usuario lo marca. Factor: ×1.8 (OR 3.7 de
+Semenza 1996 Chicago, moderado a ×1.8 porque en contexto de aviso preventivo
+el OR de caso-control sobreestima el riesgo real).
+
+**"Fiesta" como escenario compuesto:** un contexto social de celebración
+(verbenas, conciertos, terrazas) activa **varios factores simultáneos** que
+son multiplicativos (no situacionales, porque atacan por vías distintas):
+
+| Vía | Factor activo | Categoría |
+|-----|--------------|-----------|
+| Alcohol | `alcohol` → ×1.8 (MAX situacional) | situacional |
+| Actividad física (baile) | `nivel_actividad` → ×1.1–×1.3 | fisiológico |
+| Horario nocturno | `hora_inicio` → ×1.1–×1.3 | fisiológico |
+| Deshidratación | implícito en alcohol + calor | — |
+
+En el código, marcar `"fiesta"` en `situacion_social` añade automáticamente
+`"alcohol"` para evitar que el usuario tenga que acordarse de ambos. No existe
+un único botón "fiesta" como factor independiente — el frontend ofrece el
+checkbox contextual que activa el alcohol, y el resto lo completa el usuario
+(actividad + hora).
+
+**"Deporte" está cubierto por factores existentes:** el `nivel_actividad`
+captura la intensidad metabólica (×1.1–×2.0), `duracion_actividad_h` captura
+la exposición continua, `hora_inicio` captura si coincide con el pico térmico.
+Además `situacion_social` incluye `"deporte_exterior"` para marcar que la
+actividad es al aire libre (se usa en la UI para mostrar alertas UV, no
+añade factor extra). No se necesita un factor deporte separado.
+
+**`trabajo_exterior` vs `deporte_exterior`:** ambos se marcan en
+`situacion_social` pero ninguno añade factor por sí mismo — el factor real
+viene del `nivel_actividad` que el usuario seleccione. La etiqueta
+"trabajo_exterior" o "deporte_exterior" sirve para que el sistema
+pueda ofrecer recomendaciones contextuales (protegerse del sol en
+trabajo/exposición UV en deporte).
+
 ---
 
 ## Tabla de coeficientes propuesta — FRÍO
@@ -166,6 +277,8 @@ y marcados como provisionales.
 | **Hora del día (frío)** | solapa ≥75% ventana 4-8h | ×1.3 | amanecer = mínima temperatura diaria + menor actividad | mecanismo fisiológico | Media |
 | | solapa 50-75% | ×1.2 | íd. | íd. | Media |
 | | solapa parcial <50% | ×1.1 | íd. | íd. | Media |
+| **Sexo** | hombre | ×1.15 | Hombres ×1.38 tasa mortalidad frío vs mujeres (GBD 2019, 204 países). Centrado en 1.0. | GBD 2019 (PMC11026037): hombres 1.38× tasas de muerte atribuibles al frío. | Alta (calibración) |
+| | mujer | ×0.87 | íd. | íd. | Alta |
 | **Aislamiento / vivienda fría** | vive solo / pobreza energética | ×1.5 | exceso invernal mayor en climas templados con vivienda mal aislada | Media (situacional) |
 | **Obesidad / grasa corporal alta** | IMC ≥30 (o % grasa ≥25/32 h/m) | ×0.9 (protector) | la grasa aísla → protectora en frío | mecanismo fisiológico | Media |
 | **Fragilidad** | IMC <18.5 (o % grasa <12/20 h/m) | ×1.3 | poca masa/aislamiento → menor tolerancia al frío | Media |
@@ -193,20 +306,20 @@ y marcados como provisionales.
 Función: `climasafeai/features/personalizacion.py` → `personalizar_riesgo(indice, perfil, tipo="calor"|"frio")`.
 Tests: `tests/test_personalizacion.py` (24 tests). Decisiones ya tomadas:
 
+- **Sexo como calibración centrada**: calor: hombre ×0.96 / mujer ×1.04 (ratio 1.083, alineado con meta 2024 RR mujer 1.08). Frío: hombre ×1.15 / mujer ×0.87 (ratio 1.322, conservador respecto a GBD 1.38). No es factor de vulnerabilidad directa, sino corrección de sesgo demográfico del modelo con base en literatura.
+- **Edad como factor de vulnerabilidad directa**: activado en `_factores_calor`/`_factores_frio`. Calor: 65a×1.2, 75a×1.5, 85a×2.0. Frío: 65a×1.2, 75a×1.4, 85a×1.7. Se suma al factor edad que ya aplica el ML en la `prob_poblacional` vía estratos.
+- **Entrenado / adaptado a la actividad**: campo booleano. Si `entrenado=true` y actividad ≥ moderada, el exceso del factor de actividad se reduce un 50% (ej. intensa ×1.6 → ×1.3). Refleja la adaptación fisiológica al ejercicio habitual (mayor volumen plasmático, mejor termorregulación).
+- **"Fiesta" como entrada separada**: a diferencia de `alcohol_reciente` (que se mapeaba a `situacion_social.alcohol`), `fiesta` es un factor independiente con label `"fiesta / consumo de alcohol reciente"` (categoría `situacional`, ×1.8). No se mezcla con el máximo de factores situacionales.
+- **Grasa corporal relativa al grupo edad+sexo**: factor continuo 0.85–1.15 según desviación de la media poblacional por edad y sexo (curvas CUN-BAE/ENPE). Reemplaza los thresholds binarios de obesidad/fragilidad anteriores. Aplica igual en calor y frío (el efecto es el mismo; lo que cambia es si perjudica o beneficia según la temperatura).
 - **Cap del producto de factores = 3.0** (los factores no son independientes).
 - **Composición en odds** (no multiplicación directa) para no salirse de [0,1].
 - **Tablas separadas calor/frío** (`_factores_calor` / `_factores_frio`): la
   obesidad y la actividad se comportan al revés.
-- **Soporte dual IMC / % grasa corporal**: el código acepta tanto `imc` como
-  `porcentaje_grasa`. Si ambos están presentes, `porcentaje_grasa` tiene
-  prioridad. Los thresholds de IMC son ≥30 (exceso) y <18.5 (déficit); los de
-  % grasa son ≥25/32 h/m (exceso) y <12/20 h/m (déficit).
-- **Obesidad solo en esfuerzo** (actividad ≥ moderada) — donde la literatura la
-  respalda.
-- **Fragilidad siempre**: IMC bajo o % grasa bajo activan factor ×1.3
-  independientemente del nivel de actividad (a diferencia de obesidad).
 - **Salud mental y antipsicóticos = un único factor** (no doble conteo; el
   riesgo lo marca la condición, no el fármaco — ver `papers/wong-2024-...`).
+- **Alcohol en situacion_social**: el legacy `alcohol_reciente` se eliminó como campo separado; ahora se añade dinámicamente `"alcohol"` a `situacion_social` cuando se marca. Factor ×1.8 del OR 3.7 de Semenza 1996, moderado.
+- **"Fiesta" no es factor único**: el contexto social de celebración se modela como solapamiento de factores existentes (alcohol + nivel_actividad + hora_inicio). El usuario que marca esas tres cosas recibe el perfil compuesto correcto.
+- **"Deporte" cubierto por factores existentes**: nivel_actividad (intensidad), hora_inicio (pico térmico), duracion_actividad_h (exposición continua). `situacion_social.deporte_exterior` es informativo (alerta UV), no añade factor extra.
 - **Factores sociales por MÁXIMO, no producto** (los OR de Chicago se solapan).
 - **Hora del día**: factor horario en calor (ventana 12-18h, pico térmico) y
   en frío (ventana 4-8h, amanecer). Se activa según solapamiento de la
@@ -218,17 +331,3 @@ Tests: `tests/test_personalizacion.py` (24 tests). Decisiones ya tomadas:
   Las categorías (`fisiologico` / `medico` / `situacional`) permiten a quien
   consuma separar la vulnerabilidad social si lo prefiere.
 
-## Pendiente (mejoras futuras)
-
-1. Contrastar los coeficientes con literatura **española** si existe (Plan
-   Calor del Ministerio de Sanidad, MoMo desagregado) para ajustar al contexto.
-2. Afinar el factor de **duración+viento en frío** (hoy la actividad intensa en
-   frío es un ×1.2 fijo; idealmente dependería de viento/humedad reales del día).
-3. **Validar modelo ML contra literatura**: verificar que las predicciones del
-   modelo (p.ej. riesgo por grado sobre percentil) caen dentro de los rangos
-   epidemiológicos conocidos (p.ej. +3.44% mortalidad CV por 1°C, Bunker 2016).
-4. **Thresholds dinámicos por clima**: MMT varía (~P60 tropical, ~P80-90
-   templado, Gasparrini 2015). Implementar thresholds de calor regionalizados
-   en lugar del percentil fijo actual.
-5. Descargar el resto de fuentes de dominio público (NIOSH 2016-106, CDC MMWR)
-   a markdown cuando el acceso al PDF lo permita — hoy solo citadas (ver `papers/README.md`).

@@ -40,6 +40,7 @@ dependencies = [
     "mcp>=1.28.1",
     # ── RAG vector search ─────────────────────────────────────────────
     "sqlite-vec>=0.1.0",
+    "pyarrow>=24.0.0",
 ]
 
 [project.optional-dependencies]
