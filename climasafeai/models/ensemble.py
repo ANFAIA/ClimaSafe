@@ -116,6 +116,14 @@ def _predecir_tabular(
 
     u_global = CLASS_THRESHOLDS_RECOMENDADOS.get(clase, {"t1": 0.5, "t2": 0.4})
     u = dict(u_global)
+    try:
+        estrato_path = ARTIFACTS_DIR / "params_estrato.joblib"
+        if estrato_path.exists():
+            params_estrato = joblib.load(estrato_path)
+            estrato_u = params_estrato.get(clase, {}).get(grupo_edad, u_global)
+            u = {"t1": estrato_u["t1"], "t2": estrato_u["t2"]}
+    except Exception:
+        pass
     if provincia:
         try:
             umb_path = ARTIFACTS_DIR / f"umbrales_provincia_{clase}.joblib"
@@ -319,6 +327,7 @@ def predict_ensemble(
     perfil_horario = None
     if df_hora is not None and "datetime" in df_hora.columns and "heat_index_c" in df_hora.columns:
         horas_agrupadas = {}
+        temp_por_hora = {}
         for _, row in df_hora.iterrows():
             dt = pd.to_datetime(row["datetime"])
             hi = row.get("heat_index_c")
@@ -326,8 +335,14 @@ def predict_ensemble(
                 hora = dt.hour
                 if hora not in horas_agrupadas or float(hi) > horas_agrupadas[hora]:
                     horas_agrupadas[hora] = float(hi)
+                    t = row.get("t2m_c")
+                    if t is not None and not (isinstance(t, float) and np.isnan(t)):
+                        temp_por_hora[hora] = round(float(t), 1)
         if horas_agrupadas:
-            perfil_horario = [{"hora": h, "HI": hi} for h, hi in sorted(horas_agrupadas.items())]
+            perfil_horario = [
+                {"hora": h, "HI": hi, "temp": temp_por_hora.get(h)}
+                for h, hi in sorted(horas_agrupadas.items())
+            ]
             if perfil:
                 perfil["_perfil_horario"] = perfil_horario
 

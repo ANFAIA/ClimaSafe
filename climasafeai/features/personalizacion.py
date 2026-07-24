@@ -27,6 +27,8 @@ Dos puntos de diseño clave:
 
 from __future__ import annotations
 
+import math
+
 from climasafeai.db.manager import DBManager
 
 _DB = DBManager()
@@ -95,6 +97,10 @@ def _factor_edad_calor(edad: int) -> float:
         return 1.5
     if edad >= 65:
         return 1.2
+    if edad >= 55:
+        return 1.1
+    if edad >= 45:
+        return 1.05
     return 1.0
 
 
@@ -495,3 +501,139 @@ def personalizar_riesgo(
             {"nombre": n, "categoria": c, "factor": v} for n, c, v in factores
         ],
     }
+
+
+def _sigmoid_hi(hi: float) -> float:
+    """Probabilidad base de riesgo por calor a partir del Heat Index (0-1).
+
+    Sigmoide suave centrada en ~32°C (misma forma que grid_risk._hi_a_probabilidad).
+    """
+    if hi <= 20:
+        return 0.05
+    if hi >= 50:
+        return 0.95
+    return 1.0 / (1.0 + math.exp(-(hi - 32) / 6.0))
+
+
+def _factor_suave(producto_bruto: float, techo: float = 8.0, escala: float = 5.0) -> float:
+    """Compresión monótona y saturante del producto de factores.
+
+    El cap DURO de ``personalizar_riesgo`` (3.0 por defecto) es correcto para la
+    clasificación puntual, pero colapsa al mismo valor perfiles muy distintos
+    (p. ej. un albañil de 57 con cardiopatía y otro de 32 sano, ambos con el
+    factor ocupación ×2.2, saturan el cap). Para la CURVA horaria usamos en su
+    lugar una saturación suave: a mayor riesgo, mayor factor, sin meseta, así
+    cada perfil mantiene su propia línea. Los factores protectores (<1) se
+    respetan tal cual.
+    """
+    if producto_bruto <= 1.0:
+        return producto_bruto
+    return 1.0 + (techo - 1.0) * (1.0 - math.exp(-(producto_bruto - 1.0) / escala))
+
+
+def riesgo_horario_acumulado(
+    perfil_horario: list[dict],
+    perfil: dict,
+    umbral: float = 28.0,
+    decay: float = 0.85,
+    k: float = 0.045,
+) -> list[dict]:
+    """Curva de riesgo por hora (0-1) para un perfil concreto.
+
+    Combina dos cosas y por eso NO es una recta:
+      1. Riesgo instantáneo de cada hora: el Heat Index de esa hora, llevado a
+         probabilidad y personalizado con los factores del perfil (edad, sexo,
+         salud, ocupación, aclimatación…). Por eso sube y baja con el calor.
+      2. Carga térmica ACUMULADA: el calor es acumulativo. Se acumula el exceso
+         de HI sobre `umbral` con una fugacidad `decay` (el cuerpo no se recupera
+         del todo si no refresca), así que a igual HI la tarde pesa más que la
+         mañana. El acumulado añade riesgo en espacio de odds (× (1 + k·carga)).
+
+    Devuelve ``[{"hora": h, "riesgo": r, "hi": HI}, ...]`` ordenado por hora.
+    """
+    if not perfil_horario:
+        return []
+
+    # Factor de personalización (constante en el día) calculado una sola vez.
+    # Usamos el producto BRUTO con saturación suave (no el cap duro), para que
+    # perfiles distintos den curvas distintas y no una recta compartida.
+    perfil_sin_horario = {kk: vv for kk, vv in perfil.items() if kk != "_perfil_horario"}
+    factor = _factor_suave(personalizar_riesgo(0.5, perfil_sin_horario, tipo="calor")["producto_bruto"])
+
+    horas = sorted(
+        (h for h in perfil_horario if h.get("HI") is not None),
+        key=lambda e: e["hora"],
+    )
+    carga = 0.0
+    out = []
+    for e in horas:
+        hi = float(e["HI"])
+        carga = max(0.0, decay * carga + (hi - umbral))
+        base = _sigmoid_hi(hi)
+        # Personalización + carga acumulada, ambas en espacio de odds.
+        if 0.0 < base < 1.0:
+            odds = (base / (1.0 - base)) * factor * (1.0 + k * carga)
+            r = odds / (1.0 + odds)
+        else:
+            r = base
+        out.append({
+            "hora": int(e["hora"]),
+            "riesgo": round(min(r, 0.99), 4),
+            "hi": round(hi, 1),
+            "temp": e.get("temp"),
+        })
+    return out
+
+
+def pico_riesgo_actividad(curva: list[dict], perfil: dict) -> float | None:
+    """Riesgo máximo de la curva durante la ventana de actividad del perfil.
+
+    Es el número que representa mejor a una persona (su peor momento durante la
+    jornada) y, al venir de la curva suavizada, diferencia perfiles distintos.
+    """
+    if not curva:
+        return None
+    h_ini = perfil.get("hora_inicio")
+    dur = perfil.get("duracion_actividad_h")
+    if h_ini is not None and dur:
+        win = [c["riesgo"] for c in curva if h_ini <= c["hora"] < h_ini + dur]
+        if win:
+            return round(max(win), 4)
+    return round(max(c["riesgo"] for c in curva), 4)
+
+
+def recomendar_horario(
+    perfil_horario: list[dict],
+    perfil: dict,
+    duracion_h: float | None = None,
+) -> dict | None:
+    """Recomienda la ventana de `duracion_h` horas con MENOR riesgo acumulado.
+
+    Usa :func:`riesgo_horario_acumulado` y busca la ventana contigua de menor
+    riesgo medio, dando prioridad a horas de luz razonables (6-21h). Devuelve
+    ``{"hora_inicio", "hora_fin", "riesgo_medio", "riesgo_actual"}`` o None.
+    """
+    curva = riesgo_horario_acumulado(perfil_horario, perfil)
+    if not curva:
+        return None
+    dur = int(round(duracion_h or perfil.get("duracion_actividad_h") or 2))
+    dur = max(1, dur)
+    por_hora = {c["hora"]: c["riesgo"] for c in curva}
+    horas_dia = [h for h in range(6, 22) if h in por_hora]
+    if len(horas_dia) < dur:
+        horas_dia = sorted(por_hora)
+    mejor = None
+    for i in range(0, len(horas_dia) - dur + 1):
+        tramo = horas_dia[i:i + dur]
+        if tramo[-1] - tramo[0] != dur - 1:
+            continue  # ventana no contigua
+        medio = sum(por_hora[h] for h in tramo) / dur
+        if mejor is None or medio < mejor["riesgo_medio"]:
+            mejor = {"hora_inicio": tramo[0], "hora_fin": tramo[0] + dur, "riesgo_medio": round(medio, 4)}
+    if mejor is None:
+        return None
+    h_ini_actual = perfil.get("hora_inicio")
+    if h_ini_actual is not None:
+        actual = [por_hora[h] for h in range(int(h_ini_actual), int(h_ini_actual) + dur) if h in por_hora]
+        mejor["riesgo_actual"] = round(sum(actual) / len(actual), 4) if actual else None
+    return mejor

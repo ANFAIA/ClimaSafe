@@ -6,6 +6,7 @@
 <title>ClimaSafeAI - Riesgo Termico</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --seguro: #27ae60;
@@ -190,6 +191,9 @@
   #results.visible { display: block; }
 
   #map { height: 260px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--border); cursor: crosshair; }
+  #risk-chart { width: 100% !important; height: 280px !important; }
+  .btn-mode { transition: all 0.2s; font-size: 0.9rem; }
+  .btn-mode.active { background: var(--accent) !important; color: #fff !important; }
 
   .checkbox-grid {
     display: flex; flex-wrap: wrap; gap: 4px;
@@ -266,7 +270,7 @@
     <div class="card">
       <div class="card-title">Ubicacion</div>
       <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
-        Escribe una provincia o haz clic en el mapa para seleccionar la ubicacion.
+        Escribe una provincia o haz clic en el mapa.
       </p>
       <div class="form-row">
         <div class="form-group" style="flex:3">
@@ -274,40 +278,51 @@
           <input type="text" id="provincia" value="Madrid" placeholder="Madrid / 40.4168,-3.7038">
         </div>
       </div>
-      <div class="form-row" style="gap:8px;margin-bottom:8px">
+
+      <div class="form-row" style="gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+        <button class="btn-mode active" data-mode="individual" onclick="setModoPaso1('individual')" style="flex:1;padding:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Individual</button>
+        <button class="btn-mode" data-mode="grupo" onclick="setModoPaso1('grupo')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Grupo</button>
+      </div>
+
+      <div id="step1-individual-controls" class="form-row" style="gap:8px;margin-bottom:8px">
         <select id="perfil-select" style="flex:2;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
           <option value="">-- Cargar perfil --</option>
         </select>
         <button class="btn" onclick="cargarPerfilSeleccionado()" id="btn-load-profile" style="padding:8px 16px">Cargar</button>
         <button class="btn btn-outline" onclick="borrarPerfil()" id="btn-delete-profile" style="padding:8px 16px;display:none">✕</button>
+        <button class="btn btn-outline" onclick="irAdmin()" style="padding:8px 12px;background:var(--accent);color:#fff" title="Administrar usuarios">👥 Usuarios</button>
       </div>
       <div id="map"></div>
+      <div id="step1-individual">
       <div class="btn-row">
         <button class="btn" onclick="irPaso2()">Siguiente</button>
+      </div>
+      </div>
+
+      <div id="step1-grupo" style="display:none">
+      <div class="btn-row">
+        <button class="btn" onclick="irPaso2()">Siguiente</button>
+      </div>
       </div>
     </div>
   </div>
 
   <div class="step" id="step2">
     <div class="card">
-      <div class="card-title">Datos personales</div>
+      <div id="individual-form">
+      <div class="collapse-header" onclick="togglePerfilCollapse()" id="perfil-collapse-header">
+        <span class="card-title" style="margin-bottom:0;border:none;padding:0">Datos personales</span>
+        <span style="font-size:0.85rem;color:var(--text-light)" id="perfil-resumen"></span>
+        <span id="perfil-toggle">+</span>
+      </div>
+      <div id="perfil-body" class="collapse-body">
       <div class="form-row">
-        <div class="form-group"><label>Edad</label><input type="number" id="edad" min="0" max="120"></div>
-        <div class="form-group"><label>Sexo</label><select id="sexo"><option value="">-</option><option value="hombre">Hombre</option><option value="mujer">Mujer</option></select></div>
+        <div class="form-group"><label>Fecha de nacimiento</label><input type="date" id="fecha_nacimiento" onchange="calcularEdad();actualizarResumenPerfil()"></div>
+        <div class="form-group"><label>Edad (calculada)</label><input type="text" id="edad" readonly style="background:var(--bg);color:var(--text-light)"></div>
+        <div class="form-group"><label>Sexo</label><select id="sexo" onchange="actualizarResumenPerfil()"><option value="">-</option><option value="hombre">Hombre</option><option value="mujer">Mujer</option></select></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label>% Grasa <span style="font-weight:400;color:var(--text-light);font-size:0.7rem">(solo aplica en esfuerzo)</span></label><input type="number" id="porcentaje_grasa" min="0" max="70" step="0.1"></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Actividad</label>
-          <select id="nivel_actividad">
-            <option value="">-</option><option value="reposo">Reposo</option>
-            <option value="ligera">Ligera</option><option value="moderada">Moderada</option>
-            <option value="intensa">Intensa</option><option value="muy_intensa">Muy intensa</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Hora inicio (0-23)</label><input type="number" id="hora_inicio" min="0" max="23"></div>
-        <div class="form-group"><label>Duracion (h)</label><input type="number" id="duracion_actividad_h" min="0" max="24" step="0.5"></div>
-      </div>
-      <div class="form-row">
         <div class="form-group"><label>Aclimatado</label>
           <select id="aclimatado"><option value="">-</option><option value="si">Si</option><option value="no">No</option></select>
         </div>
@@ -320,19 +335,34 @@
           </select>
         </div>
       </div>
+      <div id="factor-sections-collapsed"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Actividad</label>
+          <select id="nivel_actividad">
+            <option value="">-</option><option value="reposo">Reposo</option>
+            <option value="ligera">Ligera</option><option value="moderada">Moderada</option>
+            <option value="intensa">Intensa</option><option value="muy_intensa">Muy intensa</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Hora inicio (0-23)</label><input type="number" id="hora_inicio" min="0" max="23"></div>
+        <div class="form-group"><label>Duracion (h)</label><input type="number" id="duracion_actividad_h" min="0" max="24" step="0.5"></div>
+      </div>
       <div id="factor-sections"></div>
       <div id="profile-name-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:999;justify-content:center;align-items:center">
         <div style="background:var(--card-bg);border-radius:12px;padding:24px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-          <div style="font-size:1rem;font-weight:600;margin-bottom:12px">Nombre del perfil</div>
-          <input type="text" id="profile-name-input" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1rem;box-sizing:border-box">
+          <div style="font-size:1rem;font-weight:600;margin-bottom:12px">Guardar perfil</div>
+          <input type="text" id="profile-name-input" placeholder="Nombre (alias)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1rem;box-sizing:border-box;margin-bottom:8px">
+          <input type="text" id="profile-tags-input" placeholder="Etiquetas: electricista, fontanero" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-light);font-size:0.85rem;box-sizing:border-box">
           <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
             <button class="btn btn-outline" onclick="cerrarModalPerfil()" style="padding:8px 20px">Cancelar</button>
             <button class="btn" onclick="guardarPerfilConNombre()" style="padding:8px 20px">Guardar</button>
           </div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <span id="profile-indicator" style="display:none;font-size:0.8rem;color:var(--text-light)"></span>
+        <span id="profile-tags-display" style="display:none;font-size:0.8rem"></span>
       </div>
       <div class="form-row" style="margin-top:12px;align-items:center">
         <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
@@ -342,10 +372,169 @@
         </div>
         <input type="hidden" id="target-date" value="">
       </div>
-      <div class="btn-row">
+      <div class="btn-row" id="individual-btns">
         <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
         <button class="btn btn-outline" onclick="guardarPerfil()" style="background:#2ecc71;color:#fff">Guardar perfil</button>
         <button class="btn" onclick="predecir()" id="btn-predict">Predecir riesgo</button>
+      </div>
+      </div>
+
+      <div id="grupo-form" style="display:none">
+        <div class="form-row" style="gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+          <button class="btn-mode active" data-mode="numero" onclick="setSubModoPaso2('numero')" style="flex:1;padding:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Colectivo</button>
+          <button class="btn-mode" data-mode="etiqueta" onclick="setSubModoPaso2('etiqueta')" style="flex:1;padding:8px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Por etiqueta</button>
+        </div>
+
+        <div id="grupo-numero">
+          <div class="form-row">
+            <div class="form-group"><label>Número de personas</label><input type="number" id="grupo-cantidad" min="1" max="100000" value="100"></div>
+            <div class="form-group"><label>Edad mínima</label><input type="number" id="grupo-edad-min" min="0" max="100" value="18"></div>
+            <div class="form-group"><label>Edad máxima</label><input type="number" id="grupo-edad-max" min="0" max="100" value="80"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>% Hombres</label><input type="number" id="grupo-pct-hombres" min="0" max="100" value="50"></div>
+            <div class="form-group"><label>Tipo actividad</label>
+              <select id="grupo-tipo-actividad" onchange="onCambiarTipoActividad('grupo-')">
+                <option value="trabajo">Trabajo</option>
+                <option value="deporte" selected>Deporte</option>
+                <option value="competicion">Competición</option>
+              </select>
+            </div>
+            <div class="form-group" id="grupo-actividad-group">
+              <label>Intensidad</label>
+              <select id="grupo-actividad">
+                <option value="reposo">Reposo</option>
+                <option value="ligera" selected>Ligera</option>
+                <option value="moderada">Moderada</option>
+                <option value="intensa">Intensa</option>
+                <option value="muy_intensa">Muy intensa</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row" id="grupo-ocupacion-row" style="display:none">
+            <div class="form-group"><label>Ocupación específica</label>
+              <select id="grupo-ocupacion">
+                <option value="oficina">Oficina / sedentario</option>
+                <option value="reparto">Reparto / conducción</option>
+                <option value="mantenimiento">Mantenimiento exterior / jardinería</option>
+                <option value="construccion">Construcción / albañilería</option>
+                <option value="campo">Campo / agricultura</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row" id="grupo-deporte-row" style="display:none">
+            <div class="form-group"><label>Deporte específico</label>
+              <select id="grupo-deporte">
+                <option value="correr">Correr</option>
+                <option value="ciclismo">Ciclismo</option>
+                <option value="futbol">Fútbol</option>
+                <option value="tenis">Tenis</option>
+                <option value="padel">Pádel</option>
+                <option value="senderismo">Senderismo</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Hora inicio</label><input type="number" id="grupo-hora" min="0" max="23" value="10"></div>
+            <div class="form-group"><label>Duración (h)</label><input type="number" id="grupo-duracion" min="0" max="24" step="0.5" value="2"></div>
+            <div class="form-group"><label>¿Aclimatados?</label>
+              <select id="grupo-aclimatado"><option value="">Mixto</option><option value="si">Sí</option><option value="no">No</option></select>
+            </div>
+          </div>
+
+          <details style="margin-top:8px;background:var(--bg);border-radius:8px;border:1px solid var(--border);padding:6px 10px">
+            <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;color:var(--text-light)">Factores de riesgo del grupo (porcentaje de afectados)</summary>
+            <div class="form-row" style="margin-top:6px">
+              <div class="form-group"><label>% Obesidad/grasa alta</label><input type="number" id="grupo-pct-grasa" min="0" max="100" value="0"></div>
+              <div class="form-group"><label>% Cardiovascular</label><input type="number" id="grupo-pct-cardio" min="0" max="100" value="0"></div>
+              <div class="form-group"><label>% Diabetes</label><input type="number" id="grupo-pct-diabetes" min="0" max="100" value="0"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>% Respiratoria</label><input type="number" id="grupo-pct-respiratoria" min="0" max="100" value="0"></div>
+              <div class="form-group"><label>% Salud mental</label><input type="number" id="grupo-pct-mental" min="0" max="100" value="0"></div>
+              <div class="form-group"><label>% No aclimatados</label><input type="number" id="grupo-pct-no-acl" min="0" max="100" value="0"></div>
+            </div>
+          </details>
+        </div>
+
+        <div id="grupo-etiqueta" style="display:none">
+          <div class="form-row">
+            <div class="form-group"><label>Etiqueta</label>
+              <select id="grupo-tag-select">
+                <option value="">-- Seleccionar etiqueta --</option>
+              </select>
+            </div>
+          </div>
+          <div id="grupo-tag-count" style="font-size:0.85rem;color:var(--text-light);margin-bottom:8px"></div>
+          <div style="margin:8px 0;padding:10px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:0.8rem;font-weight:600;color:var(--text-light);margin-bottom:6px">Sobreescribir (opcional) — si se deja vacío usa los datos guardados de cada persona</div>
+            <div class="form-row">
+              <div class="form-group"><label>Tipo actividad</label>
+                <select id="grupo-tag-tipo-actividad" onchange="onCambiarTipoActividad('grupo-tag-')">
+                  <option value="">-- Usar guardado --</option>
+                  <option value="trabajo">Trabajo</option>
+                  <option value="deporte">Deporte</option>
+                  <option value="competicion">Competición</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Intensidad</label>
+                <select id="grupo-tag-actividad">
+                  <option value="">-- Usar guardado --</option>
+                  <option value="reposo">Reposo</option>
+                  <option value="ligera">Ligera</option>
+                  <option value="moderada">Moderada</option>
+                  <option value="intensa">Intensa</option>
+                  <option value="muy_intensa">Muy intensa</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" id="grupo-tag-ocupacion-row" style="display:none">
+              <div class="form-group"><label>Ocupación específica</label>
+                <select id="grupo-tag-ocupacion">
+                  <option value="">-- Usar guardado --</option>
+                  <option value="oficina">Oficina / sedentario</option>
+                  <option value="reparto">Reparto / conducción</option>
+                  <option value="mantenimiento">Mantenimiento exterior / jardinería</option>
+                  <option value="construccion">Construcción / albañilería</option>
+                  <option value="campo">Campo / agricultura</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" id="grupo-tag-deporte-row" style="display:none">
+              <div class="form-group"><label>Deporte específico</label>
+                <select id="grupo-tag-deporte">
+                  <option value="">-- Usar guardado --</option>
+                  <option value="correr">Correr</option>
+                  <option value="ciclismo">Ciclismo</option>
+                  <option value="futbol">Fútbol</option>
+                  <option value="tenis">Tenis</option>
+                  <option value="padel">Pádel</option>
+                  <option value="senderismo">Senderismo</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Hora inicio</label><input type="number" id="grupo-tag-hora" min="0" max="23" placeholder="--"></div>
+              <div class="form-group"><label>Duración (h)</label><input type="number" id="grupo-tag-duracion" min="0" max="24" step="0.5" placeholder="--"></div>
+              <div class="form-group"><label>¿Aclimatados?</label>
+                <select id="grupo-tag-aclimatado"><option value="">-- Usar guardado --</option><option value="si">Sí</option><option value="no">No</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top:12px;align-items:center">
+          <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
+          <div style="display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:2px;border:1px solid var(--border)">
+            <button class="btn-date active" data-date="" onclick="setDate(this, '')">Hoy</button>
+            <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')">Mañana</button>
+          </div>
+          <input type="hidden" id="grupo-target-date" value="">
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
+          <button class="btn" onclick="predecirGrupo()" id="btn-predict-group">Predecir grupo</button>
+        </div>
       </div>
     </div>
   </div>
@@ -363,6 +552,12 @@
 
     <div class="card" id="final-card" style="display:none">
       <div class="final-result" id="final-result"></div>
+      <div id="final-extras" style="display:none;flex-wrap:wrap;gap:4px;padding:4px 16px 8px;align-items:center"></div>
+    </div>
+
+    <div class="card" id="group-schedule-card" style="display:none">
+      <div class="card-title">Horario y tiempo esperado</div>
+      <div class="opt-time" id="group-schedule"></div>
     </div>
 
     <div class="card" id="hourly-card" style="display:none">
@@ -371,6 +566,51 @@
       <div class="hourly-bar" id="hourly-bar"></div>
       <div id="hourly-legend" style="margin-top:6px;display:flex;flex-wrap:wrap"></div>
       <div id="activity-bar" style="margin-top:8px;font-size:0.85rem"></div>
+    </div>
+
+    <div class="card" id="graph-card" style="display:none">
+      <div class="card-title">Riesgo por hora</div>
+      <div style="position:relative">
+        <canvas id="risk-chart"></canvas>
+      </div>
+      <div id="graph-age-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;font-size:0.8rem"></div>
+    </div>
+
+    <div class="card" id="group-detail-card" style="display:none">
+      <div class="card-title">Personas por etiqueta</div>
+      <div id="group-person-list"></div>
+    </div>
+
+    <div class="card" id="results-map-card" style="display:none">
+      <div class="card-title">Mapa de riesgo de la zona</div>
+      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:8px">
+        Zonas donde deberías evitar la actividad y donde es seguro según tu perfil.
+      </p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:0.8rem">
+        <div class="form-group" style="min-width:120px"><label>Radio (km)</label>
+          <input type="range" id="rmap-radio" min="0.5" max="25" step="0.5" value="5" style="width:100%" oninput="document.getElementById('rmap-radio-val').textContent=this.value+' km'">
+          <span id="rmap-radio-val" style="font-size:0.75rem;color:var(--text-light)">5 km</span>
+        </div>
+        <div class="form-group" style="min-width:120px"><label>Perfil</label>
+          <select id="rmap-perfil" style="width:100%;padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:0.8rem">
+            <option value="vulnerable">Más restrictivo</option>
+            <option value="mayor">Adulto mayor (60+)</option>
+            <option value="adulto">Adulto (30-59)</option>
+            <option value="joven">Joven (18-29)</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn" onclick="actualizarMapaResultados()" style="padding:6px 14px;font-size:0.85rem">Actualizar mapa</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;font-size:0.75rem;align-items:center;margin-bottom:6px">
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#27ae60;display:inline-block"></span> Seguro</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#f39c12;display:inline-block"></span> Precaución</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#e74c3c;display:inline-block"></span> Peligro</span>
+        <span id="rmap-stats" style="margin-left:auto;font-size:0.7rem;color:var(--text-light)"></span>
+      </div>
+      <div id="results-map-container" style="height:340px;border-radius:8px;border:1px solid var(--border)"></div>
+      <div id="rmap-info" style="margin-top:6px;font-size:0.8rem;color:var(--text-light)"></div>
     </div>
 
     <div class="card" id="override-card" style="display:none">
@@ -410,14 +650,40 @@
     <div class="btn-row" style="justify-content:center">
       <button class="btn btn-outline" onclick="nuevaConsulta()">Nueva consulta</button>
     </div>
+
+  </div>
+</div>
+
+<div class="step" id="step-admin">
+  <div class="card">
+    <div class="card-title">Administrar usuarios</div>
+
+    <div style="margin-bottom:12px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:6px">Etiquetas disponibles</div>
+      <div id="admin-tags-list" style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:8px;min-height:24px">
+        <span style="color:var(--text-light);font-size:0.85rem">Cargando...</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" id="admin-nueva-tag" placeholder="Nueva etiqueta..." style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);font-size:0.85rem" onkeydown="if(event.key==='Enter')crearTagDisponible()">
+        <button class="btn" onclick="crearTagDisponible()" style="padding:6px 14px;font-size:0.85rem">Crear</button>
+      </div>
+    </div>
+
+    <div id="admin-user-list" style="margin-top:8px">
+      <div style="text-align:center;color:var(--text-light)">Cargando...</div>
+    </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-outline" onclick="volverDeAdmin()">Volver</button>
+    </div>
   </div>
 </div>
 
 <script>
 const CLASSES = ["SEGURO", "PRECAUCION", "PELIGRO"];
+let currentMode = 'individual';
+let _vieneDeAdmin = false;
 let map = null;
 let mapMarker = null;
-
 function initMap(lat, lon) {
   if (!map) {
     map = L.map('map', { zoomControl: true }).setView([lat, lon], 8);
@@ -437,10 +703,16 @@ function initMap(lat, lon) {
   ponerMarcador(lat, lon);
 }
 
-function ponerMarcador(lat, lon) {
+function ponerMarcador(lat, lon, colorRiesgo) {
   if (mapMarker) mapMarker.remove();
+  const fillColor = colorRiesgo || '#3498db';
+  const borderColor = colorRiesgo || '#2980b9';
   mapMarker = L.circleMarker([lat, lon], {
-    radius: 10, fillColor: '#3498db', color: '#2980b9', weight: 2, fillOpacity: 0.7,
+    radius: 12,
+    fillColor: fillColor,
+    color: borderColor,
+    weight: 3,
+    fillOpacity: 0.8,
   }).addTo(map).bindPopup(lat.toFixed(4) + ', ' + lon.toFixed(4));
 }
 
@@ -450,9 +722,18 @@ function irPaso2() {
   document.getElementById('dot1').classList.remove('active');
   document.getElementById('dot1').classList.add('done');
   document.getElementById('dot2').classList.add('active');
+  const modo = currentMode || 'individual';
+  document.getElementById('individual-form').style.display = modo === 'individual' ? 'block' : 'none';
+  document.getElementById('grupo-form').style.display = modo === 'grupo' ? 'block' : 'none';
+  if (modo === 'grupo') setSubModoPaso2('numero');
 }
 
 function irPaso1() {
+  if (_vieneDeAdmin) {
+    _vieneDeAdmin = false;
+    irAdmin();
+    return;
+  }
   document.getElementById('step2').classList.remove('visible');
   document.getElementById('step1').classList.add('visible');
   document.getElementById('dot2').classList.remove('active');
@@ -471,48 +752,54 @@ const CATEGORY_MAP = {
 const FISIO_BOOLEANS = {
   falta_sueno: { field: 'falta_sueno', label: 'Dormí mal / menos de 6h' },
   enfermedad_reciente: { field: 'enfermedad_reciente', label: 'Estoy resfriado / enfermo' },
+  alcohol_reciente: { field: 'alcohol_reciente', label: 'Consumí alcohol recientemente' },
 };
 
 const EXCLUDED = new Set(['no_aclimatado', 'sexo_mujer', 'grasa_alta_esfuerzo', 'grasa_baja', 'grasa_alta_protector']);
 
 async function renderFactorSections() {
   const container = document.getElementById('factor-sections');
+  const containerCollapsed = document.getElementById('factor-sections-collapsed');
   if (!container) return;
   try {
     const res = await fetch('/api/factores');
     const data = await res.json();
     const calor = data.calor || {};
+    let htmlCollapsed = '';
     let html = '';
 
-    // Categorías con field type "set"
+    // Categorías con field type "set" (comorbilidades, farmacos, situacional)
+    // → dentro del colapsable (son datos estáticos)
     for (const [cat, cfg] of Object.entries(CATEGORY_MAP)) {
-      const items = calor[cat] || [];
+      let items = calor[cat] || [];
+      if (cat === 'situacional') items = items.filter(f => f.clave !== 'alcohol');
       if (!items.length) continue;
-      html += '<div class="form-row"><div class="form-group"><label>' + cfg.label + '</label>';
-      html += '<div class="checkbox-grid" data-field="' + cfg.field + '">';
-      html += '<label class="full"><input type="checkbox" value="" class="chk-none" checked onchange="toggleNone(this)"> Ninguna</label>';
+      htmlCollapsed += '<div class="form-row"><div class="form-group"><label>' + cfg.label + '</label>';
+      htmlCollapsed += '<div class="checkbox-grid" data-field="' + cfg.field + '">';
+      htmlCollapsed += '<label class="full"><input type="checkbox" value="" class="chk-none" checked onchange="toggleNone(this)"> Ninguna</label>';
       for (const f of items) {
-        html += '<label><input type="checkbox" value="' + f.clave + '" class="chk-dynamic"> ' + f.nombre + '</label>';
+        htmlCollapsed += '<label><input type="checkbox" value="' + f.clave + '" class="chk-dynamic"> ' + f.nombre + '</label>';
       }
-      html += '</div></div></div>';
+      htmlCollapsed += '</div></div></div>';
     }
 
-    // Fisiológicos → booleans
+    // Fisiológicos → siempre visibles (factores adicionales)
     const fisioItems = (calor.fisiologico || []).filter(f => !EXCLUDED.has(f.clave));
     if (fisioItems.length) {
       html += '<div class="form-row"><div class="form-group"><label>Factores adicionales</label>';
-      html += '<div class="checkbox-grid">';
+      html += '<div class="checkbox-grid" style="flex-wrap:nowrap">';
       for (const f of fisioItems) {
         const bCfg = FISIO_BOOLEANS[f.clave];
         if (bCfg) {
           html += '<label><input type="checkbox" value="' + bCfg.field + '" class="chk-boolean" data-field="' + bCfg.field + '"> ' + bCfg.label + '</label>';
         }
       }
+      html += '<label><input type="checkbox" value="alcohol_reciente" class="chk-boolean" data-field="alcohol_reciente"> Consumí alcohol recientemente</label>';
       html += '<label><input type="checkbox" value="fiesta" class="chk-boolean" data-field="fiesta"> Fiesta / celebración (alcohol + baile + horario nocturno)</label>';
       html += '</div></div></div>';
     }
 
-    // Selectores adicionales (ocupación, entrenado, deporte)
+    // Selectores adicionales (ocupación, entrenado, deporte) → siempre visibles
     html += `<div class="form-row" style="margin-top:6px">
       <div class="form-group"><label>Exposición laboral</label>
         <select id="ocupacion">
@@ -542,6 +829,7 @@ async function renderFactorSections() {
       </div>
     </div>`;
 
+    if (containerCollapsed) containerCollapsed.innerHTML = htmlCollapsed;
     container.innerHTML = html;
   } catch (_) {
     container.innerHTML = '<p style="color:var(--text-light);font-size:0.85rem">Error al cargar factores</p>';
@@ -567,10 +855,42 @@ function setDate(btn, val) {
   }
 }
 
+function calcularEdad() {
+  const fn = document.getElementById('fecha_nacimiento').value;
+  if (!fn) { document.getElementById('edad').value = ''; return; }
+  const hoy = new Date();
+  const nac = new Date(fn + 'T12:00:00');
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  document.getElementById('edad').value = edad;
+}
+
+function togglePerfilCollapse() {
+  const body = document.getElementById('perfil-body');
+  const toggle = document.getElementById('perfil-toggle');
+  body.classList.toggle('open');
+  toggle.textContent = body.classList.contains('open') ? '−' : '+';
+}
+
+function actualizarResumenPerfil() {
+  const el = document.getElementById('perfil-resumen');
+  const edad = document.getElementById('edad').value;
+  const sexo = document.getElementById('sexo').value;
+  const deporte = document.getElementById('deporte')?.value;
+  const parts = [];
+  if (edad) parts.push(edad + ' años');
+  if (sexo) parts.push(sexo);
+  if (deporte) parts.push(deporte);
+  el.textContent = parts.length ? ' (' + parts.join(', ') + ')' : '';
+}
+
 function getPerfil() {
   const p = {};
   const edad = document.getElementById('edad').value;
   if (edad) p.edad = parseInt(edad);
+  const fn = document.getElementById('fecha_nacimiento').value;
+  if (fn) p.fecha_nacimiento = fn;
   const sexo = document.getElementById('sexo').value;
   if (sexo) p.sexo = sexo;
   const grasa = document.getElementById('porcentaje_grasa').value;
@@ -618,6 +938,55 @@ function getPerfil() {
   });
 
   return p;
+}
+
+function onCambiarTipoActividad(prefix) {
+  const tipo = document.getElementById(prefix + 'tipo-actividad').value;
+  const ocupRow = document.getElementById(prefix + 'ocupacion-row');
+  const depRow = document.getElementById(prefix + 'deporte-row');
+  if (tipo === 'trabajo') {
+    ocupRow.style.display = 'flex';
+    depRow.style.display = 'none';
+  } else if (tipo === 'deporte' || tipo === 'competicion') {
+    ocupRow.style.display = 'none';
+    depRow.style.display = 'flex';
+  } else {
+    ocupRow.style.display = 'none';
+    depRow.style.display = 'none';
+  }
+}
+
+function toggleGrupoExpl(id) {
+  const el = document.getElementById('gex-' + id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function generarTextoExplicacion(ex, factores) {
+  // En vista de grupo mostramos lo que DIFERENCIA a cada persona (sus factores
+  // personales), no el modelo meteorológico (idéntico para todos y confuso).
+  let html = '';
+  const fs = (factores || [])
+    .filter(f => Math.abs((f.factor ?? 1) - 1) > 0.001)
+    .sort((a, b) => Math.abs((b.factor ?? 1) - 1) - Math.abs((a.factor ?? 1) - 1))
+    .slice(0, 4);
+  if (fs.length) {
+    html += '<div style="margin-top:2px;font-weight:500">Factores personales:</div>';
+    for (const f of fs) {
+      const sube = (f.factor ?? 1) >= 1;
+      html += '<div style="display:flex;justify-content:space-between;padding:1px 0">'
+        + '<span>' + f.nombre + '</span>'
+        + '<span style="color:' + (sube ? '#e74c3c' : '#27ae60') + '">×' + Number(f.factor).toFixed(2) + '</span></div>';
+    }
+  }
+  // Explicación física (sensación térmica durante la ventana de actividad).
+  for (const [mod, det] of Object.entries(ex?.detalles ?? {})) {
+    if (mod === 'Formula' && det.explicaciones?.length) {
+      for (const exp of det.explicaciones) {
+        html += '<div style="margin:4px 0">' + exp + '</div>';
+      }
+    }
+  }
+  return html || '<div style="color:var(--text-light)">Sin datos</div>';
 }
 
 async function predecir() {
@@ -672,13 +1041,546 @@ async function predecir() {
   }
 }
 
+function setModoPaso1(modo) {
+  currentMode = modo;
+  document.querySelectorAll('#step1 .btn-mode[data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === modo);
+    b.style.background = b.dataset.mode === modo ? 'var(--accent)' : 'var(--bg)';
+    b.style.color = b.dataset.mode === modo ? '#fff' : 'var(--text-light)';
+  });
+  document.getElementById('step1-individual-controls').style.display = modo === 'individual' ? 'flex' : 'none';
+  document.getElementById('step1-individual').style.display = modo === 'individual' ? 'block' : 'none';
+  document.getElementById('step1-grupo').style.display = modo === 'grupo' ? 'block' : 'none';
+  const mapEl = document.getElementById('map');
+  mapEl.classList.remove('mapa-mode');
+  if (map) setTimeout(() => map.invalidateSize(), 100);
+}
+
+function setSubModoPaso2(modo) {
+  document.querySelectorAll('#grupo-form .btn-mode[data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === modo);
+    b.style.background = b.dataset.mode === modo ? 'var(--accent)' : 'var(--bg)';
+    b.style.color = b.dataset.mode === modo ? '#fff' : 'var(--text-light)';
+  });
+  document.getElementById('grupo-numero').style.display = modo === 'numero' ? 'block' : 'none';
+  document.getElementById('grupo-etiqueta').style.display = modo === 'etiqueta' ? 'block' : 'none';
+  if (modo === 'etiqueta') cargarTags();
+}
+
+let _resultsMap = null;
+let _resultsMapGrid = null;
+
+function initResultsMap(lat, lon, zoom) {
+  const container = document.getElementById('results-map-container');
+  if (!container) return;
+  if (_resultsMap) {
+    _resultsMap.setView([lat, lon], zoom);
+    setTimeout(() => _resultsMap.invalidateSize(), 100);
+    return;
+  }
+  _resultsMap = L.map(container, { zoomControl: true }).setView([lat, lon], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(_resultsMap);
+  setTimeout(() => _resultsMap.invalidateSize(), 200);
+}
+
+async function calcularMapaResultados(latOverride, lonOverride) {
+  let lat, lon;
+  if (latOverride != null && lonOverride != null) {
+    lat = latOverride;
+    lon = lonOverride;
+  } else {
+    const d = window._ultimoResultado;
+    if (!d || !d.weather) return;
+    lat = d.weather.lat;
+    lon = d.weather.lon;
+  }
+  if (lat == null || lon == null) return;
+
+  const radio = parseFloat(document.getElementById('rmap-radio').value) || 5;
+  const perfilId = document.getElementById('rmap-perfil').value;
+  const d = window._ultimoResultado;
+
+  // El mapa se adapta al modo elegido:
+  //  - individual  -> perfil del usuario (d.perfil_usuario)
+  //  - etiqueta    -> el más restrictivo de los perfiles con esa etiqueta
+  //  - colectivo   -> peor caso del rango
+  // En etiqueta/colectivo el backend devuelve d.perfil_mapa.
+  const perfilAdaptado = (d && (d.perfil_usuario || d.perfil_mapa)) || null;
+
+  try {
+    if (perfilAdaptado) {
+      const perfil = { ...perfilAdaptado };
+      const res = await fetch('/api/riesgo-zona', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat, lon, radio_km: radio,
+          perfil_id: perfilId,
+          perfil,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) return;
+      pintarMapaResultados(data, lat, lon);
+    } else {
+      // Sin perfil disponible: usar el perfil fijo del selector
+      const res = await fetch(`/api/riesgo-zona?lat=${lat}&lon=${lon}&radio_km=${radio}&perfil=${perfilId}`);
+      const data = await res.json();
+      if (data.error) return;
+      pintarMapaResultados(data, lat, lon);
+    }
+  } catch {}
+}
+
+function actualizarMapaResultados() {
+  const provVal = document.getElementById('provincia').value.trim();
+  const cm = provVal.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/);
+  if (cm) {
+    calcularMapaResultados(parseFloat(cm[1]), parseFloat(cm[2]));
+  } else {
+    calcularMapaResultados();
+  }
+}
+
+function pintarMapaResultados(data, lat, lon) {
+  const cells = data.celdas || [];
+  if (!cells.length) return;
+
+  initResultsMap(lat, lon, Math.max(9, 14 - Math.log2(parseFloat(document.getElementById('rmap-radio').value) || 5)));
+
+  if (_resultsMapGrid) {
+    _resultsMap.removeLayer(_resultsMapGrid);
+    _resultsMapGrid = null;
+  }
+
+  const colores = { 0: '#27ae60', 1: '#f39c12', 2: '#e74c3c' };
+  const rects = [];
+
+  const grid = {};
+  for (const c of cells) {
+    const key = c.lat.toFixed(3) + ',' + c.lon.toFixed(3);
+    if (!grid[key]) grid[key] = c;
+  }
+  const cellList = Object.values(grid);
+
+  let paso_lat = 0.01, paso_lon = 0.01;
+  if (cellList.length > 1) {
+    const lats = cellList.map(c => c.lat).sort((a,b) => a-b);
+    const lons = cellList.map(c => c.lon).sort((a,b) => a-b);
+    const dlat = lats[1] - lats[0];
+    const dlon = lons[1] - lons[0];
+    if (dlat > 0.0001) paso_lat = dlat;
+    if (dlon > 0.0001) paso_lon = dlon;
+  }
+
+  for (const c of cellList) {
+    const color = colores[c.riesgo] || '#999';
+    const rect = L.rectangle([
+      [c.lat - paso_lat / 2, c.lon - paso_lon / 2],
+      [c.lat + paso_lat / 2, c.lon + paso_lon / 2]
+    ], {
+      color: color, weight: 0.5, fillColor: color, fillOpacity: 0.45,
+    });
+    rect.bindPopup(`<strong>HI: ${c.hi != null ? c.hi + '°C' : 'N/A'}</strong><br>Riesgo: ${c.riesgo_label}<br>${c.lat}, ${c.lon}`);
+    rects.push(rect);
+  }
+
+  _resultsMapGrid = L.layerGroup(rects).addTo(_resultsMap);
+  setTimeout(() => _resultsMap.invalidateSize(), 100);
+
+  const stats = data.stats || {};
+  document.getElementById('rmap-stats').textContent = `${stats.total_celdas} celdas · 🟢${stats.seguro} 🟡${stats.precaucion} 🔴${stats.peligro}`;
+  const hi = data.resumen_horario || {};
+  document.getElementById('rmap-info').textContent = `HI pico: ${hi.hi_peak != null ? hi.hi_peak + '°C a las ' + hi.hora_pico + ':00' : 'N/A'} · Perfil: ${data.perfil_label || ''}`;
+  if (data.prob_personalizada != null) {
+    document.getElementById('rmap-info').textContent += ` · Riesgo personal: ${(data.prob_personalizada * 100).toFixed(0)}%`;
+  }
+  if (hi.ventana_actividad) {
+    document.getElementById('rmap-info').textContent += ` · Ventana: ${hi.ventana_actividad}`;
+  }
+}
+
+async function cargarTags() {
+  try {
+    const r = await fetch('/api/perfiles');
+    const perfiles = await r.json();
+    const tags = new Set();
+    perfiles.forEach(p => {
+      if (p.tags) p.tags.split(',').map(t => t.trim()).filter(Boolean).forEach(t => tags.add(t));
+    });
+    const sel = document.getElementById('grupo-tag-select');
+    sel.innerHTML = '<option value="">-- Seleccionar etiqueta --</option>';
+    tags.forEach(t => {
+      sel.innerHTML += '<option value="' + t + '">' + t + '</option>';
+    });
+    sel.onchange = function() {
+      const tag = this.value;
+      const count = tag ? perfiles.filter(p => p.tags && p.tags.split(',').map(s => s.trim()).includes(tag)).length : 0;
+      document.getElementById('grupo-tag-count').textContent = tag ? count + ' perfiles con esta etiqueta' : '';
+    };
+  } catch {}
+}
+
+async function predecirGrupo() {
+  const loading = document.getElementById('loading');
+  loading.classList.add('active');
+  document.getElementById('results').classList.remove('visible');
+
+  const provincia = document.getElementById('provincia').value.trim() || 'Madrid';
+  const coordMatch = provincia.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/);
+  let lat = null, lon = null;
+  if (coordMatch) { lat = parseFloat(coordMatch[1]); lon = parseFloat(coordMatch[2]); }
+
+  const targetDate = document.getElementById('grupo-target-date').value;
+
+  const esNumero = document.querySelector('#grupo-form .btn-mode.active[data-mode]')?.dataset.mode === 'numero';
+
+  try {
+    let body;
+    if (esNumero) {
+      const tipoAct = document.getElementById('grupo-tipo-actividad').value;
+      let actividad = document.getElementById('grupo-actividad').value || 'ligera';
+      let hora = parseFloat(document.getElementById('grupo-hora').value) || 10;
+      let duracion = parseFloat(document.getElementById('grupo-duracion').value) || 2;
+
+      if (tipoAct === 'trabajo') {
+        actividad = document.getElementById('grupo-actividad').value || 'moderada';
+        hora = parseFloat(document.getElementById('grupo-hora').value) || 8;
+        duracion = parseFloat(document.getElementById('grupo-duracion').value) || 8;
+      } else if (tipoAct === 'competicion') {
+        actividad = document.getElementById('grupo-actividad').value || 'muy_intensa';
+      }
+
+      body = {
+        tipo: 'numero',
+        tipo_actividad: tipoAct,
+        cantidad: parseInt(document.getElementById('grupo-cantidad').value) || 100,
+        edad_min: parseInt(document.getElementById('grupo-edad-min').value) || 18,
+        edad_max: parseInt(document.getElementById('grupo-edad-max').value) || 80,
+        pct_hombres: parseInt(document.getElementById('grupo-pct-hombres').value) || 50,
+        actividad: actividad,
+        hora_inicio: hora,
+        duracion: duracion,
+        aclimatado: document.getElementById('grupo-aclimatado').value || null,
+        ocupacion: document.getElementById('grupo-ocupacion').value,
+        deporte: document.getElementById('grupo-deporte').value,
+        pct_grasa_alta: parseInt(document.getElementById('grupo-pct-grasa').value) || 0,
+        pct_cardiovascular: parseInt(document.getElementById('grupo-pct-cardio').value) || 0,
+        pct_diabetes: parseInt(document.getElementById('grupo-pct-diabetes').value) || 0,
+        pct_respiratoria: parseInt(document.getElementById('grupo-pct-respiratoria').value) || 0,
+        pct_mental: parseInt(document.getElementById('grupo-pct-mental').value) || 0,
+        pct_no_aclimatados: parseInt(document.getElementById('grupo-pct-no-acl').value) || 0,
+      };
+    } else {
+      const tag = document.getElementById('grupo-tag-select').value;
+      if (!tag) { alert('Selecciona una etiqueta'); loading.classList.remove('active'); return; }
+      body = { tipo: 'etiqueta', tag };
+      // Overrides opcionales para por-etiqueta
+      const tagHora = document.getElementById('grupo-tag-hora').value;
+      if (tagHora) body.hora_inicio = parseFloat(tagHora);
+      const tagDur = document.getElementById('grupo-tag-duracion').value;
+      if (tagDur) body.duracion = parseFloat(tagDur);
+      const tagAct = document.getElementById('grupo-tag-actividad').value;
+      if (tagAct) body.actividad = tagAct;
+      const tagTipoAct = document.getElementById('grupo-tag-tipo-actividad').value;
+      if (tagTipoAct) {
+        body.tipo_actividad = tagTipoAct;
+        // Aplicar defaults según tipo_actividad si no hay override explícito
+        if (tagTipoAct === 'trabajo') {
+          if (!tagAct) body.actividad = 'moderada';
+          if (!tagHora) body.hora_inicio = 8;
+          if (!tagDur) body.duracion = 8;
+        } else if (tagTipoAct === 'competicion') {
+          if (!tagAct) body.actividad = 'muy_intensa';
+        } else if (tagTipoAct === 'deporte') {
+          if (!tagAct) body.actividad = 'moderada';
+        }
+      }
+      const tagAcli = document.getElementById('grupo-tag-aclimatado').value;
+      if (tagAcli) body.aclimatado = tagAcli;
+      const tagOcup = document.getElementById('grupo-tag-ocupacion').value;
+      if (tagOcup) body.ocupacion = tagOcup;
+      const tagDep = document.getElementById('grupo-tag-deporte').value;
+      if (tagDep) body.deporte = tagDep;
+    }
+
+    body.provincia = provincia;
+    if (lat != null) { body.lat = lat; body.lon = lon; }
+    if (targetDate) body.fecha = targetDate;
+
+    const res = await fetch('/api/riesgo-colectivo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    document.getElementById('step1').classList.remove('visible');
+    document.getElementById('step2').classList.remove('visible');
+    document.getElementById('dot1').classList.add('done');
+    document.getElementById('dot2').classList.remove('active');
+    document.getElementById('dot2').classList.add('done');
+    document.getElementById('dot3').classList.add('active');
+    mostrarResultadosGrupo(data);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    loading.classList.remove('active');
+  }
+}
+
+function mostrarHorarioGrupo(d) {
+  const card = document.getElementById('group-schedule-card');
+  const rh = d.riesgo_horario;
+  const rec = d.recomendacion_horario;
+  if (!rh || !rh.length) { card.style.display = 'none'; return; }
+
+  const info = {};
+  rh.forEach(e => { info[e.hora] = e; });
+  const climaVentana = (hIni, dur) => {
+    const hs = [];
+    for (let h = hIni; h < hIni + dur; h++) if (info[h]) hs.push(info[h]);
+    if (!hs.length) return '';
+    const hiMax = Math.round(Math.max(...hs.map(e => e.hi)));
+    const temps = hs.map(e => e.temp).filter(t => t != null);
+    let s = 'Sensación ~' + hiMax + '°C';
+    if (temps.length) s += ' · temp ~' + Math.round(Math.max(...temps)) + '°C';
+    return s;
+  };
+
+  // Primera hora en que el peor caso del grupo entra en PELIGRO (riesgo >= 65%).
+  const horasOrden = rh.slice().sort((a, b) => a.hora - b.hora);
+  const peligroDesde = horasOrden.find(e => e.hora >= 6 && e.hora <= 22 && e.riesgo >= 0.65);
+
+  let html = '';
+  if (rec) {
+    const dur = rec.hora_fin - rec.hora_inicio;
+    html += '<div class="box good"><div class="label">Mejor horario para la cuadrilla</div>'
+      + '<div class="value">' + rec.hora_inicio + ':00 - ' + rec.hora_fin + ':00</div>'
+      + '<div style="font-size:0.8rem;color:var(--text-light)">Riesgo medio ' + Math.round(rec.riesgo_medio * 100) + '% · ' + climaVentana(rec.hora_inicio, dur) + '</div></div>';
+  }
+  if (peligroDesde) {
+    html += '<div class="box bad"><div class="label">Peligro a partir de</div>'
+      + '<div class="value">' + peligroDesde.hora + ':00</div>'
+      + '<div style="font-size:0.8rem;color:var(--text-light)">' + climaVentana(peligroDesde.hora, 1) + '</div></div>';
+  } else {
+    html += '<div class="box good"><div class="label">Peligro</div>'
+      + '<div class="value">Sin franja crítica</div>'
+      + '<div style="font-size:0.8rem;color:var(--text-light)">El peor caso no alcanza nivel peligro hoy</div></div>';
+  }
+  document.getElementById('group-schedule').innerHTML = html;
+  card.style.display = 'block';
+}
+
+function mostrarResultadosGrupo(d) {
+  // El resultado de grupo no lleva perfil_usuario: así el mapa de zona usa el
+  // perfil genérico del selector y no el perfil individual de la consulta previa.
+  window._ultimoResultado = d;
+  mostrarHorarioGrupo(d);
+  document.getElementById('step2').classList.remove('visible');
+  document.getElementById('results').classList.add('visible');
+  document.getElementById('weather-card').style.display = 'block';
+  document.getElementById('weather-strip').innerHTML = [
+    { v: (d.total_personas ?? '?') + ' pers.', l: 'Total' },
+    { v: (d.en_peligro ?? 0) + '', l: 'En peligro' },
+    { v: (d.en_precaucion ?? 0) + '', l: 'Precaución' },
+    { v: (d.seguros ?? 0) + '', l: 'Seguros' },
+  ].map(x => '<div class="weather-item"><div class="value">' + x.v + '</div><div class="label">' + x.l + '</div></div>').join('');
+
+  document.getElementById('final-card').style.display = 'block';
+  let label;
+  if (d.clase) {
+    label = d.clase;
+  } else {
+    const pct = d.pct_peligro ?? 0;
+    label = pct > 20 ? 'PELIGRO' : pct > 5 ? 'PRECAUCION' : 'SEGURO';
+  }
+  document.getElementById('final-result').className = 'final-result bg-' + label;
+  const extra = d.edad_peor_caso ? ` (peor caso: ${d.edad_peor_caso}a)` : '';
+  document.getElementById('final-result').innerHTML = '<div class="class class-' + label + '">' + label + extra + '</div>'
+    + '<div class="sub">' + (d.mensaje || '') + '</div>';
+
+  const graphCard = document.getElementById('graph-card');
+  const groupDetail = document.getElementById('group-detail-card');
+
+  if (d.detalle && d.detalle.length) {
+    document.getElementById('final-extras').style.display = 'none';
+    groupDetail.style.display = 'block';
+    let listHtml = '';
+    const peligro = [], precaucion = [], seguros = [];
+    for (const r of d.detalle) {
+      const perClass = r.clase === 'PELIGRO' ? 'danger' : r.clase === 'PRECAUCION' ? 'warning' : 'safe';
+      (r.clase === 'PELIGRO' ? peligro : r.clase === 'PRECAUCION' ? precaucion : seguros).push({ ...r, perClass });
+    }
+    for (const [title, arr, icon] of [['En peligro', peligro, '🔴'], ['Precaución', precaucion, '🟡'], ['Seguros', seguros, '🟢']]) {
+      if (!arr.length) continue;
+      listHtml += `<div style="margin-bottom:8px"><strong>${icon} ${title} (${arr.length})</strong></div>`;
+      for (const r of arr) {
+        // Riesgo pico personalizado de su jornada (diferencia perfiles);
+        // fallback al riesgo global si no hay curva.
+        const prob = ((r.riesgo_pico ?? r.prob_riesgo) * 100).toFixed(0);
+        const idx = r.alias.replace(/\s/g, '_');
+        const expl = r.explicacion;
+        const detallesLabel = (expl || (r.factores && r.factores.length)) ? 'Por qué' : '';
+        listHtml += `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;margin-bottom:2px;background:var(--bg);border-radius:6px;font-size:0.85rem">`;
+        listHtml += `<span style="font-weight:600;min-width:70px">${r.alias}</span>`;
+        listHtml += `<span style="color:var(--text-light)">${r.edad || '?'}a · ${r.sexo || '?'}</span>`;
+        listHtml += `<span style="margin-left:auto;font-weight:600;color:${r.clase === 'PELIGRO' ? '#e74c3c' : r.clase === 'PRECAUCION' ? '#f39c12' : '#27ae60'}">${prob}%</span>`;
+        if (detallesLabel) {
+          listHtml += `<button class="btn-sm" onclick="toggleGrupoExpl('${idx}')" style="margin-left:6px;padding:2px 8px;font-size:0.75rem">${detallesLabel}</button>`;
+        }
+        listHtml += `</div>`;
+        if (detallesLabel) {
+          listHtml += `<div id="gex-${idx}" style="display:none;padding:4px 8px 8px 78px;font-size:0.8rem;color:var(--text-light);background:var(--bg);border-radius:0 0 6px 6px;margin-top:-2px;margin-bottom:4px">`;
+          listHtml += generarTextoExplicacion(expl, r.factores);
+          listHtml += `</div>`;
+        }
+      }
+    }
+    document.getElementById('group-person-list').innerHTML = listHtml;
+
+    if (d.detalle.some(r => r.riesgo_horario && r.riesgo_horario.length)) {
+      graphCard.style.display = 'block';
+      const ctx = document.getElementById('risk-chart');
+      if (_riskChart) _riskChart.destroy();
+
+      const horasIdx = Array.from({length: 24}, (_, i) => i);
+      const horas = horasIdx.map(i => i + ':00');
+      const colors = ['#e74c3c', '#e67e22', '#f39c12', '#2ecc71', '#3498db', '#9b59b6', '#1abc9c', '#e84393', '#00b894', '#6c5ce7'];
+      const datasets = [];
+
+      // Una línea por persona: su riesgo hora a hora (personalizado + calor
+      // acumulado). No es una recta y cada persona difiere según su perfil.
+      d.detalle.forEach((r, i) => {
+        if (!r.riesgo_horario || !r.riesgo_horario.length) return;
+        const m = {};
+        r.riesgo_horario.forEach(e => { m[e.hora] = Math.round(e.riesgo * 100); });
+        datasets.push({
+          label: `${r.alias} (${r.edad || '?'}a)`,
+          data: horasIdx.map(h => (m[h] != null ? m[h] : null)),
+          borderColor: colors[i % colors.length],
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.35,
+          spanGaps: true,
+          fill: false,
+        });
+      });
+
+      _riskChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: horas, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 12 } },
+            tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y + '%' } },
+          },
+          scales: {
+            x: { title: { display: true, text: 'Hora', font: { size: 11 } } },
+            y: { min: 0, max: 100, title: { display: true, text: 'Riesgo personal (%)', font: { size: 11 } },
+              ticks: { callback: v => v + '%' },
+            },
+          },
+        },
+      });
+    } else {
+      graphCard.style.display = 'none';
+    }
+  } else if (d.rangos && d.rangos.length) {
+    groupDetail.style.display = 'none';
+    graphCard.style.display = 'block';
+
+    // Factor extra info
+    if (d.factores_grupo && d.factores_grupo.length) {
+      const extrasEl = document.getElementById('final-extras');
+      extrasEl.style.display = 'flex';
+      extrasEl.innerHTML = d.factores_grupo.map(f =>
+        `<span style="background:var(--accent);color:#fff;border-radius:4px;padding:2px 8px;font-size:0.75rem;font-weight:500">${f}</span>`
+      ).join('') + (d.factor_extra > 1.01
+        ? `<span style="margin-left:auto;font-size:0.8rem;color:var(--text-light)">Factor extra: <strong style="color:var(--text)">x${d.factor_extra}</strong></span>`
+        : '');
+    } else {
+      document.getElementById('final-extras').style.display = 'none';
+    }
+
+    const ctx = document.getElementById('risk-chart');
+    if (_riskChart) _riskChart.destroy();
+    const labels = d.rangos.map(r => r.rango);
+    const datasets = [
+      { label: 'Seguros', data: d.rangos.map(r => r.seguros || 0), backgroundColor: '#27ae60' },
+      { label: 'Precaución', data: d.rangos.map(r => r.precaucion || 0), backgroundColor: '#f39c12' },
+      { label: 'Peligro', data: d.rangos.map(r => r.peligro || 0), backgroundColor: '#e74c3c' },
+    ];
+    _riskChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', labels: { font: { size: 10 } } } },
+        scales: {
+          x: { stacked: true, title: { display: true, text: 'Rango edad', font: { size: 11 } } },
+          y: { stacked: true, title: { display: true, text: 'Personas', font: { size: 11 } } },
+        },
+      },
+    });
+  } else if (d.clase) {
+    // Modo colectivo simplificado (nuevo formato)
+    groupDetail.style.display = 'none';
+    graphCard.style.display = 'block';
+    const ctx = document.getElementById('risk-chart');
+    if (_riskChart) _riskChart.destroy();
+    _riskChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Seguros', 'Precaución', 'Peligro'],
+        datasets: [{
+          data: [d.seguros ?? 0, d.en_precaucion ?? 0, d.en_peligro ?? 0],
+          backgroundColor: ['#27ae60', '#f39c12', '#e74c3c'],
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + ' personas' } },
+        },
+      },
+    });
+    document.getElementById('final-extras').style.display = 'none';
+  } else {
+    graphCard.style.display = 'none';
+    groupDetail.style.display = 'none';
+    document.getElementById('final-extras').style.display = 'none';
+  }
+
+  if (d.weather && d.weather.lat != null && d.weather.lon != null) {
+    document.getElementById('results-map-card').style.display = 'block';
+    const latM = d.weather.lat;
+    const lonM = d.weather.lon;
+    setTimeout(() => {
+      initResultsMap(latM, lonM, 12);
+      setTimeout(() => calcularMapaResultados(latM, lonM), 200);
+    }, 300);
+  } else {
+    document.getElementById('results-map-card').style.display = 'none';
+  }
+
+  window.scrollTo({ top: document.getElementById('results').offsetTop - 20, behavior: 'smooth' });
+}
+
 function cerrarModalPerfil() {
   document.getElementById('profile-name-modal').style.display = 'none';
 }
 
 function guardarPerfil() {
   const alias = localStorage.getItem('climasafe_perfil_alias') || '';
+  const tags = localStorage.getItem('climasafe_perfil_tags') || '';
   document.getElementById('profile-name-input').value = alias;
+  document.getElementById('profile-tags-input').value = tags;
   document.getElementById('profile-name-modal').style.display = 'flex';
   document.getElementById('profile-name-input').focus();
   document.getElementById('profile-name-input').onkeydown = function(e) {
@@ -692,6 +1594,8 @@ function guardarPerfilConNombre() {
   cerrarModalPerfil();
   const perfil = getPerfil();
   perfil.alias = alias;
+  const tags = document.getElementById('profile-tags-input').value.trim();
+  if (tags) perfil.tags = tags;
   fetch('/api/perfil', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -700,6 +1604,8 @@ function guardarPerfilConNombre() {
     if (data.perfil_id) {
       localStorage.setItem('climasafe_perfil_id', data.perfil_id);
       localStorage.setItem('climasafe_perfil_alias', alias);
+      if (tags) localStorage.setItem('climasafe_perfil_tags', tags);
+      else localStorage.removeItem('climasafe_perfil_tags');
       mostrarPerfilGuardado(alias);
       refrescarListaPerfiles();
     }
@@ -709,7 +1615,9 @@ function guardarPerfilConNombre() {
 function borrarPerfil() {
   localStorage.removeItem('climasafe_perfil_id');
   localStorage.removeItem('climasafe_perfil_alias');
+  localStorage.removeItem('climasafe_perfil_tags');
   document.getElementById('profile-indicator').style.display = 'none';
+  document.getElementById('profile-tags-display').style.display = 'none';
   document.getElementById('btn-delete-profile').style.display = 'none';
   document.getElementById('perfil-select').value = '';
 }
@@ -718,32 +1626,226 @@ function mostrarPerfilGuardado(nombre) {
   const el = document.getElementById('profile-indicator');
   el.style.display = 'inline';
   el.innerHTML = 'Perfil: <strong>' + nombre + '</strong> <a href="#" onclick="borrarPerfil();return false" style="color:var(--text-light)">[borrar]</a>';
+  const tags = localStorage.getItem('climasafe_perfil_tags') || '';
+  const tagEl = document.getElementById('profile-tags-display');
+  if (tags) {
+    const chips = tags.split(',').map(t => t.trim()).filter(Boolean).map(t =>
+      `<span style="display:inline-block;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:0.7rem;margin:1px">${t}</span>`
+    ).join('');
+    tagEl.style.display = 'inline';
+    tagEl.innerHTML = chips;
+  } else {
+    tagEl.style.display = 'none';
+  }
 }
 
 function nuevaConsulta() {
   document.getElementById('results').classList.remove('visible');
   document.getElementById('dot3').classList.remove('active');
   document.getElementById('dot3').classList.remove('done');
+  document.getElementById('dot2').classList.remove('active');
+  document.getElementById('dot2').classList.remove('done');
   document.getElementById('dot1').classList.add('active');
   document.getElementById('step1').classList.add('visible');
+  document.getElementById('step2').classList.remove('visible');
   window._ultimoResultado = null;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function irAdmin() {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('visible'));
+  document.querySelectorAll('.step-dot').forEach(d => { d.classList.remove('active', 'done'); });
+  document.getElementById('step-admin').classList.add('visible');
+  cargarAdminUsuarios();
+  cargarTagsDisponibles();
+}
+
+function volverDeAdmin() {
+  document.getElementById('step-admin').classList.remove('visible');
+  document.getElementById('step1').classList.add('visible');
+  document.getElementById('dot1').classList.add('active');
+}
+
+async function cargarTagsDisponibles() {
+  const container = document.getElementById('admin-tags-list');
+  try {
+    const r = await fetch('/api/tags-disponibles');
+    const tags = await r.json();
+    container.innerHTML = tags.map(t =>
+      `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--accent);color:#fff;border-radius:12px;padding:2px 8px;font-size:0.8rem;margin:3px">
+        ${t.nombre}
+        <span onclick="event.stopPropagation();eliminarTagDisponible(${t.id})" style="cursor:pointer;opacity:0.7;font-size:0.7rem">✕</span>
+      </span>`
+    ).join('');
+  } catch (e) {
+    container.innerHTML = '<span style="color:var(--text-light);font-size:0.85rem">Error</span>';
+  }
+}
+
+async function crearTagDisponible() {
+  const input = document.getElementById('admin-nueva-tag');
+  const nombre = input.value.trim();
+  if (!nombre) return;
+  input.value = '';
+  try {
+    await fetch('/api/tags-disponibles', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nombre}),
+    });
+    cargarTagsDisponibles();
+    cargarAdminUsuarios();
+  } catch (e) {
+    alert('Error al crear etiqueta');
+  }
+}
+
+async function eliminarTagDisponible(tagId) {
+  if (!confirm('¿Eliminar esta etiqueta?')) return;
+  try {
+    await fetch(`/api/tags-disponibles/${tagId}`, {method: 'DELETE'});
+    cargarTagsDisponibles();
+    cargarAdminUsuarios();
+  } catch (e) {
+    alert('Error al eliminar');
+  }
+}
+
+async function cargarAdminUsuarios() {
+  const container = document.getElementById('admin-user-list');
+  container.innerHTML = '<div style="text-align:center;color:var(--text-light)">Cargando...</div>';
+  try {
+    const [rPerfiles, rTags] = await Promise.all([
+      fetch('/api/perfiles'),
+      fetch('/api/tags-disponibles'),
+    ]);
+    const perfiles = await rPerfiles.json();
+    const tagsDisponibles = await rTags.json();
+    if (!perfiles.length) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-light)">No hay usuarios</div>';
+      return;
+    }
+    let html = '';
+    for (const p of perfiles) {
+      const userTags = (p.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+      const checkboxHtml = tagsDisponibles.map(t => {
+        const checked = userTags.includes(t.nombre) ? 'checked' : '';
+        return `<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;font-size:0.85rem;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" class="tag-cb" data-pid="${p.id}" data-tag="${t.nombre}" ${checked} onchange="guardarAdminTagsCb(${p.id})">
+          ${t.nombre}
+        </label>`;
+      }).join('');
+      html += `<div class="card" style="padding:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer" onclick="cargarAdminPerfil(${p.id})">`;
+      html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">`;
+      html += `<strong style="min-width:80px">${p.alias || 'Sin nombre'}</strong>`;
+      html += `<span style="font-size:0.8rem;color:var(--text-light)">${p.edad || '?'}a · ${p.sexo || '?'}</span>`;
+      html += `<span style="font-size:0.8rem;color:var(--text-light)">${p.provincia || ''}</span>`;
+      html += `<button class="btn btn-outline" onclick="event.stopPropagation();borrarAdminPerfil(${p.id})" style="padding:4px 8px;font-size:0.75rem;color:#e74c3c;margin-left:auto">✕</button>`;
+      html += '</div>';
+      html += `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:2px" onclick="event.stopPropagation()">${checkboxHtml}</div>`;
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<div style="text-align:center;color:#e74c3c">Error al cargar usuarios</div>';
+  }
+}
+
+function cargarAdminPerfil(perfilId) {
+  _vieneDeAdmin = true;
+  volverDeAdmin();
+  const select = document.getElementById('perfil-select');
+  select.value = perfilId;
+  cargarPerfilSeleccionado();
+}
+
+async function borrarAdminPerfil(perfilId) {
+  if (!confirm('¿Borrar este perfil?')) return;
+  try {
+    await fetch(`/api/perfil/${perfilId}`, {method: 'DELETE'});
+    cargarAdminUsuarios();
+    refrescarListaPerfiles();
+  } catch (e) {
+    alert('Error al borrar');
+  }
+}
+
+async function guardarAdminTagsCb(perfilId) {
+  const cbs = document.querySelectorAll(`.tag-cb[data-pid="${perfilId}"]`);
+  const tags = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.tag).join(', ');
+  try {
+    await fetch(`/api/perfil/${perfilId}/tags`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tags}),
+    });
+    refrescarListaPerfiles();
+  } catch (e) {
+    alert('Error al guardar');
+  }
+}
+
 function mostrarResultados(d) {
   document.getElementById('results').classList.add('visible');
+  document.getElementById('group-schedule-card').style.display = 'none';
   const w = d.weather;
-  if (w && w.lat && w.lon) ponerMarcador(w.lat, w.lon);
+  const claseLabel = d.clase_final_label ?? 'SEGURO';
+  const color = claseLabel === 'PELIGRO' ? '#e74c3c' : claseLabel === 'PRECAUCION' ? '#f39c12' : '#27ae60';
+  if (w && w.lat && w.lon) ponerMarcador(w.lat, w.lon, color);
   mostrarClima(w);
   mostrarFinal(d);
   mostrarPerfilHorario(d);
+  mostrarGraficaRiesgo(d);
+  // Cargar comparativas por edad en segundo plano
+  setTimeout(() => cargarComparativas(d), 100);
   if (d.override_fisico) mostrarOverride(d);
   if (d.explicacion) mostrarExplicacion(d.explicacion, d.modelos);
   if (d.perfil) mostrarFactores(d.perfil);
   if (d.recomendaciones && d.recomendaciones.length) mostrarRecomendaciones(d.recomendaciones);
   document.getElementById('opt-card').style.display = 'block';
   window._ultimoResultado = d;
+  // Mostrar mapa de riesgo de la zona
+  if (w && w.lat != null && w.lon != null) {
+    document.getElementById('results-map-card').style.display = 'block';
+    setTimeout(() => {
+      initResultsMap(w.lat, w.lon, 12);
+      setTimeout(() => calcularMapaResultados(), 200);
+    }, 300);
+  }
   window.scrollTo({ top: document.getElementById('results').offsetTop - 20, behavior: 'smooth' });
+}
+
+async function cargarComparativas(d) {
+  const basePerfil = d.perfil_usuario;
+  if (!basePerfil || !basePerfil.edad) return;
+  const edadBase = basePerfil.edad;
+  const edades = [];
+  if (edadBase < 35) edades.push(55);
+  else if (edadBase > 50) edades.push(25);
+  else { edades.push(25); edades.push(55); }
+
+  const resultados = await Promise.all(edades.map(async edad => {
+    const { alias: _, perfil_id: __, ...camposSeguros } = basePerfil;
+    const p = { ...camposSeguros, edad };
+    try {
+      const r = await fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provincia: d.weather?.provincia || '',
+          lat: d.weather?.lat,
+          lon: d.weather?.lon,
+          perfil: p,
+        }),
+      });
+      const data = await r.json();
+      return { edad, d: data };
+    } catch {
+      return null;
+    }
+  }));
+
+  const validos = resultados.filter(Boolean);
+  if (validos.length) mostrarGraficaRiesgo(d, validos);
 }
 
 const CONF_ICONOS = { alta: '&#9679;', media: '&#9675;', baja: '&#9888;' };
@@ -827,9 +1929,9 @@ function mostrarPerfilHorario(d) {
 
   function colorSensacion(hi) {
     if (hi >= 46) return '#8b0000';
-    if (hi >= 39) return '#e74c3c';
-    if (hi >= 32) return '#f39c12';
-    if (hi >= 27) return '#a0d000';
+    if (hi >= 39) return '#c0392b';
+    if (hi >= 32) return '#e74c3c';
+    if (hi >= 27) return '#f39c12';
     return '#27ae60';
   }
 
@@ -850,9 +1952,9 @@ function mostrarPerfilHorario(d) {
   if (legendDiv) {
     const cats = [
       { label: '< 27 Seguro', color: '#27ae60' },
-      { label: '27-32 Precaución', color: '#a0d000' },
-      { label: '32-39 Prec. alta', color: '#f39c12' },
-      { label: '39-46 Peligro', color: '#e74c3c' },
+      { label: '27-32 Precaución', color: '#f39c12' },
+      { label: '32-39 Peligro', color: '#e74c3c' },
+      { label: '39-46 Peligro alto', color: '#c0392b' },
       { label: '> 46 Pel. extremo', color: '#8b0000' },
     ];
     legendDiv.innerHTML = cats.map(c =>
@@ -872,6 +1974,216 @@ function mostrarPerfilHorario(d) {
       + '  <span style="color:var(--text-light);font-size:0.8rem">Sensación térmica '
       + Math.round(minActHI) + '-' + Math.round(maxActHI) + 'C</span>';
   }
+}
+
+let _riskChart = null;
+
+function hiToNivel(hi) {
+  if (hi <= 15) return 1;
+  if (hi <= 27) return 1 + (hi - 15) / 12;
+  if (hi <= 32) return 2 + (hi - 27) / 5 * 2;
+  if (hi <= 39) return 4 + (hi - 32) / 7 * 3;
+  if (hi <= 46) return 7 + (hi - 39) / 7 * 2;
+  return Math.min(10, 9 + (hi - 46) / 9);
+}
+
+function nivelLabel(n) {
+  if (n >= 9) return 'Peligro extremo';
+  if (n >= 7) return 'Peligro alto';
+  if (n >= 4) return 'Peligro';
+  if (n >= 2) return 'Precaución';
+  return 'Seguro';
+}
+
+function mostrarGraficaRiesgo(d, perfilesExtra) {
+  const ph = d.weather?.perfil_horario;
+  if (!ph || !ph.length) return;
+  document.getElementById('graph-card').style.display = 'block';
+  const ctx = document.getElementById('risk-chart');
+
+  const horas = ph.map(e => e.hora + ':00');
+  const hiVals = ph.map(e => e.HI);
+  const nivelVals = ph.map(e => hiToNivel(e.HI));
+
+  const zonas = nivelVals.map(n => {
+    if (n >= 9) return 'rgba(139,0,0,0.10)';
+    if (n >= 7) return 'rgba(192,57,43,0.12)';
+    if (n >= 4) return 'rgba(231,76,60,0.10)';
+    if (n >= 2) return 'rgba(243,156,18,0.10)';
+    return 'rgba(39,174,96,0.10)';
+  });
+
+  const datasets = [{
+    label: 'Peligrosidad',
+    data: nivelVals,
+    borderColor: '#2c3e50',
+    backgroundColor: 'rgba(44,62,80,0.1)',
+    fill: false,
+    tension: 0.3,
+    pointRadius: 2,
+    pointHitRadius: 8,
+    yAxisID: 'y',
+  }];
+
+  const colores = ['#e74c3c', '#2980b9', '#27ae60', '#8e44ad', '#d35400'];
+  const legHtml = [];
+
+  // Curva de riesgo por hora (no una recta): sube y baja con el calor de cada
+  // hora y con la carga térmica acumulada del día. La calcula el backend.
+  const curvaHoraria = (rh) => {
+    if (!rh || !rh.length) return null;
+    const m = {};
+    rh.forEach(e => { m[e.hora] = e.riesgo; });
+    return ph.map(e => (m[e.hora] != null ? m[e.hora] : null));
+  };
+
+  const probUser = d.perfil?.calor?.prob_personalizada ?? d.modelos?.XGBoost_calor?.prob_riesgo;
+  const dataUser = curvaHoraria(d.riesgo_horario) || (probUser != null ? Array(ph.length).fill(probUser) : null);
+  if (dataUser) {
+    const picoUser = Math.round(Math.max(...dataUser.filter(v => v != null)) * 100);
+    const labelUser = 'Tu riesgo (' + (d.perfil_usuario?.edad ?? '?') + ' años)';
+    datasets.push({
+      label: labelUser,
+      data: dataUser,
+      borderColor: colores[0],
+      borderWidth: 2.5,
+      pointRadius: 0,
+      tension: 0.35,
+      spanGaps: true,
+      fill: false,
+      yAxisID: 'y1',
+    });
+    legHtml.push('<span style="color:' + colores[0] + '">▬▬ ' + labelUser + ' · pico ' + picoUser + '%</span>');
+  }
+
+  if (perfilesExtra && perfilesExtra.length) {
+    for (let i = 0; i < perfilesExtra.length; i++) {
+      const pe = perfilesExtra[i];
+      const probFallback = pe.d?.perfil?.calor?.prob_personalizada ?? pe.d?.modelos?.XGBoost_calor?.prob_riesgo;
+      const dataPe = curvaHoraria(pe.d?.riesgo_horario) || (probFallback != null ? Array(ph.length).fill(probFallback) : null);
+      if (!dataPe) continue;
+      const edad = pe.edad;
+      const color = colores[i + 1] || '#666';
+      const picoPe = Math.round(Math.max(...dataPe.filter(v => v != null)) * 100);
+      datasets.push({
+        label: edad + ' años',
+        data: dataPe,
+        borderColor: color,
+        borderDash: [5, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.35,
+        spanGaps: true,
+        fill: false,
+        yAxisID: 'y1',
+      });
+      legHtml.push('<span style="color:' + color + '">- - ' + edad + ' años · pico ' + picoPe + '%</span>');
+    }
+  }
+
+  if (_riskChart) _riskChart.destroy();
+
+  _riskChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: horas, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const ds = ctx.dataset;
+              if (ds.label === 'Peligrosidad') {
+                const n = ctx.parsed.y;
+                return 'Nivel ' + n.toFixed(1) + '/10 — ' + nivelLabel(n);
+              }
+              return ds.label + ': ' + (ctx.parsed.y * 100).toFixed(0) + '%';
+            },
+            afterLabel: function(ctx) {
+              if (ctx.dataset.label === 'Peligrosidad') {
+                const hi = hiVals[ctx.dataIndex];
+                return hi != null ? 'HI: ' + hi.toFixed(1) + 'C' : '';
+              }
+              return '';
+            },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: 'Hora', font: { size: 11 } }, grid: { display: false } },
+        y: {
+          type: 'linear',
+          position: 'left',
+          title: { display: true, text: 'Nivel de peligro (1-10)', font: { size: 11 } },
+          min: 0.5,
+          max: 10.5,
+          grid: { color: 'rgba(0,0,0,0.06)' },
+        },
+        y1: {
+          type: 'linear',
+          position: 'right',
+          title: { display: true, text: 'Riesgo personal (%)', font: { size: 11 } },
+          min: 0,
+          max: 1,
+          ticks: { callback: v => Math.round(v * 100) + '%' },
+          grid: { display: false },
+        },
+      },
+    },
+    plugins: [{
+      afterDraw: function(chart) {
+        const ctx2 = chart.ctx;
+        const xAxis = chart.scales.x;
+        const yAxis = chart.scales.y;
+        const left = xAxis.left;
+        const w = xAxis.width;
+        const h = yAxis.height;
+        const bottom = yAxis.bottom;
+
+        for (let i = 0; i < 24; i++) {
+          const x = xAxis.getPixelForValue(i, 0);
+          const x1 = i < 23 ? xAxis.getPixelForValue(i + 1, 0) : left + w;
+          const x0 = i > 0 ? x : left;
+          const zona = zonas[i];
+          if (zona) {
+            ctx2.fillStyle = zona;
+            ctx2.fillRect(x0, yAxis.top, x1 - x0, h);
+          }
+        }
+
+        const h_ini = d.perfil_usuario?.hora_inicio;
+        const dur = d.perfil_usuario?.duracion_actividad_h;
+        if (h_ini != null && dur != null) {
+          const xIni = xAxis.getPixelForValue(h_ini, 0);
+          const xFin = xAxis.getPixelForValue(Math.min(h_ini + dur, 24), 0);
+          ctx2.save();
+          ctx2.strokeStyle = 'rgba(231,76,60,0.6)';
+          ctx2.lineWidth = 2;
+          ctx2.setLineDash([4, 4]);
+          ctx2.beginPath();
+          ctx2.moveTo(xIni, yAxis.top);
+          ctx2.lineTo(xIni, bottom);
+          ctx2.stroke();
+          ctx2.beginPath();
+          ctx2.moveTo(xFin, yAxis.top);
+          ctx2.lineTo(xFin, bottom);
+          ctx2.stroke();
+          ctx2.restore();
+          ctx2.fillStyle = 'rgba(231,76,60,0.08)';
+          ctx2.fillRect(xIni, yAxis.top, xFin - xIni, h);
+          ctx2.fillStyle = '#e74c3c';
+          ctx2.font = '10px sans-serif';
+          ctx2.textAlign = 'center';
+          ctx2.fillText('actividad', (xIni + xFin) / 2, bottom + 14);
+        }
+      },
+    }],
+  });
+
+  document.getElementById('graph-age-legend').innerHTML = legHtml.join('');
 }
 
 function mostrarOverride(d) {
@@ -1049,9 +2361,57 @@ function toggleFactors() {
 function calcularHorarioOptimo() {
   const d = window._ultimoResultado;
   if (!d) return;
+  const dur = Math.max(1, Math.round(d.perfil_usuario?.duracion_actividad_h ?? 2));
+
+  // Preferimos el riesgo por hora (personalizado + calor acumulado) que calcula
+  // el backend; así el horario recomendado tiene en cuenta el perfil, no solo el HI.
+  const rh = d.riesgo_horario;
+  const rec = d.recomendacion_horario;
+  if (rh && rh.length && rec) {
+    const m = {};
+    const info = {};
+    rh.forEach(e => { m[e.hora] = e.riesgo; info[e.hora] = e; });
+    // Tiempo esperado en una ventana: sensación térmica y temperatura.
+    const climaVentana = (hIni, d) => {
+      const hs = [];
+      for (let h = hIni; h < hIni + d; h++) if (info[h]) hs.push(info[h]);
+      if (!hs.length) return '';
+      const hiMax = Math.round(Math.max(...hs.map(e => e.hi)));
+      const temps = hs.map(e => e.temp).filter(t => t != null);
+      let s = 'Sensación ~' + hiMax + '°C';
+      if (temps.length) s += ' · temp ~' + Math.round(Math.max(...temps)) + '°C';
+      return s;
+    };
+    const horasR = rh.map(e => e.hora).sort((a, b) => a - b);
+    let peor = null;
+    for (let i = 0; i + dur <= horasR.length; i++) {
+      const tramo = horasR.slice(i, i + dur);
+      if (tramo[tramo.length - 1] - tramo[0] !== dur - 1) continue;
+      const medio = tramo.reduce((s, h) => s + m[h], 0) / dur;
+      if (!peor || medio > peor.medio) peor = { hora: tramo[0], medio };
+    }
+    const actualTxt = rec.riesgo_actual != null
+      ? ' · tu horario actual: ' + Math.round(rec.riesgo_actual * 100) + '%'
+      : '';
+    let html = '<div class="box good"><div class="label">Recomendado</div><div class="value">'
+      + rec.hora_inicio + ':00 - ' + rec.hora_fin + ':00</div>'
+      + '<div style="font-size:0.8rem;color:var(--text-light)">Riesgo medio: '
+      + Math.round(rec.riesgo_medio * 100) + '%' + actualTxt + '</div>'
+      + '<div style="font-size:0.8rem;color:var(--text-light)">' + climaVentana(rec.hora_inicio, dur) + '</div></div>';
+    if (peor) {
+      html += '<div class="box bad"><div class="label">Evitar</div><div class="value">'
+        + peor.hora + ':00 - ' + (peor.hora + dur) + ':00</div>'
+        + '<div style="font-size:0.8rem;color:var(--text-light)">Riesgo medio: '
+        + Math.round(peor.medio * 100) + '%</div>'
+        + '<div style="font-size:0.8rem;color:var(--text-light)">' + climaVentana(peor.hora, dur) + '</div></div>';
+    }
+    document.getElementById('opt-time').innerHTML = html;
+    return;
+  }
+
+  // Fallback: por Heat Index (sin datos de riesgo por hora)
   const ph = d.weather?.perfil_horario ?? d.perfil?.calor?._perfil_horario;
   if (!ph?.length) return;
-  const dur = d.perfil_usuario?.duracion_actividad_h ?? 2;
 
   const ventanas = [];
   for (let h = 0; h <= 24 - dur; h++) {
@@ -1145,7 +2505,13 @@ async function loadPendingList() {
 
 function rellenarFormulario(p) {
   if (p.error) return;
-  if (p.edad) document.getElementById('edad').value = p.edad;
+  if (p.fecha_nacimiento) {
+    document.getElementById('fecha_nacimiento').value = p.fecha_nacimiento;
+    calcularEdad();
+  } else if (p.edad) {
+    document.getElementById('edad').value = p.edad;
+    document.getElementById('fecha_nacimiento').value = '';
+  }
   if (p.sexo) document.getElementById('sexo').value = p.sexo;
   if (p.porcentaje_grasa != null) document.getElementById('porcentaje_grasa').value = p.porcentaje_grasa;
   if (p.nivel_actividad) document.getElementById('nivel_actividad').value = p.nivel_actividad;
@@ -1174,6 +2540,7 @@ function rellenarFormulario(p) {
   document.querySelectorAll('.chk-boolean').forEach(c => {
     if (p[c.dataset.field]) c.checked = true;
   });
+  if (p.tags) localStorage.setItem('climasafe_perfil_tags', p.tags);
 }
 
 function cargarPerfil() {
@@ -1183,6 +2550,7 @@ function cargarPerfil() {
     fetch('/api/perfil/' + pid).then(r => r.json()).then(p => {
       if (p.error) return;
       rellenarFormulario(p);
+      actualizarResumenPerfil();
       mostrarPerfilGuardado(p.alias || pid);
     }).catch(() => {});
   }
@@ -1212,6 +2580,7 @@ function cargarPerfilSeleccionado() {
   fetch('/api/perfil/' + pid).then(r => r.json()).then(p => {
     if (p.error) return alert(p.error);
     rellenarFormulario(p);
+    actualizarResumenPerfil();
     const alias = sel.options[sel.selectedIndex].textContent;
     localStorage.setItem('climasafe_perfil_id', pid);
     localStorage.setItem('climasafe_perfil_alias', alias);
@@ -1222,6 +2591,7 @@ function cargarPerfilSeleccionado() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  setModoPaso1('individual');
   initMap(40.4168, -3.7038);
   checkPendingFactors();
   document.getElementById('pending-modal').addEventListener('click', function(e) {

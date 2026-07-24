@@ -70,10 +70,20 @@ class DBManager:
     # ── Inicialización ──────────────────────────────────────────────
 
     def initialize(self) -> None:
-        """Crea las tablas si no existen."""
+        """Crea las tablas si no existen y migra si es necesario."""
         sql = _SCHEMA_PATH.read_text(encoding="utf-8")
         with self.conn() as c:
             c.executescript(sql)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Migraciones post-creación de schema."""
+        with self.conn() as c:
+            cols = [r["name"] for r in c.execute("PRAGMA table_info(perfiles)").fetchall()]
+            if "fecha_nacimiento" not in cols:
+                c.execute("ALTER TABLE perfiles ADD COLUMN fecha_nacimiento TEXT")
+            if "tags" not in cols:
+                c.execute("ALTER TABLE perfiles ADD COLUMN tags TEXT")
 
     def tablas(self) -> list[str]:
         with self.conn() as c:
@@ -174,7 +184,7 @@ class DBManager:
         """Todos los perfiles (sin arrays, solo cabecera)."""
         with self.conn() as c:
             rows = c.execute(
-                "SELECT id, alias, edad, sexo, lat, lon, provincia, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
+                "SELECT id, alias, edad, sexo, lat, lon, provincia, tags, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -232,6 +242,25 @@ class DBManager:
             cur = c.execute("DELETE FROM perfiles WHERE id = ?", (perfil_id,))
             return cur.rowcount > 0
 
+    # ── Tags disponibles ────────────────────────────────────────────
+
+    def listar_tags_disponibles(self) -> list[dict]:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT id, nombre FROM tags_disponibles ORDER BY nombre"
+            ).fetchall()
+
+    def crear_tag_disponible(self, nombre: str) -> int:
+        with self.conn() as c:
+            c.execute("INSERT OR IGNORE INTO tags_disponibles (nombre) VALUES (?)", (nombre,))
+            row = c.execute("SELECT id FROM tags_disponibles WHERE nombre = ?", (nombre,)).fetchone()
+            return row["id"] if row else -1
+
+    def eliminar_tag_disponible(self, tag_id: int) -> bool:
+        with self.conn() as c:
+            c.execute("DELETE FROM tags_disponibles WHERE id = ?", (tag_id,))
+            return c.rowcount > 0
+
     def buscar_por_alias(self, alias: str) -> dict | None:
         """Busca un perfil por alias exacto."""
         with self.conn() as c:
@@ -239,6 +268,42 @@ class DBManager:
                 "SELECT id, alias, updated_at FROM perfiles WHERE alias = ?", (alias,)
             ).fetchone()
             return dict(row) if row else None
+
+    def buscar_por_tag(self, tag: str) -> list[dict]:
+        """Busca perfiles que contengan una etiqueta (tags separados por coma).
+        Incluye arrays (comorbilidades, fármacos, etc.) y conversión de booleanos
+        igual que obtener_perfil()."""
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM perfiles WHERE tags IS NOT NULL AND tags != ''"
+            ).fetchall()
+            result = []
+            for r in rows:
+                r = dict(r)
+                tags = [t.strip() for t in (r.get("tags") or "").split(",") if t.strip()]
+                if tag not in tags:
+                    continue
+                # Booleans
+                for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente", "fiesta"):
+                    if r.get(k) is not None:
+                        r[k] = bool(r[k])
+                if "entrenado" in r:
+                    r["entrenado"] = r["entrenado"] == "si"
+                # Arrays M2M
+                pid = r.get("id")
+                if pid:
+                    for campo, tabla in (
+                        ("comorbilidades", "perfil_comorbilidades"),
+                        ("farmacos", "perfil_farmacos"),
+                        ("situacion_social", "perfil_situacion_social"),
+                        ("ocupacional", "perfil_ocupacional"),
+                    ):
+                        rows_m2m = c.execute(
+                            f"SELECT clave FROM {tabla} WHERE perfil_id = ?", (pid,)
+                        ).fetchall()
+                        r[campo] = [rr["clave"] for rr in rows_m2m]
+                result.append(r)
+            return result
 
     # ── Factores de riesgo ──────────────────────────────────────────
 

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS perfiles (
 
     -- Campos escalares (todos opcionales)
     edad            INTEGER,
+    fecha_nacimiento TEXT,                           -- YYYY-MM-DD
     sexo            TEXT CHECK(sexo IN ('hombre', 'mujer')),
     porcentaje_grasa REAL,
     nivel_actividad TEXT CHECK(nivel_actividad IN ('reposo', 'ligera', 'moderada', 'intensa', 'muy_intensa')),
@@ -30,11 +31,12 @@ CREATE TABLE IF NOT EXISTS perfiles (
     fiesta          INTEGER,                       -- 0/1
     lat             REAL,
     lon             REAL,
-    provincia       TEXT
+    provincia       TEXT,
+    tags            TEXT                             -- coma-separadas: electricista,fontanero
 );
 
-CREATE INDEX idx_perfiles_alias ON perfiles(alias);
-CREATE INDEX idx_perfiles_created ON perfiles(created_at);
+CREATE INDEX IF NOT EXISTS idx_perfiles_alias ON perfiles(alias);
+CREATE INDEX IF NOT EXISTS idx_perfiles_created ON perfiles(created_at);
 
 -- ── Relaciones muchos-a-muchos ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS perfil_comorbilidades (
@@ -78,8 +80,8 @@ CREATE TABLE IF NOT EXISTS factores_riesgo (
     UNIQUE(tipo, categoria, clave)
 );
 
-CREATE INDEX idx_factores_tipo ON factores_riesgo(tipo);
-CREATE INDEX idx_factores_implementado ON factores_riesgo(implementado);
+CREATE INDEX IF NOT EXISTS idx_factores_tipo ON factores_riesgo(tipo);
+CREATE INDEX IF NOT EXISTS idx_factores_implementado ON factores_riesgo(implementado);
 
 -- ── Historial de consultas ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS historial_consultas (
@@ -95,8 +97,14 @@ CREATE TABLE IF NOT EXISTS historial_consultas (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_historial_perfil ON historial_consultas(perfil_id);
-CREATE INDEX idx_historial_fecha ON historial_consultas(created_at);
+CREATE INDEX IF NOT EXISTS idx_historial_perfil ON historial_consultas(perfil_id);
+CREATE INDEX IF NOT EXISTS idx_historial_fecha ON historial_consultas(created_at);
+
+-- ── Tags predefinidas ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tags_disponibles (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre  TEXT NOT NULL UNIQUE
+);
 
 -- ── Aprendizaje activo (scout) ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS scout_entrenamiento (
