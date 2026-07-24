@@ -1,6 +1,6 @@
 # Próximos pasos — hoja de ruta
 
-**Última revisión:** 2026-07-23
+**Última revisión:** 2026-07-24
 
 ---
 
@@ -28,15 +28,25 @@
 | ✅ | Tests de personalización (11 tests) | `tests/test_personalizacion.py` |
 | ✅ | Documentación actualizada: pipeline, personalización, hoja de ruta | `documentacion/` |
 
+### Fase 1 — Riesgo colectivo y demográfico (sesión 2026-07-24)
+
+| # | Qué | Archivos |
+|---|-----|----------|
+| ✅ | Selector Individual / Grupo en el flujo (paso 1 → paso 2) | `chat/static/index.html` |
+| ✅ | Modo colectivo: N personas, edad min/max, %hombres, tipo actividad (trabajo/deporte/competición), duración, aclimatación | `chat/app.py`, `chat/static/index.html` |
+| ✅ | Modo por etiqueta: seleccionar tag → predecir todos los perfiles con esa tag | `chat/app.py`, `climasafeai/db/manager.py` |
+| ✅ | Tags predefinidas: tabla `tags_disponibles`, CRUD, checkboxes (evita errores ortográficos) | `chat/app.py`, `climasafeai/db/manager.py`, `data/schema.sql` |
+| ✅ | Página de administración de usuarios (👥 Usuarios) | `chat/static/index.html` |
+| ✅ | Per-person breakdown en resultados por etiqueta (lista agrupada por riesgo) | `chat/static/index.html` |
+| ✅ | Gráfica de líneas: una línea por persona en grupo por etiqueta | `chat/static/index.html` |
+| ✅ | Navegación admin ↔ perfil (flag _vieneDeAdmin) | `chat/static/index.html` |
+| ✅ | Tags visibles como chips en paso 2 | `chat/static/index.html` |
+| ✅ | Fecha de nacimiento en lugar de edad (campo date, cálculo automático) | `climasafeai/db/manager.py`, `chat/static/index.html`, `data/schema.sql` |
+| ✅ | Comorbilidades/medicación en collapsible | `chat/static/index.html` |
+
 ---
 
-## Próximo — Fase 1: Riesgo colectivo y demográfico
-
-### 1.1 Múltiples edades en una pantalla
-Mostrar **todas las curvas de riesgo por edad** simultáneamente (18–85+):
-- Gráfica de líneas: eje X = hora del día, eje Y = HI / probabilidad, una línea por grupo etario
-- Resaltar umbrales de PRECAUCION y PELIGRO
-- Tooltip: "A las 14:00, un adulto de 70a tiene riesgo X, un joven de 25a tiene riesgo Y"
+## Pendiente — Fase 1: Riesgo colectivo y demográfico
 
 ### 1.2 Riesgo colectivo por CSV
 Endpoint que acepte un **CSV de personas** con sus perfiles:
@@ -57,38 +67,35 @@ problemas cardíacos**:
 - Devolver: "De 5000 asistentes esperados, ~75 podrían requerir atención médica por calor"
 
 ### 1.4 API estructurada
-Endpoint REST que permita:
-- `POST /api/riesgo-colectivo` — CSV + ubicación + fecha → estadísticas
-- `GET /api/riesgo-zona?lat=...&lon=...&radio=5` — riesgo por cuadrantes
+- `GET /api/riesgo-zona?lat=...&lon=...&radio=5` — riesgo por cuadrantes (✅ hecho en Fase 2)
 
 ---
 
-## Fase 2: Mapa de riesgo por zona
+## Fase 2: Mapa de riesgo por zona (sesión 2026-07-24)
 
-### 2.1 Grid de riesgo por km²
-Dividir el área alrededor de un punto en cuadrantes de ~1 km² y calcular:
-- HI pico del día para cada cuadrante
-- Clase de riesgo (SEGURO/PRECAUCION/PELIGRO) por cuadrante
-- Colorear mapa con semáforo
+### 2.1 Grid de riesgo por km² — ✅
+- `/api/riesgo-zona` — genera grid de celdas alrededor de un punto
+- Calcula HI pico y clase de riesgo (SEGURO/PRECAUCION/PELIGRO) por celda
+- 4 perfiles de vulnerabilidad: vulnerable (default), mayor, adulto, joven
+- Distintos umbrales HI según perfil (más restrictivo = más sensible)
+- Frontend: overlay de rectángulos coloreados sobre Leaflet, slider de radio (0.5-25 km), selector de perfil
 
-**Fuente**: Open-Meteo devuelve datos grillados (~11 km). Habría que interpolar
-o consultar múltiples puntos. Alternativa: usar la rejilla de ERA5.
+| # | Qué | Archivos |
+|---|-----|----------|
+| ✅ | Grid de celdas alrededor de punto (paso ~1km) | `climasafeai/data/grid_risk.py` |
+| ✅ | Cálculo HI pico + clase de riesgo por celda | `climasafeai/data/grid_risk.py` |
+| ✅ | 4 perfiles de vulnerabilidad con umbrales ajustables | `climasafeai/data/grid_risk.py` |
+| ✅ | Endpoint GET /api/riesgo-zona | `chat/app.py` |
+| ✅ | Selector de radio (slider 0.5-25 km) | `chat/static/index.html` |
+| ✅ | Selector de perfil (más restrictivo / adulto mayor / adulto / joven) | `chat/static/index.html` |
+| ✅ | Overlay de rectángulos coloreados en Leaflet | `chat/static/index.html` |
+| ✅ | Leyenda y estadísticas en tiempo real | `chat/static/index.html` |
 
-**Modelos satelitales útiles aquí**:
-- **Prithvi-EO-2.0** (IBM/NASA, 600M, Apache-2.0) — foundation model para
-  imágenes satelitales (HLS 30m, 6 bands). Útil para clasificar superficie
-  (asfalto retiene más calor que bosque) y ajustar HI por tipo de suelo.
-- **AlphaEarth Foundations** (DeepMind) — embeddings satelitales 10×10m de toda
-  la superficie terrestre. Disponible en Google Earth Engine. Útil para
-  caracterizar el terreno sin necesidad de procesar imágenes crudas.
+### 2.2 Selector de radio — ✅
+Input tipo slider ya implementado (0.5-25 km, paso 0.5 km).
 
-### 2.2 Selector de radio
-Input tipo slider: "Mostrar riesgo en un radio de ___ km"
-- 1 km, 5 km, 10 km, 25 km
-- A más radio, menos resolución (promedio por cuadrante más grande)
-
-### 2.3 Exportar mapa
-- Captura PNG del mapa de riesgo (para LinkedIn, informes)
+### 2.3 Exportar mapa — ⬜
+- Captura PNG del mapa de riesgo
 - Datos subyacentes en GeoJSON
 
 ---
@@ -96,201 +103,92 @@ Input tipo slider: "Mostrar riesgo en un radio de ___ km"
 ## Fase 3: Forecasting y margen de error
 
 ### 3.1 Predicción a más días
-Actualmente se puede consultar cualquier fecha. Ampliar:
-- Mostrar **tendencia semanal**: "El jueves es el día más peligroso de la semana"
-- Para cada día, mostrar el **margen de error** de la predicción meteorológica
-- Bandas de confianza: "HI estimado: 32±3°C"
+- Mostrar **tendencia semanal**
+- Bandas de confianza
 
 ### 3.2 Modelos fundacionales para forecasting
-Modelos pre-entrenados en HuggingFace que podrían complementar o reemplazar
-los modelos propios (XGBoost, RF, LSTM):
-
-| Modelo | Creador | Params | Lo hace | Licencia |
-|--------|---------|--------|---------|----------|
-| **TimesFM 2.5** | Google | 200M | Forecasting de series temporales (decoder-only). No es específico de clima pero funciona con cualquier serie. | Apache-2.0 |
-| **Granite-TTM-R3** | IBM | 1.4M | Forecasting ligero de series, corre en CPU. Ya documentado en `evaluacion_fuentes_externas.md`. | CC-BY-NC-SA (restrictiva) |
-| **WeatherNext 2** | DeepMind | — | Forecasting meteorológico global, 6h resolución. Disponible en Google Earth Engine. Ya documentado. | Propietaria (API) |
-| **Prithvi-EO-2.0** | IBM/NASA | 600M | Foundation model EO (satélite). Análisis multitemporal HLS (30m, 6 bands). *No es forecasting* — clasificación suelo/vegetación. | Apache-2.0 |
-| **AlphaEarth Foundations** | DeepMind | — | Embeddings satelitales 10×10m. Dataset en Earth Engine para análisis geoespacial. | Propietaria (EE) |
-
-**Recomendación**:
-- **TimesFM 2.5** es el más prometedor para reemplazar modelos propios de
-  forecasting de riesgo (serie temporal de features → riesgo). Apache-2.0,
-  200M params, corre en GPU consumer.
-- **Granite-TTM-R3** es alternativa ligera (CPU), pero licencia CC-BY-NC-SA.
-- WeatherNext y Open-Meteo son **fuentes de datos**, no modelos que sustituyan
-  al nuestro.
-- Prithvi-EO y AlphaEarth son para **análisis geoespacial** (mapas, Fase 2).
+- **TimesFM 2.5** (Google, Apache-2.0) — reemplazar modelos propios
+- **Granite-TTM-R3** (IBM, 1.4M, CPU, licencia restrictiva)
+- **WeatherNext 2** (DeepMind) — forecasting meteorológico global
 
 ### 3.3 Forecast con supervisión
-Cuando el forecast tiene alta incertidumbre, añadir aviso:
-> "Predicción con baja confianza debido a dispersión entre modelos.
-> Se recomienda supervisar manualmente las condiciones reales."
+Aviso cuando el forecast tiene alta incertidumbre.
 
 ---
 
 ## Fase 4: Mensajería y notificaciones
 
 ### 4.1 Abstracción de mensajería
-Interfaz común para enviar alertas, con adaptadores:
-
-```
-MessageService
-  ├── TelegramAdapter    → Bot API
-  ├── HermesAdapter      → Plugin para Hermes
-  ├── WebhookAdapter     → URL configurable
-  └── ConsoleAdapter     → Log / stdout (desarrollo)
-```
-
-Cada adaptador implementa: `send(user_id, message, image?)`.
+Interfaz común con adaptadores: Telegram, Hermes, Webhook, Console.
 
 ### 4.2 Crontab en Docker
-Contenedor que ejecuta evaluaciones programadas:
-- `0 8 * * *` — "Hoy en tu zona: PRECAUCION a las 15:00. Toma precauciones."
-- `0 20 * * *` — "Resumen del día: HI pico 34°C a las 16:00."
-- Configurable por usuario (horario, canales)
+Contenedor con evaluaciones programadas (mañana/resumen).
 
 ### 4.3 Worker de notificaciones
-- Lee de una cola (Redis / SQLite) los usuarios que deben ser notificados
-- Usa el MessageService para enviar
-- Escalable: N workers compitiendo por mensajes
+Cola de mensajes con N workers compitiendo.
 
 ### 4.4 Telegram
-- **Chat privado**: el usuario se identifica con su `telegram_id`, se carga su
-  perfil guardado, recibe predicciones personalizadas.
-- **Grupo**: el bot responde a comandos como `/clima Madrid`, `/recomendaciones`
-  (visibilidad pública, sin perfil individual).
+- Chat privado con perfil guardado
+- Grupo con comandos `/clima`, `/recomendaciones`
 
 ---
 
 ## Fase 5: Agentes e integración MCP
 
-### 5.1 MCP Server
-Exponer el sistema como **MCP server**:
-```
-Herramientas:
-  - predecir(provincia, perfil) → clase_riesgo
-  - recomendar(provincia, perfil) → recomendaciones
-  - riesgo_zona(lat, lon, radio) → grid de riesgo
-  - buscar_factor(query) → factores de riesgo (RAG con sqlite-vec)
-  - contrafactuales(perfil) → qué cambiar para bajar el riesgo
-```
-
-Cualquier LLM (Claude, Codex, GPT) con MCP puede consultar:
-> "Voy a salir a correr por la Sierra de Madrid a las 7 de la mañana, ¿qué riesgo tengo?"
-
-### 5.2 Agente Harness
-Un agente que:
-- Escucha en un puerto (MCP / WebSocket)
-- Recibe queries en lenguaje natural
-- Decide qué herramientas usar
-- Devuelve resultado + imagen si procede
-
-### 5.3 Plugin para otros agentes
-El sistema empaquetado como **skill** de Skills.sh o plugin MCP:
-- `climasafeai-mcp` publicable
-- Otros agentes lo importan: "analiza el clima para mi ruta de running"
-- Skills.sh ya tiene patrones para esto
-
-### 5.4 Hermes
-Investigar Hermes como orquestador:
-- ¿Hermes puede leer el chat y actuar como agente?
-- ¿O usarlo como gateway de mensajería (recibe → MCP server)?
-- Diferencia entre agente autónomo (Hermes) vs plugin (ClimaSafeAI como skill)
+| # | Qué |
+|---|-----|
+| ⬜ | MCP Server con herramientas: predecir, recomendar, riesgo_zona, contrafactuales |
+| ⬜ | Agente Harness (WebSocket, queries en lenguaje natural) |
+| ⬜ | Plugin Skills.sh / MCP publicable |
+| ⬜ | Investigar Hermes como orquestador |
 
 ---
 
 ## Fase 6: RAG + LLM local
 
-### 6.1 Resúmenes con LLM local
-Lo que devuelva el RAG (factores de riesgo, papers) resumirlo con un LLM local:
-- Gemma 3 (Google) vía Unsloth
-- Fine-tuning LoRA en Google Colab con `unsloth`
-- Dataset: papers de factores de riesgo, documentación del proyecto
-
-### 6.2 Enlaces de referencia
-- https://unsloth.ai/docs/models/gemma-4/train — entrenamiento con GUI
-- https://www.skills.sh/google-gemma/gemma-skills/gemma-trainer — skill para fine-tune
-- https://github.com/mattpocock/skills/tree/main/skills/productivity/teach
-- https://www.skills.sh/aradotso/trending-skills/gemma-tuner-multimodal
-
-### 6.3 Estrategia
-1. Hacer RAG sobre los papers almacenados (sqlite-vec ya implementado)
-2. El LLM local (Gemma 3 2B/9B fine-tuneado) resume la respuesta del RAG
-3. El usuario pregunta en lenguaje natural y recibe respuesta sintetizada
-4. El fine-tune se entrena con los propios documentos del proyecto
+| # | Qué |
+|---|-----|
+| ⬜ | Resúmenes con Gemma 3 vía Unsloth |
+| ⬜ | Fine-tuning LoRA con documentos del proyecto |
+| ⬜ | Consultas en lenguaje natural con respuesta sintetizada |
 
 ---
 
 ## Fase 7: UX y despliegue
 
-### 7.1 Fecha de nacimiento
-En lugar de pedir "edad", pedir **fecha de nacimiento** (campo `date`):
-- El frontend calcula la edad automáticamente
-- Una vez enviado el perfil, la fecha se transforma en edad y se descarta
-- Privacidad: no se almacena la fecha de nacimiento
-
-### 7.2 Chat iterativo en la GUI
-- Mejorar la interfaz actual con un **chat** (asistente conversacional)
-- Ejemplo: usuario escribe "voy a correr mañana a las 8 en Valencia"
-- El asistente interpreta, rellena el formulario y ejecuta la predicción
-- Las respuestas pueden incluir gráficos inline
-
-### 7.3 Capturas para LinkedIn
-- Generar imágenes bonitas del mapa de riesgo y las gráficas
-- Con marca de agua de ClimaSafeAI
-- Botón "Compartir" que descarga PNG
-
-### 7.4 Despliegue simplificado
-- Dockploy / Spacebot como alternativa a Docker manual
-- Skills.sh para distribuir como skill instalable
-- Futuro: "agentes que te montan todo, no un Docker"
+| # | Qué |
+|---|-----|
+| ✅ | Fecha de nacimiento (campo date, cálculo automático de edad) |
+| ⬜ | Chat iterativo en la GUI (asistente conversacional) |
+| ⬜ | Capturas para LinkedIn con marca de agua |
+| ⬜ | Despliegue simplificado (Dockploy / Skills.sh) |
 
 ---
 
 ## Retos técnicos / Aprendizaje
 
-Ideas para aprender conceptos nuevos que aporten valor al proyecto y sean
-transferibles. Ninguno tiene prioridad fija.
-
-### Cadenas de Markov / HMM
-Modelar *trayectoria* de riesgo (dado que hoy hay precaución, probabilidad de
-que mañana sea peligro). Alternativa al punto-a-punto actual.
-
-### Redes Bayesianas
-Grafo causal de factores de riesgo. Diagnóstico inverso: "dado riesgo peligro,
-¿qué factor lo causa?" — ya implementado como `BayesianRiskDiagnosis`.
-
-### Teoría causal (Pearl)
-Contrafactuales formales: "¿qué pasaría si todos se aclimataran?" Siguiente
-salto cualitativo sobre "solo predecir".
-
-### Procesos Gaussianos
-Incertidumbre nativa para factores con pocos datos. Complemento a XGBoost/LSTM.
-
-### Graph Neural Networks
-Embeddings de factores basados en su grafo de relaciones. Mejor que all-MiniLM
-para el RAG.
-
-### Series temporales avanzadas (TFT / N-BEATS)
-Alternativa al LSTM híbrido actual. Forecast multi-día con atención interpretable.
-
-### Aprendizaje por refuerzo
-Pasar de "predecir riesgo" a "reducir riesgo": agente que recomienda acciones y
-aprende de las consecuencias.
+| # | Qué |
+|---|-----|
+| ⬜ | Cadenas de Markov / HMM — modelar trayectoria de riesgo |
+| ⬜ | Redes Bayesianas — grafo causal (diagnóstico ya implementado) |
+| ⬜ | Teoría causal (Pearl) — contrafactuales formales |
+| ⬜ | Procesos Gaussianos — incertidumbre nativa |
+| ⬜ | Graph Neural Networks — embeddings de factores |
+| ⬜ | Series temporales avanzadas (TFT / N-BEATS) |
+| ⬜ | Aprendizaje por refuerzo — de predecir a reducir riesgo |
 
 ---
 
 ## Resumen visual
 
 ```
-Fase 1 ── CSV, gráfica multi-edad, volumen, API   [AHORA]
-Fase 2 ── Mapa de riesgo por km², colores, exportar
+Fase 1 ── CSV, volumen, API por zonas             [PENDIENTE — 1.2, 1.3]
+Fase 2 ── Mapa de riesgo por km², colores, exportar  [✅ Grid + perfiles hecho, ⬜ exportar]
 Fase 3 ── Tendencia semanal, TimesFM, márgenes de error
 Fase 4 ── Telegram, Hermes, crontab, worker
 Fase 5 ── MCP server, Harness, Skills.sh plugin
 Fase 6 ── Gemma 3 + Unsloth + LoRA para RAG
-Fase 7 ── Fecha nac., chat, LinkedIn, Dockploy
+Fase 7 ── Chat, LinkedIn, Dockploy
 ```
 
 ## Referencias

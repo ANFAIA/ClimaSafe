@@ -175,19 +175,7 @@ def preprocess_data(
     if n_before - len(df):
         print(f"    Duplicados eliminados: {n_before - len(df)}")
 
-    # 2. Feature engineering
-    df = _feature_engineering(df)
-
-    # 2.5 Transformación logarítmica
-    df = _apply_logcols(df, LOGCOLS)
-
-    # 3. Codificación ordinal
-    for col, mapping in ORDINAL_MAPPINGS.items():
-        if col in df.columns:
-            df[col] = df[col].map(mapping)
-            print(f"    Codificación ordinal: {col}")
-
-    # Capturar 'fecha' ANTES de que COLS_TO_DROP la elimine (paso 4) --
+    # Capturar 'fecha' ANTES de que COLS_TO_DROP la elimine --
     # split_by_date la necesita para decidir qué filas van a test.
     if split_by_date:
         if "fecha" not in df.columns:
@@ -198,7 +186,9 @@ def preprocess_data(
             )
         fechas_para_split = pd.to_datetime(df["fecha"]).copy()
 
-    # 4. Eliminar columnas (generales + fuga de datos + extra por clase)
+    # 2. Eliminar columnas (generales + fuga de datos + extra por clase)
+    #    ANTES de feature engineering para evitar que features derivadas
+    #    reintroduzcan información de columnas eliminadas intencionalmente.
     cols_a_eliminar = (
         list(COLS_TO_DROP)
         + LEAKAGE_COLS_BY_CLASE[clase]
@@ -208,6 +198,18 @@ def preprocess_data(
     if cols_presentes:
         df.drop(columns=cols_presentes, inplace=True)
         print(f"    Columnas eliminadas ({clase}): {cols_presentes}")
+
+    # 3. Feature engineering (después de dropear columnas)
+    df = _feature_engineering(df)
+
+    # 3.5 Transformación logarítmica
+    df = _apply_logcols(df, LOGCOLS)
+
+    # 4. Codificación ordinal
+    for col, mapping in ORDINAL_MAPPINGS.items():
+        if col in df.columns:
+            df[col] = df[col].map(mapping)
+            print(f"    Codificación ordinal: {col}")
 
     # 5. X / y
     X = df.drop(columns=[target_col])

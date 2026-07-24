@@ -223,18 +223,27 @@ def fetch_weather_data(
 
     is_today = target_date == today
 
-    df_hora_hist = fetch_historical_hourly(lat, lon, days=14)
+    try:
+        df_hora_hist = fetch_historical_hourly(lat, lon, days=14)
+    except Exception:
+        df_hora_hist = pd.DataFrame()
     if df_hora_hist is not None and len(df_hora_hist) > 0:
         last_hist_date = pd.to_datetime(df_hora_hist["datetime"]).dt.date.max()
     else:
         last_hist_date = None
 
     if is_today:
-        current = fetch_current_weather(lat, lon)
+        try:
+            current = fetch_current_weather(lat, lon)
+        except Exception:
+            current = {}
     else:
         current = {}
 
-    df_hora_forecast = fetch_hourly_forecast(lat, lon, hours=48)
+    try:
+        df_hora_forecast = fetch_hourly_forecast(lat, lon, hours=48)
+    except Exception:
+        df_hora_forecast = pd.DataFrame()
 
     if df_hora_forecast is not None and len(df_hora_forecast) > 0:
         df_hora_forecast["fecha"] = pd.to_datetime(df_hora_forecast["datetime"]).dt.date

@@ -214,7 +214,6 @@ def download_openuv(
     file_path = RAW_DATA_DIR / filename
 
     if file_path.exists():
-        print(f"    {filename} ya existe en {RAW_DATA_DIR}")
         return pd.read_csv(file_path)
 
     api_key = os.environ.get("OpenUV_API_KEY")
