@@ -8,7 +8,8 @@
         monitor tune serve query \
         docker-run docker-update docker-down \
         clean clean-models clean-figures clean-all \
-        run info help web
+        run info help web \
+        mcp mcp-factors install-mcp setup-claude
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Variables
@@ -82,9 +83,17 @@ help:
 	@echo ""
 	@echo "  Docker"
 	@echo "    make web             lanza web chat en http://localhost:8000"
-	@echo "    make docker-run     construye imagen y lanza el chat en http://localhost:8080"
-	@echo "    make docker-update  reconstruye la imagen con los cambios mas recientes"
-	@echo "    make docker-down    para y elimina los contenedores"
+	@echo "    make docker-run      construye imagen y lanza el chat en http://localhost:8080"
+	@echo "    make docker-update   reconstruye la imagen con los cambios mas recientes"
+	@echo "    make docker-down     para y elimina los contenedores"
+	@echo ""
+	@echo "  MCP (Claude Desktop / Cursor / VS Code)"
+	@echo "    make mcp             MCP HTTPS autofirmado en :8101/mcp"
+	@echo "    make mcp-http        MCP HTTP plano en :8101/mcp"
+	@echo "    make mcp-stdio       MCP stdio (Claude Desktop local)"
+	@echo "    make mcp-web         MCP + ngrok para Claude Web"
+	@echo "    make install-mcp     instala symlink en ~/.local/bin/"
+	@echo "    make setup-claude    genera claude_desktop_config.json"
 	@echo ""
 
 
@@ -169,9 +178,47 @@ serve:
 	@echo "   Documentación interactiva: http://localhost:8000/docs"
 	uv run uvicorn api.main:app --reload --port 8000
 
-web:
+ web:
 	@echo "▶  Lanzando web chat en http://localhost:8000"
 	uv run uvicorn chat.app:app --reload --port 8000
+
+mcp:
+	@echo "▶  MCP Server — HTTPS autofirmado en https://localhost:8101/mcp"
+	uv run python -m agents.tools.prediction_mcp_tool
+
+mcp-http:
+	@echo "▶  MCP Server — HTTP plano en http://localhost:8101/mcp"
+	uv run python -m agents.tools.prediction_mcp_tool --insecure
+
+mcp-web: mcp-http
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Exponiendo MCP para Claude Web via ngrok"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  1. En otra terminal: ngrok http 8101"
+	@echo "  2. Copia la URL https://xxxx.ngrok.io"
+	@echo "  3. Ve a claude.ai → Settings → Connectors"
+	@echo "  4. Añade Custom Connector con URL: https://xxxx.ngrok.io/mcp"
+	@echo "  5. Test connection → ¡Listo!"
+	@echo ""
+	@echo "  Si no tienes ngrok: sudo snap install ngrok"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+mcp-factors:
+	@echo "▶  MCP Server — Factores en http://localhost:8100/sse"
+	uv run python -m agents.tools.factors_mcp_tool
+
+USER_BIN := $(shell echo $${HOME:-~})/.local/bin
+
+install-mcp: $(USER_BIN)/climasafeai-mcp
+	@echo "✅  climasafeai-mcp instalado en PATH: $(USER_BIN)/climasafeai-mcp"
+
+$(USER_BIN)/climasafeai-mcp: .venv/bin/climasafeai-mcp
+	@mkdir -p $(USER_BIN)
+	ln -sf $(abspath $<) $(USER_BIN)/climasafeai-mcp
+
+setup-claude:
+	@uv run python scripts/setup_claude_config.py
 
 
 profile:

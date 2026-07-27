@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "climasafeai": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "agents.tools.prediction_mcp_tool", "--stdio"]
+    }
+  }
+}

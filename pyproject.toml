@@ -136,8 +136,11 @@ monitoring = [
 ]
 
 
-[tool.setuptools]
-packages = ["climasafeai"]
+[tool.setuptools.packages.find]
+include = ["climasafeai*", "agents*"]
+
+[project.scripts]
+climasafeai-mcp = "agents.tools.prediction_mcp_tool:main"
 
 [build-system]
 requires = ["setuptools>=65.0", "wheel"]

@@ -76,6 +76,7 @@ reports/**/*.npz
 
 # --- Modelos entrenados ---
 models/**/*.joblib
+models/**/*.bak
 models/**/*.pkl
 models/**/*.pt
 models/**/*.pth
@@ -152,11 +153,10 @@ graphify-out/cache/
 .opencode/node_modules/
 .opencode/package.json
 .opencode/package-lock.json
-*.bak
-opencode.json
 
 # --- MLflow local DB ---
 mlflow.db
+mlflow.db-journal
 
 # --- Data artifacts ---
 data/processed/*.pt

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    ".opencode/orchestrator.md"
+  ],
+  "agent": {
+    "orquestador": {
+      "description": "Orquestador que recibe ideas en lenguaje natural, las descompone y delega en los agentes Python del proyecto (agents/)",
+      "mode": "primary"
+    }
+  },
+  "mcp": {
+    "climasafeai": {
+      "type": "local",
+      "command": ["uv", "run", "python", "-m", "agents.tools.prediction_mcp_tool", "--stdio"],
+      "enabled": true
+    }
+  }
+}

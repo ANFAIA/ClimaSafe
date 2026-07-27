@@ -17,7 +17,9 @@ Uso como tool registrada:
 
 from __future__ import annotations
 
+import asyncio
 import json
+import sys
 from typing import Any
 
 from agents.tools.registry import register_tool
@@ -142,15 +144,50 @@ def search_factors(query: str, k: int = 5) -> list[dict]:
     return _db().search_factores(query, k=k)
 
 
-def run_mcp_server(host: str = "0.0.0.0", port: int = 8100) -> None:
+def run_mcp_server(
+    host: str = "0.0.0.0",
+    port: int = 8100,
+    ssl_keyfile: str | None = None,
+    ssl_certfile: str | None = None,
+) -> None:
     """Arranca el servidor MCP en modo SSE."""
     if not _HAS_MCP:
-        print("Error: mcp no está instalado. Ejecuta: uv add mcp")
+        print("Error: mcp no está instalado. Ejecuta: uv add mcp", file=sys.stderr)
         return
-    print(f"MCP Server — ClimaSafeAI Factores de Riesgo")
-    print(f"   Escuchando en http://{host}:{port}/sse")
-    _mcp.run(host=host, port=port)
+
+    import uvicorn
+
+    starlette_app = _mcp.sse_app()
+    proto = "https" if ssl_certfile else "http"
+    print(f"MCP Server — ClimaSafeAI Factores de Riesgo", file=sys.stderr)
+    print(f"   Escuchando en {proto}://{host}:{port}/sse", file=sys.stderr)
+
+    uvicorn_config: dict[str, Any] = {
+        "app": starlette_app,
+        "host": host,
+        "port": port,
+        "log_level": "info",
+    }
+    if ssl_keyfile and ssl_certfile:
+        uvicorn_config["ssl_keyfile"] = ssl_keyfile
+        uvicorn_config["ssl_certfile"] = ssl_certfile
+
+    try:
+        uvicorn.run(**uvicorn_config)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        print("\n   Servidor detenido.", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":
-    run_mcp_server()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ClimaSafeAI MCP Factors Server")
+    parser.add_argument("--host", default="0.0.0.0", help="Host (default 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=8100, help="Puerto (default 8100)")
+    parser.add_argument("--ssl-keyfile", help="Ruta a clave privada SSL")
+    parser.add_argument("--ssl-certfile", help="Ruta a certificado SSL")
+    args = parser.parse_args()
+    run_mcp_server(
+        host=args.host, port=args.port,
+        ssl_keyfile=args.ssl_keyfile, ssl_certfile=args.ssl_certfile,
+    )
