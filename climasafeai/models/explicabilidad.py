@@ -1,7 +1,13 @@
 import numpy as np
 import pandas as pd
 import joblib
-import torch
+
+try:
+    import torch
+    _TORCH_AVAILABLE = True
+except ModuleNotFoundError:
+    torch = None
+    _TORCH_AVAILABLE = False
 
 from climasafeai.utils.paths import ARTIFACTS_DIR
 from climasafeai.models.predict_model import (
@@ -155,6 +161,9 @@ def explicar_lstm(
     df_features,
     provincia: str = "Madrid",
 ) -> dict:
+    if not _TORCH_AVAILABLE:
+        return {"error": "torch no está instalado (pip install '.[redes_neuronales]' o 'uv sync --group redes_neuronales')"}
+
     from climasafeai.models.lstm_province_hybrid import (
         load_lstm_province_hybrid,
         LSTM_PROVINCE_HYBRID_MODEL_PATH,

@@ -1,6 +1,6 @@
 # Próximos pasos — hoja de ruta
 
-**Última revisión:** 2026-07-24
+**Última revisión:** 2026-07-27 (tarde)
 
 ---
 
@@ -44,6 +44,22 @@
 | ✅ | Fecha de nacimiento en lugar de edad (campo date, cálculo automático) | `climasafeai/db/manager.py`, `chat/static/index.html`, `data/schema.sql` |
 | ✅ | Comorbilidades/medicación en collapsible | `chat/static/index.html` |
 
+### 1.1 Múltiples edades en una pantalla (sesión 2026-07-27)
+
+Todas las curvas de riesgo por edad a la vez sobre el eje horario, con los
+umbrales resaltados y tooltip comparativo hora a hora.
+
+| # | Qué | Archivos |
+|---|-----|----------|
+| ✅ | `POST /api/curvas-edad` — N curvas de riesgo horario por edad con UNA sola descarga de meteo y sin ejecutar los modelos (la curva solo depende del perfil horario y de la personalización) | `chat/app.py` |
+| ✅ | `perfil_horario_desde_df()` extraído de `predict_ensemble`, y `PERS_THRESHOLD_PELIGRO` subido a constante de módulo para reutilizar los umbrales | `climasafeai/models/ensemble.py` |
+| ✅ | Comparativa de 5 edades (antes 1-2) en una sola llamada; se descarta el tramo que solapa con la edad real para no duplicar su línea | `chat/static/index.html` |
+| ✅ | Líneas horizontales de umbral PRECAUCION / PELIGRO sobre el eje de riesgo personal | `chat/static/index.html` |
+| ✅ | Tooltip comparativo por hora (modo `index` de Chart.js, ya existente) | `chat/static/index.html` |
+| ✅ | Fix: la comparativa ya no persiste perfiles inventados en SQLite — flag `persistir` en `/api/predict` | `chat/app.py`, `chat/static/index.html` |
+| ✅ | Tests del endpoint y del flag (7 nuevos) | `tests/test_api.py` |
+| ⬜ | Ajustar `EDADES_COMPARATIVA` a `(25, 55, 65, 75, 85)`: los tramos de `_factor_edad_calor` son 45/55/65/75/85, así que 25 y 40 pintan la misma curva | `chat/app.py` |
+
 ---
 
 ## Pendiente — Fase 1: Riesgo colectivo y demográfico
@@ -59,12 +75,15 @@ María,70,mujer,28,reposo,...
 - **Factor "orgullo colectivo"**: si es un evento deportivo, el riesgo individual
   se multiplica por un factor (la gente se exige más en grupo)
 
-### 1.3 Predicción por volumen
-Dado un volumen de N personas en una zona, estimar **cuántas podrían tener
-problemas cardíacos**:
-- Usar prevalencia poblacional de enfermedad cardiovascular (~10-15% en >50a)
-- Combinar con las condiciones climáticas previstas para ese día
-- Devolver: "De 5000 asistentes esperados, ~75 podrían requerir atención médica por calor"
+### 1.3 Predicción por volumen ✅
+| # | Qué | Archivos |
+|---|-----|----------|
+| ✅ | `estimar_afectados()` con prevalencia ECV (4%/<50, 12%/>50), multiplicador climático por tramos HI, factor evento, rango ±30% | `climasafeai/models/volumen.py` |
+| ✅ | `POST /api/riesgo-volumen` — calcula HI pico en ventana de actividad, llama estimar_afectados | `chat/app.py` |
+| ✅ | Tests (26): multiplicador, escalado, ejemplo roadmap, extremos, claves presentes | `tests/test_volumen.py` |
+| ✅ | Explicabilidad colectivo: 5 tarjetas (factores_detalle, contrafactuales 3 escenarios, distr. demográfica, HI overlay, resumen ejecutivo) | `chat/static/index.html`, `chat/app.py` |
+| ✅ | Prevalencias internas por edad (`_prevalencia(edad)`) — elimina inputs manuales de % comorbilidades del formulario | `chat/app.py` |
+| ✅ | Volumen como submodo de Grupo (junto a Colectivo y Por etiqueta) — UI más intuitiva | `chat/static/index.html` |
 
 ### 1.4 API estructurada
 - `GET /api/riesgo-zona?lat=...&lon=...&radio=5` — riesgo por cuadrantes (✅ hecho en Fase 2)
@@ -137,7 +156,7 @@ Cola de mensajes con N workers compitiendo.
 
 | # | Qué |
 |---|-----|
-| ⬜ | MCP Server con herramientas: predecir, recomendar, riesgo_zona, contrafactuales |
+| ✅ | MCP Server con herramientas: predict_risk, predict_volume_risk, predict_zone_risk, predict_group_risk, predict_age_curves, system_health (puerto 8101) · `agents/tools/prediction_mcp_tool.py` |
 | ⬜ | Agente Harness (WebSocket, queries en lenguaje natural) |
 | ⬜ | Plugin Skills.sh / MCP publicable |
 | ⬜ | Investigar Hermes como orquestador |
@@ -182,11 +201,11 @@ Cola de mensajes con N workers compitiendo.
 ## Resumen visual
 
 ```
-Fase 1 ── CSV, volumen, API por zonas             [PENDIENTE — 1.2, 1.3]
+Fase 1 ── Curvas por edad ✅ · CSV, volumen ✅        [PENDIENTE — 1.2 CSV]
 Fase 2 ── Mapa de riesgo por km², colores, exportar  [✅ Grid + perfiles hecho, ⬜ exportar]
 Fase 3 ── Tendencia semanal, TimesFM, márgenes de error
 Fase 4 ── Telegram, Hermes, crontab, worker
-Fase 5 ── MCP server, Harness, Skills.sh plugin
+Fase 5 ── MCP server ✅ · Harness, Skills.sh plugin
 Fase 6 ── Gemma 3 + Unsloth + LoRA para RAG
 Fase 7 ── Chat, LinkedIn, Dockploy
 ```

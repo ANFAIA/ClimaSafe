@@ -538,40 +538,45 @@ async def api_predict(body: dict, date: str | None = None):
     except Exception as exc:
         return {"error": str(exc)}
 
-    # Guardar perfil en SQLite (sin perfil_id ni alias en datos)
-    alias = raw_perfil.get("alias")
-    datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
-    # Quitar campos internos que no deben persistir en SQLite
-    for _k in ("_perfil_horario", "perfil_id", "alias"):
-        datos_perfil.pop(_k, None)
-    datos_perfil["lat"] = lat
-    datos_perfil["lon"] = lon
-    datos_perfil["provincia"] = provincia
-    if alias:
-        existente = _db.buscar_por_alias(alias)
-        if existente:
-            perfil_id = existente["id"]
-            datos_perfil["alias"] = alias
+    # Predicciones auxiliares (comparativa de edades, simulaciones) mandan
+    # `persistir: false`: son perfiles inventados a partir del real, así que
+    # no deben crear filas en SQLite ni contar como consulta del usuario.
+    if body.get("persistir", True):
+        # Guardar perfil en SQLite (sin perfil_id ni alias en datos)
+        alias = raw_perfil.get("alias")
+        datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
+        # Quitar campos internos que no deben persistir en SQLite
+        for _k in ("_perfil_horario", "perfil_id", "alias"):
+            datos_perfil.pop(_k, None)
+        datos_perfil["lat"] = lat
+        datos_perfil["lon"] = lon
+        datos_perfil["provincia"] = provincia
+        if alias:
+            existente = _db.buscar_por_alias(alias)
+            if existente:
+                perfil_id = existente["id"]
+                datos_perfil["alias"] = alias
+                _db.actualizar_perfil(perfil_id, datos_perfil)
+            else:
+                datos_perfil["alias"] = alias
+                perfil_id = _db.crear_perfil(datos_perfil)
+        elif perfil_id:
             _db.actualizar_perfil(perfil_id, datos_perfil)
         else:
-            datos_perfil["alias"] = alias
             perfil_id = _db.crear_perfil(datos_perfil)
-    elif perfil_id:
-        _db.actualizar_perfil(perfil_id, datos_perfil)
-    else:
-        perfil_id = _db.crear_perfil(datos_perfil)
-    result["perfil_id"] = perfil_id
 
-    # Guardar consulta
-    clase = result.get("clase_final_label", result.get("clase_final"))
-    tipo = result.get("tipo", "calor")
-    indice_orig = result.get("explicacion", {}).get("indice_original")
-    indice_pers = result.get("explicacion", {}).get("indice_personalizado")
-    _db.guardar_consulta(
-        perfil_id=perfil_id, provincia=provincia, lat=lat, lon=lon,
-        tipo_riesgo=tipo, indice_original=indice_orig,
-        indice_personalizado=indice_pers, clase_final=clase,
-    )
+        # Guardar consulta
+        clase = result.get("clase_final_label", result.get("clase_final"))
+        tipo = result.get("tipo", "calor")
+        indice_orig = result.get("explicacion", {}).get("indice_original")
+        indice_pers = result.get("explicacion", {}).get("indice_personalizado")
+        _db.guardar_consulta(
+            perfil_id=perfil_id, provincia=provincia, lat=lat, lon=lon,
+            tipo_riesgo=tipo, indice_original=indice_orig,
+            indice_personalizado=indice_pers, clase_final=clase,
+        )
+
+    result["perfil_id"] = perfil_id
 
     result["perfil_usuario"] = perfil
     result["weather"] = _get_weather_summary(result)
@@ -605,9 +610,102 @@ async def api_predict(body: dict, date: str | None = None):
     return result
 
 
-@app.post("/api/riesgo-colectivo")
-async def api_riesgo_colectivo(body: dict):
-    """Calcula riesgo para un grupo."""
+# Edades de referencia de la comparativa. Cubren el rango adulto sin llenar la
+# gráfica de líneas: joven, adulto, mediana edad, mayor y muy mayor.
+EDADES_COMPARATIVA = (25, 40, 55, 70, 85)
+
+
+@app.post("/api/curvas-edad")
+async def api_curvas_edad(body: dict):
+    """Curva de riesgo horario del mismo perfil a varias edades.
+
+    La curva solo depende del perfil horario (HI de cada hora) y de los factores
+    de personalización, así que las N curvas salen de UNA sola descarga de meteo
+    y sin ejecutar los modelos. Si el cliente ya tiene el `perfil_horario` de la
+    predicción principal, lo manda y no hace falta ni descargar.
+
+    No persiste nada: son perfiles derivados del real para comparar, no
+    consultas del usuario.
+    """
+    from climasafeai.features.personalizacion import riesgo_horario_acumulado
+    from climasafeai.models.ensemble import (
+        PERS_THRESHOLD_PELIGRO, perfil_horario_desde_df,
+    )
+    from climasafeai.models.predict_model import CLASS_THRESHOLDS_RECOMENDADOS
+
+    perfil_base = _normalize_perfil(body.get("perfil") or {})
+    for _k in ("_perfil_horario", "perfil_id", "alias"):
+        perfil_base.pop(_k, None)
+
+    edades = body.get("edades") or list(EDADES_COMPARATIVA)
+    try:
+        edades = sorted({int(e) for e in edades if 0 < int(e) <= 120})[:8]
+    except (TypeError, ValueError):
+        return {"error": "El campo 'edades' debe ser una lista de números."}
+    if not edades:
+        return {"error": "No hay ninguna edad válida que comparar (1-120)."}
+
+    perfil_horario = body.get("perfil_horario")
+    if not perfil_horario:
+        target_date = None
+        if body.get("fecha"):
+            try:
+                from datetime import date as date_type
+                target_date = date_type.fromisoformat(body["fecha"])
+            except ValueError:
+                return {"error": f"Fecha inválida: '{body['fecha']}'. Usa formato ISO: YYYY-MM-DD"}
+        try:
+            from climasafeai.data.weather_fetcher import fetch_weather_data
+            weather = fetch_weather_data(
+                lat=body.get("lat"), lon=body.get("lon"),
+                provincia=body.get("provincia", "Madrid"), target_date=target_date,
+            )
+            perfil_horario = perfil_horario_desde_df(weather.get("df_hora"))
+        except Exception as exc:
+            return {"error": str(exc)}
+    if not perfil_horario:
+        return {"error": "No hay perfil horario disponible para esta ubicación."}
+
+    curvas = []
+    for edad in edades:
+        curva = riesgo_horario_acumulado(perfil_horario, {**perfil_base, "edad": edad})
+        if not curva:
+            continue
+        pico = max(curva, key=lambda e: e["riesgo"])
+        curvas.append({
+            "edad": edad,
+            "curva": curva,
+            "pico": round(pico["riesgo"], 4),
+            "hora_pico": pico["hora"],
+        })
+
+    return {
+        "curvas": curvas,
+        "horas": [e["hora"] for e in perfil_horario],
+        # Mismos cortes que usa el ensemble sobre la probabilidad personalizada,
+        # para que las líneas de la gráfica coincidan con la clase que se muestra.
+        "umbrales": {
+            "precaucion": CLASS_THRESHOLDS_RECOMENDADOS.get("calor", {}).get("t1", 0.25),
+            "peligro": PERS_THRESHOLD_PELIGRO,
+        },
+    }
+
+
+FACTORES_COEF = {
+    "grasa_alta": {"label": "Obesidad/grasa alta", "coef": 1.08},
+    "cardiovascular": {"label": "Cardiovascular", "coef": 1.4},
+    "diabetes": {"label": "Diabetes", "coef": 1.2},
+    "respiratoria": {"label": "Respiratoria", "coef": 1.3},
+    "mental": {"label": "Salud mental", "coef": 1.8},
+    "no_aclimatados": {"label": "No aclimatados", "coef": 1.6},
+}
+
+FACTORES_ETIQUETAS = {k: v["label"] for k, v in FACTORES_COEF.items()}
+
+
+def _calcular_riesgo_colectivo(body: dict) -> dict:
+    """Núcleo del cálculo de riesgo colectivo (modo 'numero').
+    Devuelve el resultado completo + datos intermedios para contrafactuales."""
     provincia = body.get("provincia", "Madrid")
     lat = body.get("lat")
     lon = body.get("lon")
@@ -620,149 +718,214 @@ async def api_riesgo_colectivo(body: dict):
         except ValueError:
             pass
 
-    tipo = body.get("tipo", "numero")
+    cantidad = int(body.get("cantidad", 100))
+    edad_min = int(body.get("edad_min", 18))
+    edad_max = int(body.get("edad_max", 80))
+    pct_hombres = int(body.get("pct_hombres", 50))
+    actividad = body.get("actividad", "ligera")
+    hora_inicio = float(body.get("hora_inicio", 10))
+    duracion = float(body.get("duracion", 2))
+    aclimatado = body.get("aclimatado")
+
+    def _prevalencia(edad: float) -> dict:
+        e = max(18, min(90, edad))
+        return {
+            "grasa_alta": min(45, 20 + (e - 20) * 0.35),
+            "cardiovascular": min(30, 2 + (e - 20) * 0.35),
+            "diabetes": min(25, 1 + (e - 20) * 0.30),
+            "respiratoria": min(12, 3 + (e - 20) * 0.12),
+            "mental": min(15, 8 - abs(e - 45) * 0.15),
+            "no_aclimatados": 40.0,
+        }
+
+    def _factor_grupo(pct: float, coef: float) -> float:
+        if pct <= 0:
+            return 1.0
+        return 1.0 + (pct / 100.0) * (coef - 1.0)
+
+    rangos_edad = [
+        (18, 30), (30, 45), (45, 60), (60, 75), (75, 90)
+    ]
+    rangos_edad = [(a, b) for a, b in rangos_edad if a < edad_max and b > edad_min]
+    if not rangos_edad:
+        rangos_edad = [(edad_min, edad_max)]
+
     from climasafeai.models.ensemble import predict_ensemble
+
+    total_rango_pct = sum(min(b, edad_max) - max(a, edad_min) for a, b in rangos_edad)
+    pcts_ponderados = {k: 0.0 for k in FACTORES_COEF}
+    for a, b in rangos_edad:
+        solapamiento = max(0, min(b, edad_max) - max(a, edad_min))
+        if solapamiento <= 0:
+            continue
+        peso = solapamiento / total_rango_pct if total_rango_pct else 0
+        edad_med_rango = (max(a, edad_min) + min(b, edad_max)) / 2
+        prev = _prevalencia(edad_med_rango)
+        for k in pcts_ponderados:
+            pcts_ponderados[k] += prev[k] * peso
+
+    # Permitir override explícito desde el body (útil para contrafactuales)
+    for k in pcts_ponderados:
+        bk = f"pct_{k}"
+        if bk in body:
+            try:
+                pcts_ponderados[k] = float(body[bk])
+            except (ValueError, TypeError):
+                pass
+
+    factor_extra = 1.0
+    factores_detalle = []
+    for k, cfg in FACTORES_COEF.items():
+        pct = pcts_ponderados[k]
+        mult = _factor_grupo(pct, cfg["coef"])
+        factor_extra *= mult
+        if mult > 1.001:
+            factores_detalle.append({
+                "clave": k,
+                "nombre": cfg["label"],
+                "pct": round(pct, 1),
+                "coef": cfg["coef"],
+                "multiplicador": round(mult, 3),
+            })
+    factor_extra = min(factor_extra, 2.5)
+
+    resultados_rangos = []
+    total_seguros = 0
+    total_precaucion = 0
+    total_peligro = 0
+    primer_pred_num = None
+
+    for a, b in rangos_edad:
+        solapamiento = max(0, min(b, edad_max) - max(a, edad_min))
+        if solapamiento <= 0:
+            continue
+        pct_rango = solapamiento / total_rango_pct
+        n_personas = max(1, int(round(cantidad * pct_rango)))
+        edad_med = (max(a, edad_min) + min(b, edad_max)) // 2
+
+        for sexo in ("hombre", "mujer"):
+            pct_sexo = pct_hombres / 100 if sexo == "hombre" else (100 - pct_hombres) / 100
+            n_sexo = max(1, int(round(n_personas * pct_sexo)))
+            if n_sexo == 0:
+                continue
+
+            perfil = {
+                "edad": edad_med,
+                "sexo": sexo,
+                "nivel_actividad": actividad,
+                "hora_inicio": hora_inicio,
+                "duracion_actividad_h": duracion,
+            }
+            if body.get("ocupacion"):
+                perfil["ocupacion"] = body["ocupacion"]
+            if body.get("deporte"):
+                perfil["deporte"] = body["deporte"]
+            if aclimatado:
+                perfil["aclimatado"] = aclimatado == "si"
+
+            try:
+                pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj)
+                if primer_pred_num is None:
+                    primer_pred_num = pred
+                clase = pred.get("clase_final", 0)
+                prob_base = pred.get("perfil", {}).get("calor", {}).get("prob_personalizada", 0)
+                prob = prob_base
+                if factor_extra != 1.0 and 0 < prob_base < 1:
+                    odds = prob_base / (1.0 - prob_base)
+                    prob = odds * factor_extra / (1.0 + odds * factor_extra)
+            except Exception:
+                clase = 0
+                prob = 0
+
+            if clase == 2:
+                total_peligro += n_sexo
+            elif clase == 1:
+                total_precaucion += n_sexo
+            else:
+                total_seguros += n_sexo
+
+            resultados_rangos.append({
+                "rango": f"{edad_med}a {sexo[0]}",
+                "edad": edad_med,
+                "sexo": sexo,
+                "seguros": n_sexo if clase == 0 else 0,
+                "precaucion": n_sexo if clase == 1 else 0,
+                "peligro": n_sexo if clase == 2 else 0,
+                "prob": round(prob, 4),
+                "n_personas": n_sexo,
+            })
+
+    total = total_seguros + total_precaucion + total_peligro
+    pct_peligro = round(total_peligro / total * 100, 1) if total else 0
+
+    return {
+        "total_personas": total,
+        "seguros": total_seguros,
+        "en_precaucion": total_precaucion,
+        "en_peligro": total_peligro,
+        "pct_peligro": pct_peligro,
+        "factor_extra": round(factor_extra, 3),
+        "factores_detalle": factores_detalle,
+        "rangos": resultados_rangos,
+        "primer_pred": primer_pred_num,
+        "cantidad": cantidad,
+        "edad_min": edad_min,
+        "edad_max": edad_max,
+        "pct_hombres": pct_hombres,
+        "actividad": actividad,
+        "hora_inicio": hora_inicio,
+        "duracion": duracion,
+        "aclimatado": aclimatado,
+        "pcts": pcts_ponderados,
+    }
+
+
+@app.post("/api/riesgo-colectivo")
+async def api_riesgo_colectivo(body: dict):
+    """Calcula riesgo para un grupo."""
+    tipo = body.get("tipo", "numero")
     from climasafeai.features.personalizacion import (
         riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad,
     )
 
     if tipo == "numero":
-        cantidad = int(body.get("cantidad", 100))
-        edad_min = int(body.get("edad_min", 18))
-        edad_max = int(body.get("edad_max", 80))
-        pct_hombres = int(body.get("pct_hombres", 50))
-        actividad = body.get("actividad", "ligera")
-        hora_inicio = float(body.get("hora_inicio", 10))
-        duracion = float(body.get("duracion", 2))
-        aclimatado = body.get("aclimatado")
+        c = _calcular_riesgo_colectivo(body)
+        total = c["total_personas"]
+        total_peligro = c["en_peligro"]
+        total_precaucion = c["en_precaucion"]
+        total_seguros = c["seguros"]
+        pct_peligro = c["pct_peligro"]
+        factor_extra = c["factor_extra"]
+        primer_pred_num = c["primer_pred"]
+        resultados_rangos = c["rangos"]
+        pcts = c["pcts"]
 
-        # Factores de riesgo porcentuales del grupo
-        pcts = {
-            "grasa_alta": float(body.get("pct_grasa_alta", 0)),
-            "cardiovascular": float(body.get("pct_cardiovascular", 0)),
-            "diabetes": float(body.get("pct_diabetes", 0)),
-            "respiratoria": float(body.get("pct_respiratoria", 0)),
-            "mental": float(body.get("pct_mental", 0)),
-            "no_aclimatados": float(body.get("pct_no_aclimatados", 0)),
-        }
-        COEF_PCT = {
-            "grasa_alta": 1.08,
-            "cardiovascular": 1.4,
-            "diabetes": 1.2,
-            "respiratoria": 1.3,
-            "mental": 1.8,
-            "no_aclimatados": 1.6,
-        }
-
-        def _factor_grupo(pct: float, coef: float) -> float:
-            if pct <= 0:
-                return 1.0
-            return 1.0 + (pct / 100.0) * (coef - 1.0)
-
-        factor_extra = 1.0
-        for k, coef in COEF_PCT.items():
-            factor_extra *= _factor_grupo(pcts[k], coef)
-        factor_extra = min(factor_extra, 2.5)
-
-        rangos_edad = [
-            (18, 30), (30, 45), (45, 60), (60, 75), (75, 90)
-        ]
-        rangos_edad = [(a, b) for a, b in rangos_edad if a < edad_max and b > edad_min]
-        if not rangos_edad:
-            rangos_edad = [(edad_min, edad_max)]
-
-        total_rango_pct = sum(min(b, edad_max) - max(a, edad_min) for a, b in rangos_edad)
-        resultados_rangos = []
-        total_seguros = 0
-        total_precaucion = 0
-        total_peligro = 0
-        primer_pred_num = None
-
-        for a, b in rangos_edad:
-            solapamiento = max(0, min(b, edad_max) - max(a, edad_min))
-            if solapamiento <= 0:
-                continue
-            pct_rango = solapamiento / total_rango_pct
-            n_personas = max(1, int(round(cantidad * pct_rango)))
-            edad_med = (max(a, edad_min) + min(b, edad_max)) // 2
-
-            for sexo in ("hombre", "mujer"):
-                pct_sexo = pct_hombres / 100 if sexo == "hombre" else (100 - pct_hombres) / 100
-                n_sexo = max(1, int(round(n_personas * pct_sexo)))
-                if n_sexo == 0:
-                    continue
-
-                perfil = {
-                    "edad": edad_med,
-                    "sexo": sexo,
-                    "nivel_actividad": actividad,
-                    "hora_inicio": hora_inicio,
-                    "duracion_actividad_h": duracion,
-                }
-                if body.get("ocupacion"):
-                    perfil["ocupacion"] = body["ocupacion"]
-                if body.get("deporte"):
-                    perfil["deporte"] = body["deporte"]
-                if aclimatado:
-                    perfil["aclimatado"] = aclimatado == "si"
-
-                try:
-                    pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj)
-                    if primer_pred_num is None:
-                        primer_pred_num = pred
-                    clase = pred.get("clase_final", 0)
-                    prob_base = pred.get("perfil", {}).get("calor", {}).get("prob_personalizada", 0)
-                    # Aplicar factor extra del grupo en espacio de odds
-                    prob = prob_base
-                    if factor_extra != 1.0 and 0 < prob_base < 1:
-                        odds = prob_base / (1.0 - prob_base)
-                        prob = odds * factor_extra / (1.0 + odds * factor_extra)
-                except Exception:
-                    clase = 0
-                    prob = 0
-
-                if clase == 2:
-                    total_peligro += n_sexo
-                elif clase == 1:
-                    total_precaucion += n_sexo
-                else:
-                    total_seguros += n_sexo
-
-                resultados_rangos.append({
-                    "rango": f"{edad_med}a {sexo[0]}",
-                    "seguros": n_sexo if clase == 0 else 0,
-                    "precaucion": n_sexo if clase == 1 else 0,
-                    "peligro": n_sexo if clase == 2 else 0,
-                    "prob": round(prob, 4),
-                })
-
-        total = total_seguros + total_precaucion + total_peligro
-        pct_peligro = round(total_peligro / total * 100, 1) if total else 0
-        # Añadir detalle de factores aplicados al mensaje
         factores_activos = [f"{k}={pcts[k]:.0f}%" for k in sorted(pcts) if pcts[k] > 0]
         sufijo_extra = f" · Factor extra grupo: x{factor_extra:.2f}" if factor_extra > 1.01 else ""
 
-        # Perfil para el mapa de zona: peor caso del rango (edad máxima) más las
-        # comorbilidades/condiciones que afectan a una fracción relevante del grupo.
         _comorb_map = {
             "cardiovascular": "cardiovascular",
             "diabetes": "diabetes",
             "respiratoria": "respiratoria",
             "mental": "mental",
         }
-        comorb_mapa = {_comorb_map[k] for k, col in _comorb_map.items() if pcts.get(k, 0) >= 50}
+
+        edad_max = c["edad_max"]
+        actividad = c["actividad"]
+        aclimatado_val = c["aclimatado"]
+        comorb_mapa = {_comorb_map[k] for k in _comorb_map if pcts.get(k, 0) >= 50}
         perfil_mapa = {
             "edad": edad_max,
             "sexo": "hombre",
             "nivel_actividad": actividad,
-            "hora_inicio": hora_inicio,
-            "duracion_actividad_h": duracion,
+            "hora_inicio": c["hora_inicio"],
+            "duracion_actividad_h": c["duracion"],
         }
         if comorb_mapa:
             perfil_mapa["comorbilidades"] = comorb_mapa
-        if pcts.get("no_aclimatados", 0) >= 50 or aclimatado == "no":
+        if pcts.get("no_aclimatados", 0) >= 50 or aclimatado_val == "no":
             perfil_mapa["aclimatado"] = False
-        elif aclimatado == "si":
+        elif aclimatado_val == "si":
             perfil_mapa["aclimatado"] = True
         if body.get("ocupacion"):
             perfil_mapa["ocupacion"] = body["ocupacion"]
@@ -773,6 +936,8 @@ async def api_riesgo_colectivo(body: dict):
         grp_curva = riesgo_horario_acumulado(_hourly_num, perfil_mapa)
         grp_reco = recomendar_horario(_hourly_num, perfil_mapa)
 
+        demografico = _calc_demografico(resultados_rangos, total)
+
         return {
             "total_personas": total,
             "seguros": total_seguros,
@@ -782,9 +947,12 @@ async def api_riesgo_colectivo(body: dict):
             "clase": "PELIGRO" if pct_peligro > 20 else ("PRECAUCION" if pct_peligro > 5 else "SEGURO"),
             "factor_extra": round(factor_extra, 3),
             "factores_grupo": factores_activos,
+            "factores_detalle": c["factores_detalle"],
             "mensaje": f"De {total} personas, ~{total_peligro} en peligro, ~{total_precaucion} en precaución" + sufijo_extra,
             "rangos": resultados_rangos,
-            "perfil_mapa": perfil_mapa,   # peor caso del rango: el mapa de zona lo usa
+            "demografico": demografico,
+            "resumen": _generar_resumen(pct_peligro, total_peligro, total_precaucion, total_seguros, factor_extra, c["factores_detalle"], c["actividad"]),
+            "perfil_mapa": perfil_mapa,
             "riesgo_horario": grp_curva,
             "recomendacion_horario": grp_reco,
             "weather": _get_weather_summary(primer_pred_num) if primer_pred_num else None,
@@ -965,6 +1133,94 @@ async def api_delete_tag_disponible(tag_id: int):
     return {"ok": True}
 
 
+def _calc_demografico(rangos: list, total: int) -> dict | None:
+    if not rangos or total <= 0:
+        return None
+    total_peligro = sum(r.get("peligro", 0) for r in rangos)
+    if total_peligro <= 0:
+        return None
+    contribuciones = []
+    for r in rangos:
+        pct_pob = r.get("n_personas", 0) / total * 100
+        pct_riesgo = r.get("peligro", 0) / total_peligro * 100 if total_peligro else 0
+        if pct_riesgo > pct_pob * 1.2:
+            contribuciones.append({
+                "rango": r["rango"],
+                "pct_poblacion": round(pct_pob, 1),
+                "pct_del_riesgo": round(pct_riesgo, 1),
+                "desproporcion": round(pct_riesgo / pct_pob, 2) if pct_pob > 0 else 0,
+            })
+    return contribuciones[:5] if contribuciones else None
+
+
+def _generar_resumen(
+    pct_peligro: float, total_peligro: int, total_precaucion: int,
+    total_seguros: int, factor_extra: float,
+    factores_detalle: list, actividad: str,
+) -> str:
+    partes = []
+    if pct_peligro > 15:
+        partes.append(f"Riesgo alto: {pct_peligro}% del grupo en peligro")
+    elif pct_peligro > 5:
+        partes.append(f"Riesgo moderado: {pct_peligro}% en peligro, {total_precaucion} personas en precaución")
+    else:
+        partes.append(f"Riesgo bajo: mayoría del grupo ({total_seguros} personas) en nivel seguro")
+
+    if factor_extra > 1.1 and factores_detalle:
+        top = max(factores_detalle, key=lambda f: f["multiplicador"])
+        partes.append(f"Factor más influyente: {top['nombre']} (afecta al {top['pct']:.0f}% del grupo, ×{top['multiplicador']})")
+
+    if actividad:
+        etiqueta_act = {"reposo": "reposo", "ligera": "ligera", "moderada": "moderada", "intensa": "intensa", "muy_intensa": "muy intensa"}.get(actividad, actividad)
+        partes.append(f"Actividad: {etiqueta_act}")
+
+    return " · ".join(partes) if partes else ""
+
+
+@app.post("/api/contrafactuales-grupo")
+async def api_contrafactuales_grupo(body: dict):
+    """Simula cambios en parámetros del grupo y compara con la predicción
+    original. Acepta el mismo body que POST /api/riesgo-colectivo (tipo=numero)."""
+    cambios = body.get("cambios", {})
+    escenario = body.get("escenario", "")
+    body_base = {k: v for k, v in body.items() if k not in ("cambios", "escenario")}
+
+    c_original = _calcular_riesgo_colectivo(body_base)
+    body_mod = dict(body_base)
+    body_mod.update(cambios)
+    c_mod = _calcular_riesgo_colectivo(body_mod)
+
+    orig_pct = c_original["pct_peligro"]
+    mod_pct = c_mod["pct_peligro"]
+    diff_pct = round(mod_pct - orig_pct, 1)
+    diff_abs = c_mod["en_peligro"] - c_original["en_peligro"]
+
+    return {
+        "escenario": escenario,
+        "original": {
+            "total_peligro": c_original["en_peligro"],
+            "total_precaucion": c_original["en_precaucion"],
+            "total_seguros": c_original["seguros"],
+            "pct_peligro": orig_pct,
+            "clase": "PELIGRO" if orig_pct > 20 else ("PRECAUCION" if orig_pct > 5 else "SEGURO"),
+            "factor_extra": c_original["factor_extra"],
+        },
+        "modificado": {
+            "total_peligro": c_mod["en_peligro"],
+            "total_precaucion": c_mod["en_precaucion"],
+            "total_seguros": c_mod["seguros"],
+            "pct_peligro": mod_pct,
+            "clase": "PELIGRO" if mod_pct > 20 else ("PRECAUCION" if mod_pct > 5 else "SEGURO"),
+            "factor_extra": c_mod["factor_extra"],
+        },
+        "diferencia": {
+            "pct_peligro": diff_pct,
+            "absoluta": diff_abs,
+            "mejora": diff_abs < 0,
+        },
+    }
+
+
 @app.post("/api/contrafactuales")
 async def api_contrafactuales(body: dict):
     from climasafeai.models.explicabilidad import generar_contrafactuales
@@ -1065,6 +1321,88 @@ async def api_riesgo_zona_post(body: dict):
         return result
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.post("/api/riesgo-volumen")
+async def api_riesgo_volumen(body: dict):
+    """Estima cuántas personas de un volumen dado podrían requerir
+    atención médica por calor, combinando prevalencia poblacional de
+    ECV con las condiciones climáticas previstas."""
+    provincia = body.get("provincia", "Madrid")
+    lat = body.get("lat")
+    lon = body.get("lon")
+    total_personas = int(body.get("total_personas", 1000))
+    pct_mayores_50 = float(body.get("pct_mayores_50", 30))
+    tipo_evento = body.get("tipo_evento", "general")
+    hora_inicio = body.get("hora_inicio")
+    duracion_h = body.get("duracion_h")
+    target_date = body.get("fecha")
+    date_obj = None
+    if target_date:
+        try:
+            from datetime import date as date_type
+            date_obj = date_type.fromisoformat(target_date)
+        except ValueError:
+            pass
+
+    from climasafeai.data.weather_fetcher import fetch_weather_data
+    from climasafeai.features.weather_indices import heat_index
+    import numpy as np
+
+    try:
+        weather = fetch_weather_data(lat=lat, lon=lon, provincia=provincia, target_date=date_obj)
+    except Exception as e:
+        return {"error": f"Error fetching weather: {e}"}
+
+    df_hora = weather.get("df_hora")
+    hourly_data = None
+    if df_hora is not None and not df_hora.empty:
+        df = df_hora.copy()
+        if "rh" in df.columns and "t2m_c" in df.columns:
+            df["heat_index_c"] = heat_index(df["t2m_c"].values, df["rh"].values)
+        hourly_data = df.to_dict("records")
+
+    horas_actividad = []
+    if hourly_data:
+        import pandas as pd
+        for row in hourly_data:
+            dt = pd.to_datetime(row.get("datetime"))
+            hi = row.get("heat_index_c")
+            if hi is not None and not (isinstance(hi, float) and np.isnan(hi)):
+                horas_actividad.append({"hora": dt.hour, "hi": float(hi)})
+
+    if hora_inicio is not None and duracion_h is not None:
+        h_ini = int(hora_inicio)
+        h_fin = min(23, h_ini + max(1, int(duracion_h)))
+        horas_filtradas = [h for h in horas_actividad if h_ini <= h["hora"] < h_fin]
+    else:
+        horas_filtradas = horas_actividad
+
+    hi_peak = None
+    if horas_filtradas:
+        hi_peak = max(h["hi"] for h in horas_filtradas)
+    elif horas_actividad:
+        hi_peak = max(h["hi"] for h in horas_actividad)
+    else:
+        current = weather.get("current", {})
+        t = current.get("t2m_c")
+        rh = current.get("rh")
+        if t is not None and rh is not None:
+            hi_peak = float(heat_index(np.array([t]), np.array([rh]))[0])
+
+    from climasafeai.models.volumen import estimar_afectados
+
+    resultado = estimar_afectados(
+        total_personas=total_personas,
+        hi_peak=hi_peak,
+        pct_mayores_50=pct_mayores_50,
+        tipo_evento=tipo_evento,
+    )
+    resultado["weather"] = _get_weather_summary({"weather": weather})
+    if target_date:
+        resultado["target_date"] = target_date
+
+    return resultado
 
 
 @app.websocket("/ws")

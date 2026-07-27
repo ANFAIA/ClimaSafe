@@ -281,7 +281,7 @@
 
       <div class="form-row" style="gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
         <button class="btn-mode active" data-mode="individual" onclick="setModoPaso1('individual')" style="flex:1;padding:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Individual</button>
-        <button class="btn-mode" data-mode="grupo" onclick="setModoPaso1('grupo')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Grupo</button>
+        <button class="btn-mode" data-mode="grupo" onclick="setModoPaso1('grupo')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Grupo / Evento</button>
       </div>
 
       <div id="step1-individual-controls" class="form-row" style="gap:8px;margin-bottom:8px">
@@ -380,8 +380,14 @@
       </div>
 
       <div id="grupo-form" style="display:none">
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px;padding:8px 10px;background:var(--bg);border-radius:8px">
+          <strong>Colectivo (ML):</strong> riesgo detallado por rangos de edad · 
+          <strong>Volumen:</strong> estimación rápida de posibles atenciones médicas · 
+          <strong>Por etiqueta:</strong> evaluar perfiles guardados
+        </div>
         <div class="form-row" style="gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
-          <button class="btn-mode active" data-mode="numero" onclick="setSubModoPaso2('numero')" style="flex:1;padding:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Colectivo</button>
+          <button class="btn-mode active" data-mode="numero" onclick="setSubModoPaso2('numero')" style="flex:1;padding:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Colectivo (ML)</button>
+          <button class="btn-mode" data-mode="volumen" onclick="setSubModoPaso2('volumen')" style="flex:1;padding:8px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Volumen</button>
           <button class="btn-mode" data-mode="etiqueta" onclick="setSubModoPaso2('etiqueta')" style="flex:1;padding:8px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Por etiqueta</button>
         </div>
 
@@ -442,19 +448,7 @@
             </div>
           </div>
 
-          <details style="margin-top:8px;background:var(--bg);border-radius:8px;border:1px solid var(--border);padding:6px 10px">
-            <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;color:var(--text-light)">Factores de riesgo del grupo (porcentaje de afectados)</summary>
-            <div class="form-row" style="margin-top:6px">
-              <div class="form-group"><label>% Obesidad/grasa alta</label><input type="number" id="grupo-pct-grasa" min="0" max="100" value="0"></div>
-              <div class="form-group"><label>% Cardiovascular</label><input type="number" id="grupo-pct-cardio" min="0" max="100" value="0"></div>
-              <div class="form-group"><label>% Diabetes</label><input type="number" id="grupo-pct-diabetes" min="0" max="100" value="0"></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label>% Respiratoria</label><input type="number" id="grupo-pct-respiratoria" min="0" max="100" value="0"></div>
-              <div class="form-group"><label>% Salud mental</label><input type="number" id="grupo-pct-mental" min="0" max="100" value="0"></div>
-              <div class="form-group"><label>% No aclimatados</label><input type="number" id="grupo-pct-no-acl" min="0" max="100" value="0"></div>
-            </div>
-          </details>
+
         </div>
 
         <div id="grupo-etiqueta" style="display:none">
@@ -523,17 +517,55 @@
           </div>
         </div>
 
+        <div id="grupo-default-controls">
+          <div class="form-row" style="margin-top:12px;align-items:center">
+            <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
+            <div style="display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:2px;border:1px solid var(--border)">
+              <button class="btn-date active" data-date="" onclick="setDate(this, '')">Hoy</button>
+              <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')">Mañana</button>
+            </div>
+            <input type="hidden" id="grupo-target-date" value="">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
+            <button class="btn" onclick="predecirGrupo()" id="btn-predict-group">Predecir grupo</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="grupo-volumen" style="display:none">
+        <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
+          Estimación rápida basada en prevalencia poblacional de ECV y condiciones climáticas.
+          No ejecuta los modelos ML — ideal para eventos multitudinarios.
+        </p>
+        <div class="form-row">
+          <div class="form-group"><label>Total asistentes</label><input type="number" id="vol-total" min="1" max="10000000" value="5000"></div>
+          <div class="form-group"><label>% Mayores de 50</label><input type="number" id="vol-mayores50" min="0" max="100" value="30"></div>
+          <div class="form-group"><label>Tipo de evento</label>
+            <select id="vol-tipo-evento">
+              <option value="general">General / público</option>
+              <option value="concierto">Concierto</option>
+              <option value="festival">Festival</option>
+              <option value="deporte" selected>Evento deportivo</option>
+              <option value="trabajo_exterior">Trabajo exterior</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Hora inicio (opcional)</label><input type="number" id="vol-hora" min="0" max="23" placeholder="Todo el día"></div>
+          <div class="form-group"><label>Duración (h, opcional)</label><input type="number" id="vol-duracion" min="0" max="24" step="0.5" placeholder="Todo el día"></div>
+        </div>
         <div class="form-row" style="margin-top:12px;align-items:center">
           <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
           <div style="display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:2px;border:1px solid var(--border)">
-            <button class="btn-date active" data-date="" onclick="setDate(this, '')">Hoy</button>
-            <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')">Mañana</button>
+            <button class="btn-date active" data-date="" onclick="setDateVol(this, '')">Hoy</button>
+            <button class="btn-date" data-date="tomorrow" onclick="setDateVol(this, 'tomorrow')">Mañana</button>
           </div>
-          <input type="hidden" id="grupo-target-date" value="">
+          <input type="hidden" id="vol-target-date" value="">
         </div>
         <div class="btn-row">
           <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
-          <button class="btn" onclick="predecirGrupo()" id="btn-predict-group">Predecir grupo</button>
+          <button class="btn" onclick="predecirVolumen()" id="btn-predict-volumen" style="background:#8e44ad">Estimar volumen</button>
         </div>
       </div>
     </div>
@@ -558,6 +590,26 @@
     <div class="card" id="group-schedule-card" style="display:none">
       <div class="card-title">Horario y tiempo esperado</div>
       <div class="opt-time" id="group-schedule"></div>
+    </div>
+
+    <div class="card" id="group-explain-card" style="display:none">
+      <div class="card-title">Qué impulsa el riesgo del grupo</div>
+      <div id="group-explain-content"></div>
+    </div>
+
+    <div class="card" id="group-demografico-card" style="display:none">
+      <div class="card-title">Distribución demográfica del riesgo</div>
+      <div id="group-demografico-content"></div>
+    </div>
+
+    <div class="card" id="group-contrafactual-card" style="display:none">
+      <div class="card-title">¿Qué cambiaría si...?</div>
+      <div id="group-contrafactual-content"></div>
+    </div>
+
+    <div class="card" id="volumen-card" style="display:none">
+      <div class="card-title">Estimación por volumen</div>
+      <div id="volumen-result"></div>
     </div>
 
     <div class="card" id="hourly-card" style="display:none">
@@ -724,7 +776,7 @@ function irPaso2() {
   document.getElementById('dot2').classList.add('active');
   const modo = currentMode || 'individual';
   document.getElementById('individual-form').style.display = modo === 'individual' ? 'block' : 'none';
-  document.getElementById('grupo-form').style.display = modo === 'grupo' ? 'block' : 'none';
+  document.getElementById('grupo-form').style.display = (modo === 'grupo') ? 'block' : 'none';
   if (modo === 'grupo') setSubModoPaso2('numero');
 }
 
@@ -1064,6 +1116,8 @@ function setSubModoPaso2(modo) {
   });
   document.getElementById('grupo-numero').style.display = modo === 'numero' ? 'block' : 'none';
   document.getElementById('grupo-etiqueta').style.display = modo === 'etiqueta' ? 'block' : 'none';
+  document.getElementById('grupo-volumen').style.display = modo === 'volumen' ? 'block' : 'none';
+  document.getElementById('grupo-default-controls').style.display = modo === 'volumen' ? 'none' : 'block';
   if (modo === 'etiqueta') cargarTags();
 }
 
@@ -1266,12 +1320,6 @@ async function predecirGrupo() {
         aclimatado: document.getElementById('grupo-aclimatado').value || null,
         ocupacion: document.getElementById('grupo-ocupacion').value,
         deporte: document.getElementById('grupo-deporte').value,
-        pct_grasa_alta: parseInt(document.getElementById('grupo-pct-grasa').value) || 0,
-        pct_cardiovascular: parseInt(document.getElementById('grupo-pct-cardio').value) || 0,
-        pct_diabetes: parseInt(document.getElementById('grupo-pct-diabetes').value) || 0,
-        pct_respiratoria: parseInt(document.getElementById('grupo-pct-respiratoria').value) || 0,
-        pct_mental: parseInt(document.getElementById('grupo-pct-mental').value) || 0,
-        pct_no_aclimatados: parseInt(document.getElementById('grupo-pct-no-acl').value) || 0,
       };
     } else {
       const tag = document.getElementById('grupo-tag-select').value;
@@ -1469,6 +1517,34 @@ function mostrarResultadosGrupo(d) {
         });
       });
 
+      // HI overlay line from hourly data
+      const hiPorHora = (() => {
+        if (!d.detalle || !d.detalle.length) return null;
+        const first = d.detalle.find(p => p.perfil_horario && p.perfil_horario.length);
+        if (!first) return null;
+        const m = {};
+        first.perfil_horario.forEach(e => {
+          const hi = typeof e.hi === 'number' ? e.hi : (e.heat_index_c ?? null);
+          if (hi != null) m[e.hora] = hi;
+        });
+        return horasIdx.map(h => (m[h] != null ? m[h] : null));
+      })();
+      if (hiPorHora && hiPorHora.some(v => v != null)) {
+        const maxHI = Math.max(...hiPorHora.filter(v => v != null));
+        datasets.push({
+          label: 'HI (°C)',
+          data: hiPorHora,
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231,76,60,0.08)',
+          borderWidth: 1,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: true,
+          yAxisID: 'y1',
+          tension: 0.3,
+        });
+      }
+
       _riskChart = new Chart(ctx, {
         type: 'line',
         data: { labels: horas, datasets },
@@ -1477,12 +1553,18 @@ function mostrarResultadosGrupo(d) {
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 12 } },
-            tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y + '%' } },
+            tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y + (c.dataset.yAxisID === 'y1' ? '°C' : '%') } },
           },
           scales: {
             x: { title: { display: true, text: 'Hora', font: { size: 11 } } },
             y: { min: 0, max: 100, title: { display: true, text: 'Riesgo personal (%)', font: { size: 11 } },
               ticks: { callback: v => v + '%' },
+            },
+            y1: {
+              position: 'right', grid: { display: false },
+              title: { display: true, text: 'HI (°C)', font: { size: 10 } },
+              min: 0,
+              ticks: { callback: v => v + '°C' },
             },
           },
         },
@@ -1507,8 +1589,23 @@ function mostrarResultadosGrupo(d) {
       document.getElementById('final-extras').style.display = 'none';
     }
 
+    // HI info from weather
+    const hiInfo = (() => {
+      const ph = d.weather?.perfil_horario;
+      if (!ph || !ph.length) return '';
+      const pis = ph.filter(h => h.hi != null).map(h => ({ hora: h.hora, hi: h.hi }));
+      if (!pis.length) return '';
+      const peak = pis.reduce((a, b) => a.hi > b.hi ? a : b);
+      return ` · HI pico ${Math.round(peak.hi)}°C a las ${peak.hora}:00`;
+    })();
+
     const ctx = document.getElementById('risk-chart');
     if (_riskChart) _riskChart.destroy();
+
+    // Bar chart title
+    const graphTitle = document.querySelector('#graph-card .card-title');
+    if (graphTitle) graphTitle.textContent = 'Personas por rango de edad' + hiInfo;
+
     const labels = d.rangos.map(r => r.rango);
     const datasets = [
       { label: 'Seguros', data: d.rangos.map(r => r.seguros || 0), backgroundColor: '#27ae60' },
@@ -1555,6 +1652,77 @@ function mostrarResultadosGrupo(d) {
     graphCard.style.display = 'none';
     groupDetail.style.display = 'none';
     document.getElementById('final-extras').style.display = 'none';
+  }
+
+  // ── Resumen ejecutivo ──────────────────────────────────────────
+  if (d.resumen) {
+    const fe = document.getElementById('final-extras');
+    fe.style.display = 'flex';
+    fe.style.flexDirection = 'column';
+    fe.style.alignItems = 'stretch';
+    fe.innerHTML = `<div style="font-size:0.8rem;color:var(--text-light);padding:6px 0;border-top:1px solid var(--border);margin-top:4px">${d.resumen}</div>`;
+  }
+
+  // ── Factor importance donut ─────────────────────────────────────
+  if (d.factores_detalle && d.factores_detalle.length) {
+    document.getElementById('group-explain-card').style.display = 'block';
+    const total = d.factores_detalle.reduce((s, f) => s + f.multiplicador, 0);
+    const coloresFactor = ['#e74c3c','#e67e22','#f39c12','#2ecc71','#3498db','#9b59b6'];
+    document.getElementById('group-explain-content').innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+        <div style="flex:1;min-width:180px">
+          ${d.factores_detalle.map((f, i) => `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:0.85rem">
+              <span style="width:10px;height:10px;border-radius:2px;background:${coloresFactor[i % coloresFactor.length]};flex-shrink:0"></span>
+              <span style="flex:1">${f.nombre}</span>
+              <span style="font-weight:600">${f.pct}%</span>
+              <span style="color:var(--text-light);font-size:0.75rem">×${f.multiplicador}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div style="flex:1;min-width:160px;padding:10px;background:var(--bg);border-radius:8px;text-align:center">
+          <div style="font-size:0.75rem;color:var(--text-light)">Factor extra total</div>
+          <div style="font-size:1.5rem;font-weight:700;color:${d.factor_extra > 1.5 ? '#e74c3c' : d.factor_extra > 1.2 ? '#f39c12' : '#27ae60'}">×${d.factor_extra}</div>
+          <div style="font-size:0.75rem;color:var(--text-light)">Multiplica el riesgo base del grupo</div>
+        </div>
+      </div>
+    `;
+  } else {
+    document.getElementById('group-explain-card').style.display = 'none';
+  }
+
+  // ── Demographic concentration ──────────────────────────────────
+  if (d.demografico && d.demografico.length) {
+    document.getElementById('group-demografico-card').style.display = 'block';
+    document.getElementById('group-demografico-content').innerHTML = `
+      <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px">Rangos que concentran más riesgo del que les corresponde por población:</div>
+      ${d.demografico.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:6px;margin-bottom:4px;font-size:0.85rem">
+          <span style="font-weight:600;min-width:60px">${r.rango}</span>
+          <span style="color:var(--text-light)">${r.pct_poblacion}% del grupo</span>
+          <span style="margin-left:auto;color:#e74c3c;font-weight:600">${r.pct_del_riesgo}% del riesgo</span>
+          <span style="background:#e74c3c20;color:#e74c3c;border-radius:4px;padding:1px 6px;font-size:0.75rem;font-weight:600">×${r.desproporcion}</span>
+        </div>
+      `).join('')}
+    `;
+  } else {
+    document.getElementById('group-demografico-card').style.display = 'none';
+  }
+
+  // ── Contrafactuales de grupo ──────────────────────────────────
+  if (d.rangos && d.rangos.length) {
+    document.getElementById('group-contrafactual-card').style.display = 'block';
+    document.getElementById('group-contrafactual-content').innerHTML = `
+      <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px">Simula cómo cambiaría el riesgo del grupo si modificas algún parámetro:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px" id="cf-scenarios">
+        <button class="btn-sm" onclick="cargarContrafactualGrupo('hora_temprano')" style="background:var(--bg);padding:6px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem">⏰ Empezar a las 8am</button>
+        <button class="btn-sm" onclick="cargarContrafactualGrupo('actividad_baja')" style="background:var(--bg);padding:6px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem">🏃 Actividad ligera</button>
+        <button class="btn-sm" onclick="cargarContrafactualGrupo('sin_comorbilidades')" style="background:var(--bg);padding:6px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem">❤️ Sin comorbilidades</button>
+      </div>
+      <div id="cf-grupo-resultado" style="font-size:0.85rem;color:var(--text-light)">Haz clic en un escenario para ver el impacto.</div>
+    `;
+  } else {
+    document.getElementById('group-contrafactual-card').style.display = 'none';
   }
 
   if (d.weather && d.weather.lat != null && d.weather.lon != null) {
@@ -1639,8 +1807,215 @@ function mostrarPerfilGuardado(nombre) {
   }
 }
 
+function setDateVol(btn, val) {
+  document.querySelectorAll('#grupo-volumen .btn-date').forEach(b => { b.classList.remove('active'); b.style.background = 'var(--bg)'; b.style.color = 'var(--text-light)'; });
+  btn.classList.add('active'); btn.style.background = 'var(--accent)'; btn.style.color = '#fff';
+  let iso = '';
+  if (val === 'tomorrow') {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    iso = d.toISOString().slice(0,10);
+  }
+  document.getElementById('vol-target-date').value = iso;
+}
+
+async function predecirVolumen() {
+  const loading = document.getElementById('loading');
+  loading.classList.add('active');
+  document.getElementById('results').classList.remove('visible');
+
+  const provincia = document.getElementById('provincia').value.trim() || 'Madrid';
+  const coordMatch = provincia.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/);
+  let lat = null, lon = null;
+  if (coordMatch) { lat = parseFloat(coordMatch[1]); lon = parseFloat(coordMatch[2]); }
+
+  const body = {
+    total_personas: parseInt(document.getElementById('vol-total').value) || 5000,
+    pct_mayores_50: parseFloat(document.getElementById('vol-mayores50').value) || 30,
+    tipo_evento: document.getElementById('vol-tipo-evento').value || 'general',
+    provincia,
+  };
+  if (lat != null) { body.lat = lat; body.lon = lon; }
+  const hora = document.getElementById('vol-hora').value;
+  if (hora) body.hora_inicio = parseFloat(hora);
+  const dur = document.getElementById('vol-duracion').value;
+  if (dur) body.duracion_h = parseFloat(dur);
+  const fecha = document.getElementById('vol-target-date').value;
+  if (fecha) body.fecha = fecha;
+
+  try {
+    const res = await fetch('/api/riesgo-volumen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    document.getElementById('step1').classList.remove('visible');
+    document.getElementById('step2').classList.remove('visible');
+    document.getElementById('dot1').classList.add('done');
+    document.getElementById('dot2').classList.remove('active');
+    document.getElementById('dot2').classList.add('done');
+    document.getElementById('dot3').classList.add('active');
+    mostrarResultadosVolumen(data);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    loading.classList.remove('active');
+  }
+}
+
+function mostrarResultadosVolumen(d) {
+  window._ultimoResultado = d;
+  document.querySelectorAll('#results > .card:not(#volumen-card):not(#weather-card)').forEach(c => c.style.display = 'none');
+  document.getElementById('results').classList.add('visible');
+
+  document.getElementById('volumen-card').style.display = 'block';
+
+  const w = d.weather || {};
+  const c = w.current || {};
+  document.getElementById('weather-card').style.display = 'block';
+  document.getElementById('weather-strip').innerHTML = [
+    { v: (c.t2m_c ?? '?') + '°C', l: 'Temperatura' },
+    { v: (c.rh ?? '?') + '%', l: 'Humedad' },
+    { v: d.clima?.hi_peak != null ? d.clima.hi_peak + '°C' : '?', l: 'HI pico' },
+    { v: d.clima?.categoria || '?', l: 'Categoría' },
+  ].map(x => '<div class="weather-item"><div class="value">' + x.v + '</div><div class="label">' + x.l + '</div></div>').join('');
+
+  const cl = d.clima?.categoria === 'PELIGRO' || d.clima?.categoria === 'PELIGRO_EXTREMO' ? 'peligro' :
+    d.clima?.categoria === 'PRECAUCION' || d.clima?.categoria === 'PRECAUCION_EXTREMA' ? 'precaucion' : 'seguro';
+
+  const pct = d.pct_estimado || 0;
+  const ancho = Math.min(pct * 10, 100);
+
+  document.getElementById('volumen-result').innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center;margin-bottom:16px">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:4px">Atención médica estimada</div>
+        <div style="font-size:2.5rem;font-weight:800;color:var(--text);line-height:1.1">${d.estimacion_atencion_medica}</div>
+        <div style="font-size:0.85rem;color:var(--text-light)">
+          de <strong>${d.total_personas}</strong> asistentes · <strong>${pct}%</strong>
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:4px">Rango estimado</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:1.1rem;font-weight:600">${d.rango_bajo}</span>
+          <span style="flex:1;height:6px;background:var(--bg);border-radius:3px;position:relative">
+            <span style="position:absolute;left:20%;width:60%;height:100%;background:var(--precaucion);border-radius:3px"></span>
+          </span>
+          <span style="font-size:1.1rem;font-weight:600">${d.rango_alto}</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:16px;padding:14px;background:var(--bg);border-radius:8px;font-size:0.95rem;border-left:4px solid ${cl === 'peligro' ? '#e74c3c' : cl === 'precaucion' ? '#f39c12' : '#27ae60'}">
+      ${d.mensaje_largo || d.mensaje}
+    </div>
+    <details style="background:var(--bg);border-radius:8px;padding:10px;border:1px solid var(--border)">
+      <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;color:var(--text-light)">Desglose de factores</summary>
+      <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.85rem">
+        <div><span style="color:var(--text-light)">Prevalencia ECV</span><br><strong>${(d.prevalencia_ecv_usada * 100).toFixed(1)}%</strong></div>
+        <div><span style="color:var(--text-light)">Multiplicador climático</span><br><strong>×${d.multiplicador_climatico}</strong></div>
+        <div><span style="color:var(--text-light)">Factor evento</span><br><strong>×${d.factor_evento}</strong></div>
+        <div><span style="color:var(--text-light)">Incidencia directa</span><br><strong>${(d.tasa_incidencia_directa * 100).toFixed(3)}%</strong></div>
+        <div><span style="color:var(--text-light)">Exceso ECV</span><br><strong>${(d.exceso_ecv * 100).toFixed(3)}%</strong></div>
+        <div><span style="color:var(--text-light)">Exceso directo</span><br><strong>${(d.exceso_directo * 100).toFixed(3)}%</strong></div>
+      </div>
+    </details>
+  `;
+
+  window.scrollTo({ top: document.getElementById('results').offsetTop - 20, behavior: 'smooth' });
+}
+
+async function cargarContrafactualGrupo(escenario) {
+  const d = window._ultimoResultado;
+  if (!d || !d.rangos) return;
+
+  // Reconstruir el body original desde sessionStorage o desde los datos
+  // Usamos lo que tenemos en la respuesta + defaults razonables
+  const body = {
+    tipo: 'numero',
+    cantidad: d.total_personas || 100,
+    edad_min: 18,
+    edad_max: 80,
+    pct_hombres: 50,
+    actividad: 'moderada',
+    hora_inicio: 14,
+    duracion: 2,
+    provincia: document.getElementById('provincia').value.trim() || 'Madrid',
+  };
+  const coordMatch = body.provincia.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/);
+  if (coordMatch) { body.lat = parseFloat(coordMatch[1]); body.lon = parseFloat(coordMatch[2]); }
+
+  const cambios = {};
+  let label = '';
+  if (escenario === 'hora_temprano') {
+    cambios.hora_inicio = 8;
+    cambios.duracion = 2;
+    label = '⏰ Empezar a las 8am';
+  } else if (escenario === 'actividad_baja') {
+    cambios.actividad = 'ligera';
+    label = '🏃 Actividad ligera';
+  } else if (escenario === 'sin_comorbilidades') {
+    cambios.pct_grasa_alta = 0;
+    cambios.pct_cardiovascular = 0;
+    cambios.pct_diabetes = 0;
+    cambios.pct_respiratoria = 0;
+    cambios.pct_mental = 0;
+    cambios.pct_no_aclimatados = 0;
+    label = '❤️ Sin comorbilidades';
+  }
+
+  try {
+    const res = await fetch('/api/contrafactuales-grupo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, cambios, escenario: label }),
+    });
+    const data = await res.json();
+    if (data.error) { document.getElementById('cf-grupo-resultado').innerHTML = 'Error: ' + data.error; return; }
+
+    const o = data.original;
+    const m = data.modificado;
+    const dif = data.diferencia;
+    const mejoro = dif.mejora;
+    const emoji = mejoro ? '✅' : '⚠️';
+    const color = mejoro ? '#27ae60' : '#e74c3c';
+
+    document.getElementById('cf-grupo-resultado').innerHTML = `
+      <div style="background:var(--bg);border-radius:8px;padding:12px;border:1px solid var(--border)">
+        <div style="font-weight:600;margin-bottom:8px">${label}</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:100px;text-align:center;padding:8px;background:var(--card);border-radius:6px">
+            <div style="font-size:0.7rem;color:var(--text-light)">Original</div>
+            <div style="font-size:1.1rem;font-weight:700">${o.pct_peligro}%</div>
+            <div style="font-size:0.75rem;color:var(--text-light)">${o.en_peligro} peligro</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:1.2rem;font-weight:700;color:${color}">
+            ${emoji} ${dif.pct_peligro > 0 ? '+' : ''}${dif.pct_peligro}%
+          </div>
+          <div style="flex:1;min-width:100px;text-align:center;padding:8px;background:var(--card);border-radius:6px">
+            <div style="font-size:0.7rem;color:var(--text-light)">Modificado</div>
+            <div style="font-size:1.1rem;font-weight:700">${m.pct_peligro}%</div>
+            <div style="font-size:0.75rem;color:var(--text-light)">${m.en_peligro} peligro</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:0.8rem;color:var(--text-light)">
+          ${mejoro ? 'El riesgo baja' : 'El riesgo sube'} en ${Math.abs(dif.absoluta)} personas
+          (${mejoro ? 'mejora' : 'empeora'} de ${o.clase} a ${m.clase})
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    document.getElementById('cf-grupo-resultado').innerHTML = 'Error de conexión: ' + e.message;
+  }
+}
+
 function nuevaConsulta() {
   document.getElementById('results').classList.remove('visible');
+  document.getElementById('volumen-card').style.display = 'none';
+  document.getElementById('group-explain-card').style.display = 'none';
+  document.getElementById('group-demografico-card').style.display = 'none';
+  document.getElementById('group-contrafactual-card').style.display = 'none';
   document.getElementById('dot3').classList.remove('active');
   document.getElementById('dot3').classList.remove('done');
   document.getElementById('dot2').classList.remove('active');
@@ -1814,38 +2189,37 @@ function mostrarResultados(d) {
   window.scrollTo({ top: document.getElementById('results').offsetTop - 20, behavior: 'smooth' });
 }
 
+// Una sola llamada devuelve todas las curvas por edad: la curva depende del
+// perfil horario y de la personalización, no de los modelos, así que el backend
+// las calcula de golpe sin descargar meteo otra vez ni predecir N veces.
 async function cargarComparativas(d) {
   const basePerfil = d.perfil_usuario;
-  if (!basePerfil || !basePerfil.edad) return;
-  const edadBase = basePerfil.edad;
-  const edades = [];
-  if (edadBase < 35) edades.push(55);
-  else if (edadBase > 50) edades.push(25);
-  else { edades.push(25); edades.push(55); }
+  const ph = d.weather?.perfil_horario;
+  if (!basePerfil || !ph || !ph.length) return;
 
-  const resultados = await Promise.all(edades.map(async edad => {
-    const { alias: _, perfil_id: __, ...camposSeguros } = basePerfil;
-    const p = { ...camposSeguros, edad };
-    try {
-      const r = await fetch('/api/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provincia: d.weather?.provincia || '',
-          lat: d.weather?.lat,
-          lon: d.weather?.lon,
-          perfil: p,
-        }),
-      });
-      const data = await r.json();
-      return { edad, d: data };
-    } catch {
-      return null;
-    }
-  }));
+  const { alias: _, perfil_id: __, ...camposSeguros } = basePerfil;
+  try {
+    const r = await fetch('/api/curvas-edad', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        perfil: camposSeguros,
+        perfil_horario: ph,   // ya lo tenemos de la predicción principal
+      }),
+    });
+    const data = await r.json();
+    if (data.error || !data.curvas || !data.curvas.length) return;
 
-  const validos = resultados.filter(Boolean);
-  if (validos.length) mostrarGraficaRiesgo(d, validos);
+    // Fuera el tramo que se solapa con la edad real: su línea ya está pintada.
+    const edadBase = basePerfil.edad;
+    const extras = data.curvas
+      .filter(c => edadBase == null || Math.abs(c.edad - edadBase) > 5)
+      .map(c => ({ edad: c.edad, riesgo_horario: c.curva }));
+
+    mostrarGraficaRiesgo(d, extras, data.umbrales);
+  } catch {
+    /* sin comparativa: la gráfica se pinta igual con la curva del usuario */
+  }
 }
 
 const CONF_ICONOS = { alta: '&#9679;', media: '&#9675;', baja: '&#9888;' };
@@ -1995,7 +2369,7 @@ function nivelLabel(n) {
   return 'Seguro';
 }
 
-function mostrarGraficaRiesgo(d, perfilesExtra) {
+function mostrarGraficaRiesgo(d, perfilesExtra, umbrales) {
   const ph = d.weather?.perfil_horario;
   if (!ph || !ph.length) return;
   document.getElementById('graph-card').style.display = 'block';
@@ -2025,7 +2399,7 @@ function mostrarGraficaRiesgo(d, perfilesExtra) {
     yAxisID: 'y',
   }];
 
-  const colores = ['#e74c3c', '#2980b9', '#27ae60', '#8e44ad', '#d35400'];
+  const colores = ['#e74c3c', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
   const legHtml = [];
 
   // Curva de riesgo por hora (no una recta): sube y baja con el calor de cada
@@ -2059,8 +2433,7 @@ function mostrarGraficaRiesgo(d, perfilesExtra) {
   if (perfilesExtra && perfilesExtra.length) {
     for (let i = 0; i < perfilesExtra.length; i++) {
       const pe = perfilesExtra[i];
-      const probFallback = pe.d?.perfil?.calor?.prob_personalizada ?? pe.d?.modelos?.XGBoost_calor?.prob_riesgo;
-      const dataPe = curvaHoraria(pe.d?.riesgo_horario) || (probFallback != null ? Array(ph.length).fill(probFallback) : null);
+      const dataPe = curvaHoraria(pe.riesgo_horario ?? pe.d?.riesgo_horario);
       if (!dataPe) continue;
       const edad = pe.edad;
       const color = colores[i + 1] || '#666';
@@ -2178,6 +2551,32 @@ function mostrarGraficaRiesgo(d, perfilesExtra) {
           ctx2.font = '10px sans-serif';
           ctx2.textAlign = 'center';
           ctx2.fillText('actividad', (xIni + xFin) / 2, bottom + 14);
+        }
+
+        // Umbrales de PRECAUCION y PELIGRO sobre el eje de riesgo personal:
+        // son los mismos cortes que usa el backend para decidir la clase.
+        const y1Axis = chart.scales.y1;
+        if (umbrales && y1Axis) {
+          ctx2.save();
+          ctx2.setLineDash([2, 3]);
+          ctx2.lineWidth = 1;
+          ctx2.font = '9px sans-serif';
+          ctx2.textAlign = 'left';
+          for (const l of [
+            { v: umbrales.precaucion, color: '#f39c12', txt: 'precaución' },
+            { v: umbrales.peligro, color: '#c0392b', txt: 'peligro' },
+          ]) {
+            if (l.v == null) continue;
+            const y = y1Axis.getPixelForValue(l.v);
+            ctx2.strokeStyle = l.color;
+            ctx2.beginPath();
+            ctx2.moveTo(left, y);
+            ctx2.lineTo(left + w, y);
+            ctx2.stroke();
+            ctx2.fillStyle = l.color;
+            ctx2.fillText(l.txt, left + 4, y - 3);
+          }
+          ctx2.restore();
         }
       },
     }],

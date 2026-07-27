@@ -1,7 +1,13 @@
 import joblib
 import numpy as np
 import pandas as pd
-import torch
+
+try:
+    import torch
+    _TORCH_AVAILABLE = True
+except ModuleNotFoundError:
+    torch = None
+    _TORCH_AVAILABLE = False
 
 from climasafeai.features.build_features import process_input
 from climasafeai.features.personalizacion import personalizar_riesgo
@@ -176,6 +182,9 @@ def _predecir_lstm(
     provincia: str | None = None,
     grupo_edad: str = "todos",
 ) -> dict:
+    if not _TORCH_AVAILABLE:
+        return {"error": "torch no está instalado (pip install '.[redes_neuronales]' o 'uv sync --group redes_neuronales')"}
+
     try:
         model = _cargar_lstm()
     except Exception as e:
@@ -269,6 +278,42 @@ def _predecir_formulas(current: dict) -> dict:
 from datetime import date as date_type
 
 
+# Umbral de PELIGRO sobre la probabilidad personalizada. Más exigente que el t2
+# del ML porque prob_pers es P(riesgo)=P(1)+P(2), no P(peligro)=P(2).
+PERS_THRESHOLD_PELIGRO = 0.55
+
+
+def perfil_horario_desde_df(df_hora) -> list[dict] | None:
+    """Perfil horario ``[{"hora", "HI", "temp"}, ...]`` a partir del df por horas.
+
+    Se queda con el HI máximo de cada hora del día (el df puede traer varios
+    días). Extraído de ``predict_ensemble`` para que otros endpoints puedan
+    construir el mismo perfil sin ejecutar el ensemble entero.
+    """
+    if df_hora is None or "datetime" not in df_hora.columns or "heat_index_c" not in df_hora.columns:
+        return None
+
+    horas_agrupadas = {}
+    temp_por_hora = {}
+    for _, row in df_hora.iterrows():
+        dt = pd.to_datetime(row["datetime"])
+        hi = row.get("heat_index_c")
+        if hi is not None and not (isinstance(hi, float) and np.isnan(hi)):
+            hora = dt.hour
+            if hora not in horas_agrupadas or float(hi) > horas_agrupadas[hora]:
+                horas_agrupadas[hora] = float(hi)
+                t = row.get("t2m_c")
+                if t is not None and not (isinstance(t, float) and np.isnan(t)):
+                    temp_por_hora[hora] = round(float(t), 1)
+
+    if not horas_agrupadas:
+        return None
+    return [
+        {"hora": h, "HI": hi, "temp": temp_por_hora.get(h)}
+        for h, hi in sorted(horas_agrupadas.items())
+    ]
+
+
 def predict_ensemble(
     lat: float | None = None,
     lon: float | None = None,
@@ -324,27 +369,9 @@ def predict_ensemble(
 
     perfil_aplicado = {}
 
-    perfil_horario = None
-    if df_hora is not None and "datetime" in df_hora.columns and "heat_index_c" in df_hora.columns:
-        horas_agrupadas = {}
-        temp_por_hora = {}
-        for _, row in df_hora.iterrows():
-            dt = pd.to_datetime(row["datetime"])
-            hi = row.get("heat_index_c")
-            if hi is not None and not (isinstance(hi, float) and np.isnan(hi)):
-                hora = dt.hour
-                if hora not in horas_agrupadas or float(hi) > horas_agrupadas[hora]:
-                    horas_agrupadas[hora] = float(hi)
-                    t = row.get("t2m_c")
-                    if t is not None and not (isinstance(t, float) and np.isnan(t)):
-                        temp_por_hora[hora] = round(float(t), 1)
-        if horas_agrupadas:
-            perfil_horario = [
-                {"hora": h, "HI": hi, "temp": temp_por_hora.get(h)}
-                for h, hi in sorted(horas_agrupadas.items())
-            ]
-            if perfil:
-                perfil["_perfil_horario"] = perfil_horario
+    perfil_horario = perfil_horario_desde_df(df_hora)
+    if perfil_horario and perfil:
+        perfil["_perfil_horario"] = perfil_horario
 
     override_fisico = None
     formula_result = resultados.get("Formula", {})
@@ -418,7 +445,6 @@ def predict_ensemble(
     # t1 (PRECAUCION) alineado con el ML (CLASS_THRESHOLDS_RECOMENDADOS.calor.t1).
     # t2 (PELIGRO) es más exigente porque prob_pers es P(riesgo) = P(1)+P(2),
     # no P(peligro)=P(2) del ML. Usamos un umbral propio y fijo.
-    PERS_THRESHOLD_PELIGRO = 0.55
     prob_pers = max(
         res_calor["indice_personalizado"],
         res_frio["indice_personalizado"],
