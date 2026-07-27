@@ -95,3 +95,68 @@ def test_api_predict_con_fecha_lejana_devuelve_error(client):
     data = response.json()
     assert "error" in data
     assert "2 días" in data["error"]
+
+
+class _DBEspia:
+    """DBManager falso: solo apunta qué escrituras se han intentado."""
+
+    def __init__(self):
+        self.escrituras = []
+
+    def buscar_por_alias(self, alias):
+        return None
+
+    def crear_perfil(self, datos):
+        self.escrituras.append(("crear_perfil", datos))
+        return 999
+
+    def actualizar_perfil(self, perfil_id, datos):
+        self.escrituras.append(("actualizar_perfil", perfil_id))
+
+    def guardar_consulta(self, **kwargs):
+        self.escrituras.append(("guardar_consulta", kwargs))
+
+
+@pytest.fixture
+def db_espia(monkeypatch):
+    """Sustituye el DBManager real y el ensemble por dobles de prueba."""
+    from climasafeai.models import ensemble
+
+    espia = _DBEspia()
+    monkeypatch.setattr("chat.app._db", espia)
+    monkeypatch.setattr(
+        ensemble, "predict_ensemble",
+        lambda **kwargs: {
+            "clase_final": 0,
+            "modelos": {},
+            "weather": {"lat": kwargs.get("lat"), "lon": kwargs.get("lon"), "perfil_horario": []},
+        },
+    )
+    return espia
+
+
+def test_api_predict_persiste_por_defecto(client, db_espia):
+    """Una consulta normal del usuario sí crea perfil y consulta."""
+    response = client.post("/api/predict", json={
+        "provincia": "Madrid",
+        "lat": 40.4168,
+        "lon": -3.7038,
+        "perfil": {"edad": 30},
+    })
+    assert response.status_code == 200
+    acciones = [a for a, _ in db_espia.escrituras]
+    assert "crear_perfil" in acciones
+    assert "guardar_consulta" in acciones
+
+
+def test_api_predict_con_persistir_false_no_escribe_en_bbdd(client, db_espia):
+    """La comparativa de edades manda perfiles inventados: no deben guardarse."""
+    response = client.post("/api/predict", json={
+        "provincia": "Madrid",
+        "lat": 40.4168,
+        "lon": -3.7038,
+        "perfil": {"edad": 55},
+        "persistir": False,
+    })
+    assert response.status_code == 200
+    assert db_espia.escrituras == []

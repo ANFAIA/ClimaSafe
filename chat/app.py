@@ -538,40 +538,45 @@ async def api_predict(body: dict, date: str | None = None):
     except Exception as exc:
         return {"error": str(exc)}
 
-    # Guardar perfil en SQLite (sin perfil_id ni alias en datos)
-    alias = raw_perfil.get("alias")
-    datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
-    # Quitar campos internos que no deben persistir en SQLite
-    for _k in ("_perfil_horario", "perfil_id", "alias"):
-        datos_perfil.pop(_k, None)
-    datos_perfil["lat"] = lat
-    datos_perfil["lon"] = lon
-    datos_perfil["provincia"] = provincia
-    if alias:
-        existente = _db.buscar_por_alias(alias)
-        if existente:
-            perfil_id = existente["id"]
-            datos_perfil["alias"] = alias
+    # Predicciones auxiliares (comparativa de edades, simulaciones) mandan
+    # `persistir: false`: son perfiles inventados a partir del real, así que
+    # no deben crear filas en SQLite ni contar como consulta del usuario.
+    if body.get("persistir", True):
+        # Guardar perfil en SQLite (sin perfil_id ni alias en datos)
+        alias = raw_perfil.get("alias")
+        datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
+        # Quitar campos internos que no deben persistir en SQLite
+        for _k in ("_perfil_horario", "perfil_id", "alias"):
+            datos_perfil.pop(_k, None)
+        datos_perfil["lat"] = lat
+        datos_perfil["lon"] = lon
+        datos_perfil["provincia"] = provincia
+        if alias:
+            existente = _db.buscar_por_alias(alias)
+            if existente:
+                perfil_id = existente["id"]
+                datos_perfil["alias"] = alias
+                _db.actualizar_perfil(perfil_id, datos_perfil)
+            else:
+                datos_perfil["alias"] = alias
+                perfil_id = _db.crear_perfil(datos_perfil)
+        elif perfil_id:
             _db.actualizar_perfil(perfil_id, datos_perfil)
         else:
-            datos_perfil["alias"] = alias
             perfil_id = _db.crear_perfil(datos_perfil)
-    elif perfil_id:
-        _db.actualizar_perfil(perfil_id, datos_perfil)
-    else:
-        perfil_id = _db.crear_perfil(datos_perfil)
-    result["perfil_id"] = perfil_id
 
-    # Guardar consulta
-    clase = result.get("clase_final_label", result.get("clase_final"))
-    tipo = result.get("tipo", "calor")
-    indice_orig = result.get("explicacion", {}).get("indice_original")
-    indice_pers = result.get("explicacion", {}).get("indice_personalizado")
-    _db.guardar_consulta(
-        perfil_id=perfil_id, provincia=provincia, lat=lat, lon=lon,
-        tipo_riesgo=tipo, indice_original=indice_orig,
-        indice_personalizado=indice_pers, clase_final=clase,
-    )
+        # Guardar consulta
+        clase = result.get("clase_final_label", result.get("clase_final"))
+        tipo = result.get("tipo", "calor")
+        indice_orig = result.get("explicacion", {}).get("indice_original")
+        indice_pers = result.get("explicacion", {}).get("indice_personalizado")
+        _db.guardar_consulta(
+            perfil_id=perfil_id, provincia=provincia, lat=lat, lon=lon,
+            tipo_riesgo=tipo, indice_original=indice_orig,
+            indice_personalizado=indice_pers, clase_final=clase,
+        )
+
+    result["perfil_id"] = perfil_id
 
     result["perfil_usuario"] = perfil
     result["weather"] = _get_weather_summary(result)

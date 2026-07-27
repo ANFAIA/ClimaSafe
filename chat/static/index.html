@@ -1835,6 +1835,7 @@ async function cargarComparativas(d) {
           lat: d.weather?.lat,
           lon: d.weather?.lon,
           perfil: p,
+          persistir: false,   // edad inventada: no debe crear perfil ni consulta
         }),
       });
       const data = await r.json();
