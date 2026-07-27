@@ -58,7 +58,7 @@ umbrales resaltados y tooltip comparativo hora a hora.
 | ✅ | Tooltip comparativo por hora (modo `index` de Chart.js, ya existente) | `chat/static/index.html` |
 | ✅ | Fix: la comparativa ya no persiste perfiles inventados en SQLite — flag `persistir` en `/api/predict` | `chat/app.py`, `chat/static/index.html` |
 | ✅ | Tests del endpoint y del flag (7 nuevos) | `tests/test_api.py` |
-| ⬜ | Ajustar `EDADES_COMPARATIVA` a `(25, 55, 65, 75, 85)`: los tramos de `_factor_edad_calor` son 45/55/65/75/85, así que 25 y 40 pintan la misma curva | `chat/app.py` |
+| ✅ | Ajustar `EDADES_COMPARATIVA` a `(25, 55, 65, 75, 85)`: los tramos de `_factor_edad_calor` son 45/55/65/75/85, así que 25 y 40 pintan la misma curva | `chat/app.py` |
 
 ---
 
@@ -156,7 +156,7 @@ Cola de mensajes con N workers compitiendo.
 
 | # | Qué |
 |---|-----|
-| ✅ | MCP Server con herramientas: predict_risk, predict_volume_risk, predict_zone_risk, predict_group_risk, predict_age_curves, system_health (puerto 8101) · `agents/tools/prediction_mcp_tool.py` |
+| ✅ | MCP Server con 3 tools: predict_risk_mcp, listar_usuarios_mcp, cargar_perfil_mcp · `agents/tools/prediction_mcp_tool.py` |
 | ⬜ | Agente Harness (WebSocket, queries en lenguaje natural) |
 | ⬜ | Plugin Skills.sh / MCP publicable |
 | ⬜ | Investigar Hermes como orquestador |
@@ -179,7 +179,7 @@ Cola de mensajes con N workers compitiendo.
 |---|-----|
 | ✅ | Fecha de nacimiento (campo date, cálculo automático de edad) |
 | ⬜ | Chat iterativo en la GUI (asistente conversacional) |
-| ⬜ | Capturas para LinkedIn con marca de agua |
+| ✅ | Capturas para LinkedIn con marca de agua |
 | ⬜ | Despliegue simplificado (Dockploy / Skills.sh) |
 
 ---

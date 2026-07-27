@@ -610,9 +610,7 @@ async def api_predict(body: dict, date: str | None = None):
     return result
 
 
-# Edades de referencia de la comparativa. Cubren el rango adulto sin llenar la
-# gráfica de líneas: joven, adulto, mediana edad, mayor y muy mayor.
-EDADES_COMPARATIVA = (25, 40, 55, 70, 85)
+EDADES_COMPARATIVA = (25, 55, 65, 75, 85)
 
 
 @app.post("/api/curvas-edad")
