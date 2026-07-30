@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 import struct
+import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -10,6 +12,26 @@ import sqlite_vec
 
 EMBEDDING_DIM = 384
 _embedder: Any = None
+_llm_client: Any = None
+
+
+SYSTEM_PROMPT = textwrap.dedent("""\
+    Eres un asistente experto en factores de riesgo térmico (calor y frío)
+    para ClimaSafeAI, un sistema de predicción de riesgo personalizado.
+
+    Tu función es responder preguntas sobre factores de riesgo basándote
+    EXCLUSIVAMENTE en el contexto proporcionado abajo (factores de riesgo
+    recuperados de la base de conocimiento).
+
+    NORMAS:
+    - No inventes factores que no estén en el contexto.
+    - Si el contexto no es suficiente para responder, dilo claramente.
+    - Menciona los nombres concretos de los factores cuando sean relevantes.
+    - Indica la categoría y el tipo (calor/frío) de cada factor que cites.
+    - Sé conciso: responde directo, sin rodeos.
+    - Si la pregunta no está relacionada con riesgo térmico, indica
+      educadamente que solo respondes sobre factores de riesgo climático.
+""")
 
 
 def _get_embedder():
@@ -18,6 +40,40 @@ def _get_embedder():
         from sentence_transformers import SentenceTransformer
         _embedder = SentenceTransformer("all-MiniLM-L6-v2")
     return _embedder
+
+
+def _get_llm_client() -> Any | None:
+    """Cliente OpenAI-compatible para generar respuestas RAG.
+
+    Proveedores (por orden de preferencia):
+    1. GROQ_API_KEY + GROQ_BASE_URL (por defecto)
+    2. OPENAI_API_KEY + OPENAI_BASE_URL
+    3. GEMINI_API_KEY + GEMINI_BASE_URL
+    """
+    global _llm_client
+    if _llm_client is not None:
+        return _llm_client
+
+    from openai import OpenAI
+
+    configs = [
+        ("GROQ_API_KEY", "GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+        ("OPENAI_API_KEY", "OPENAI_BASE_URL", None),
+        ("GEMINI_API_KEY", "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+    ]
+
+    for key_var, url_var, default_url in configs:
+        api_key = os.getenv(key_var)
+        if api_key:
+            base_url = os.getenv(url_var, default_url) if default_url else os.getenv(url_var, "https://api.openai.com/v1")
+            if base_url:
+                _llm_client = OpenAI(api_key=api_key, base_url=base_url, timeout=30)
+                return _llm_client
+    return None
+
+
+def _llm_model() -> str:
+    return os.getenv("RAG_MODEL", "llama-3.3-70b-versatile")
 
 
 def _factor_text(f: dict) -> str:
@@ -127,3 +183,57 @@ class RAG:
                 "total_factores": total_factores,
                 "pending": total_factores - total,
             }
+
+    def ask(self, query: str, k: int = 5) -> dict:
+        """Retrieve + Augment + Generate: RAG completo.
+
+        1. Recupera los k factores más relevantes para la query.
+        2. Construye un prompt con el contexto.
+        3. Genera respuesta con LLM (Gemini vía API).
+        4. Devuelve respuesta + fuentes.
+        """
+        results = self.search_factores(query, k=k)
+
+        if not results:
+            return {
+                "answer": "No encontré factores de riesgo relevantes para tu consulta.",
+                "sources": [],
+            }
+
+        client = _get_llm_client()
+        if client is None:
+            return {
+                "answer": None,
+                "sources": results,
+                "error": "GEMINI_API_KEY no configurada — no se puede generar respuesta",
+            }
+
+        # Prompt de usuario: contexto recuperado + pregunta
+        ctx = "\n".join(
+            f"{i}. {r['texto']} (distancia: {r['distance']:.3f})"
+            for i, r in enumerate(results, 1)
+        )
+        user_prompt = f"""Factores de riesgo recuperados:\n{ctx}\n\nPregunta: {query}\n\nResponde basándote exclusivamente en los factores de riesgo listados. Si no hay información suficiente, dilo. Menciona factores concretos cuando sea relevante."""
+
+        try:
+            resp = client.chat.completions.create(
+                model=_llm_model(),
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            answer = resp.choices[0].message.content.strip()
+        except Exception as e:
+            return {
+                "answer": None,
+                "sources": results,
+                "error": f"Error generando respuesta: {e}",
+            }
+
+        return {
+            "answer": answer,
+            "sources": results,
+        }
