@@ -9,7 +9,11 @@
         docker-run docker-update docker-down \
         clean clean-models clean-figures clean-all \
         run info help web \
-        mcp mcp-factors install-mcp setup-claude
+        mcp mcp-factors install-mcp setup-claude \
+        init harness-check backlog \
+        agents-list agents-run agents-doctor agents-test agents-eval \
+        prompts-sync assistants-sync prompts-check \
+        bot bot-start bot-daemon bot-stop bot-restart bot-logs
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Variables
@@ -17,6 +21,21 @@
 MODULE   = climasafeai
 ML_TYPE  = supervisado
 PYTHON   = python
+
+# `uv run` a secas sincroniza el venv contra las dependencias BASE antes de
+# ejecutar, y eso desinstala todo lo que venga de un extra (torch, mlflow,
+# xgboost, fastapi...). Cualquier `make test` dejaba el entorno cojo y el fallo
+# aparecía después en otro sitio. Con --no-sync los targets solo ejecutan.
+# Para instalar o actualizar dependencias: `make setup` (ese sí sincroniza).
+UVRUN    = uv run --no-sync
+
+# Los extras que forman el entorno real de trabajo. `uv sync` DESINSTALA lo que
+# no esté en la lista, así que sincronizar con menos extras de los que usa el
+# proyecto deja el venv cojo: `make setup` con solo dev+supervisado se llevaba
+# torch, mlflow, fastapi, optuna y evidently por delante.
+EXTRAS   = --extra dev --extra $(ML_TYPE) --extra no_supervisado \
+           --extra redes_neuronales --extra mlflow_tracking --extra optuna \
+           --extra api --extra monitoring --extra rag
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  help  →  target por defecto
@@ -75,6 +94,18 @@ help:
 	@echo "  Documentación"
 	@echo "    make docs           sphinx-apidoc + html"
 	@echo ""
+	@echo "  Arnés (ver AGENTS.md)"
+	@echo "    make init           ./init.sh — la puerta: ¿se puede trabajar?"
+	@echo "    make harness-check  ./init.sh --quick — sin tests"
+	@echo "    make backlog        estado de featureslist.json"
+	@echo ""
+	@echo "  Sistema de agentes"
+	@echo "    make agents-list    los 26 agentes disponibles"
+	@echo "    make agents-doctor  diagnóstico integral del proyecto"
+	@echo "    make agents-test    suite de tests de agents/"
+	@echo "    make agents-eval    arnés + smoke + routing + contratos"
+	@echo "    make prompts-sync   regenera prompts y subagentes desde el código"
+	@echo ""
 	@echo "  Limpieza"
 	@echo "    make clean          cachés y __pycache__"
 	@echo "    make clean-models   borra .joblib y .pt de models/"
@@ -86,6 +117,14 @@ help:
 	@echo "    make docker-run      construye imagen y lanza el chat en http://localhost:8080"
 	@echo "    make docker-update   reconstruye la imagen con los cambios mas recientes"
 	@echo "    make docker-down     para y elimina los contenedores"
+	@echo ""
+	@echo "  Bot Telegram (determinista)"
+	@echo "    make bot            lanza el bot Telegram en foreground (alias de bot-start)"
+	@echo "    make bot-start      lanza el bot Telegram en foreground (Ctrl+C)"
+	@echo "    make bot-daemon     lanza en background con autoreinicio"
+	@echo "    make bot-stop       para el bot"
+	@echo "    make bot-restart    reinicia el bot"
+	@echo "    make bot-logs       tail del log rotativo (logs/bot.log)"
 	@echo ""
 	@echo "  MCP (Claude Desktop / Cursor / VS Code)"
 	@echo "    make mcp             MCP HTTPS autofirmado en :8101/mcp"
@@ -105,13 +144,13 @@ setup:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  Instalando dependencias para ML tipo: $(ML_TYPE)"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	uv sync --extra dev --extra $(ML_TYPE)
+	uv sync $(EXTRAS)
 	@echo ""
 	@echo "  Listo. Activa el entorno con:  source .venv/bin/activate"
 	@echo ""
 
 install-deps:
-	uv sync --extra $(ML_TYPE)
+	uv sync $(EXTRAS)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Pipeline  data → features → train → predict
@@ -125,19 +164,19 @@ install-deps:
 # ─────────────────────────────────────────────────────────────────────────────
 data:
 	@echo "▶  Procesando datos crudos → data/processed/"
-	uv run $(PYTHON) $(MODULE)/data/make_dataset.py
+	$(UVRUN) $(PYTHON) $(MODULE)/data/make_dataset.py
 
 features: data
 	@echo "▶  Construyendo features → data/interim/"
-	uv run $(PYTHON) $(MODULE)/features/build_features.py
+	$(UVRUN) $(PYTHON) $(MODULE)/features/build_features.py
 
 train: features
 	@echo "▶  Entrenando modelo → models/"
-	uv run $(PYTHON) $(MODULE)/models/train_model.py
+	$(UVRUN) $(PYTHON) $(MODULE)/models/train_model.py
 
 predict: train
 	@echo "▶  Generando predicciones → reports/"
-	uv run $(PYTHON) $(MODULE)/models/predict_model.py
+	$(UVRUN) $(PYTHON) $(MODULE)/models/predict_model.py
 
 pipeline: predict
 	@echo ""
@@ -148,7 +187,7 @@ pipeline: predict
 #  Ejecución directa
 # ─────────────────────────────────────────────────────────────────────────────
 run:
-	uv run $(PYTHON) main.py
+	$(UVRUN) $(PYTHON) main.py
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -156,7 +195,7 @@ run:
 # ─────────────────────────────────────────────────────────────────────────────
 monitor:
 	@echo "▶  Ejecutando monitorización de drift y rendimiento..."
-	uv run python -m monitoring.monitor
+	$(UVRUN) python -m monitoring.monitor
 
 
 
@@ -165,7 +204,7 @@ monitor:
 # ─────────────────────────────────────────────────────────────────────────────
 tune:
 	@echo "▶  Lanzando optimizacion Optuna (OPTUNA_TRIALS en main.py)"
-	uv run python -m tuning.tune_model
+	$(UVRUN) python -m tuning.tune_model
 
 
 
@@ -176,19 +215,19 @@ tune:
 serve:
 	@echo "▶  Lanzando API REST en http://localhost:8000"
 	@echo "   Documentación interactiva: http://localhost:8000/docs"
-	uv run uvicorn api.main:app --reload --port 8000
+	$(UVRUN) uvicorn api.main:app --reload --port 8000
 
  web:
 	@echo "▶  Lanzando web chat en http://localhost:8000"
-	uv run uvicorn chat.app:app --reload --port 8000
+	$(UVRUN) uvicorn chat.app:app --reload --port 8000
 
 mcp:
 	@echo "▶  MCP Server — HTTPS autofirmado en https://localhost:8101/mcp"
-	uv run python -m agents.tools.prediction_mcp_tool
+	$(UVRUN) python -m agents.tools.prediction_mcp_tool
 
 mcp-http:
 	@echo "▶  MCP Server — HTTP plano en http://localhost:8101/mcp"
-	uv run python -m agents.tools.prediction_mcp_tool --insecure
+	$(UVRUN) python -m agents.tools.prediction_mcp_tool --insecure
 
 mcp-web: mcp-http
 	@echo ""
@@ -206,7 +245,7 @@ mcp-web: mcp-http
 
 mcp-factors:
 	@echo "▶  MCP Server — Factores en http://localhost:8100/sse"
-	uv run python -m agents.tools.factors_mcp_tool
+	$(UVRUN) python -m agents.tools.factors_mcp_tool
 
 USER_BIN := $(shell echo $${HOME:-~})/.local/bin
 
@@ -217,40 +256,106 @@ $(USER_BIN)/climasafeai-mcp: .venv/bin/climasafeai-mcp
 	@mkdir -p $(USER_BIN)
 	ln -sf $(abspath $<) $(USER_BIN)/climasafeai-mcp
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  Bot Telegram (determinista)
+# ─────────────────────────────────────────────────────────────────────────────
+
+bot: bot-start
+
+bot-start:
+	@echo "▶  Starting ClimaSafe Bot (foreground, Ctrl+C para parar)"
+	@bash scripts/run_bot.sh
+
+bot-daemon:
+	@bash scripts/run_bot.sh --daemon
+
+bot-stop:
+	@bash scripts/run_bot.sh --stop
+
+bot-restart:
+	@bash scripts/run_bot.sh --restart
+
+bot-logs:
+	@echo "▶  ClimaSafe Bot logs"
+	@tail -f logs/bot.log 2>/dev/null || echo "Todavía no hay logs (el bot no se ha iniciado)"
+
 setup-claude:
-	@uv run python scripts/setup_claude_config.py
+	@$(UVRUN) python scripts/setup_claude_config.py
 
 
 profile:
 	@echo "▶  Profiling main.py → reports/profile.prof"
-	uv run $(PYTHON) -m cProfile -o reports/profile.prof main.py
-	@echo "   Visualiza con: uv run snakeviz reports/profile.prof"
+	$(UVRUN) $(PYTHON) -m cProfile -o reports/profile.prof main.py
+	@echo "   Visualiza con: $(UVRUN) snakeviz reports/profile.prof"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Calidad de código
 # ─────────────────────────────────────────────────────────────────────────────
 test:
-	uv run pytest tests/ -v
+	$(UVRUN) pytest tests/ -v
 
 smoke:
 	@echo "▶  Test de humo — pipeline con datos sintéticos"
-	uv run pytest tests/ -v -m smoke --tb=short
+	$(UVRUN) pytest tests/ -v -m smoke --tb=short
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Arnés — la puerta y el backlog (ver AGENTS.md)
+# ─────────────────────────────────────────────────────────────────────────────
+init:
+	@chmod +x init.sh 2>/dev/null || true
+	@./init.sh
+
+harness-check:
+	@chmod +x init.sh 2>/dev/null || true
+	@./init.sh --quick
+
+backlog:
+	@$(UVRUN) $(PYTHON) -c "import json; d=json.load(open('featureslist.json')); \
+	print(); print('  Backlog de ClimaSafeAI'); print(); \
+	[print('  [%-11s] %-14s %s' % (f['status'], f['id'], f['title'])) for f in d['features']]; \
+	print()"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Sistema de agentes
+# ─────────────────────────────────────────────────────────────────────────────
+agents-list:
+	$(UVRUN) python -m agents list
+
+agents-run:
+	$(UVRUN) python -m agents run $(filter-out $@,$(MAKECMDGOALS))
+
+agents-doctor:
+	$(UVRUN) python -m agents doctor
+
+agents-test:
+	$(UVRUN) pytest agents/tests/ -q
+
+agents-eval:
+	@echo "▶  Evaluación del sistema de agentes (arnés + smoke + routing + contracts)"
+	$(UVRUN) python -m agents.evals.runner
+
+prompts-sync assistants-sync:
+	@echo "▶  Regenerando prompts y subagentes desde el código y los contratos..."
+	$(UVRUN) python -m agents.prompts_sync --write
+
+prompts-check:
+	@$(UVRUN) python -m agents.prompts_sync
 
 lint:
-	uv run ruff check $(MODULE)/ tests/
-	uv run ruff format --check $(MODULE)/ tests/
+	$(UVRUN) ruff check $(MODULE)/ tests/
+	$(UVRUN) ruff format --check $(MODULE)/ tests/
 
 format:
-	uv run ruff format $(MODULE)/ tests/
+	$(UVRUN) ruff format $(MODULE)/ tests/
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Jupyter
 # ─────────────────────────────────────────────────────────────────────────────
 lab:
-	uv run jupyter lab --ip=* --port=8888 --no-browser
+	$(UVRUN) jupyter lab --ip=* --port=8888 --no-browser
 
 notebook:
-	uv run jupyter notebook --ip=* --port=8888 --no-browser
+	$(UVRUN) jupyter notebook --ip=* --port=8888 --no-browser
 
 
 
@@ -259,7 +364,7 @@ notebook:
 # ─────────────────────────────────────────────────────────────────────────────
 mlflow:
 	@echo "Lanzando MLflow UI en http://localhost:5000"
-	uv run mlflow ui --port 5000
+	$(UVRUN) mlflow ui --port 5000
 
 
 
@@ -267,7 +372,7 @@ mlflow:
 #  Documentación
 # ─────────────────────────────────────────────────────────────────────────────
 docs:
-	uv run sphinx-apidoc -o docs/source/ $(MODULE)/
+	$(UVRUN) sphinx-apidoc -o docs/source/ $(MODULE)/
 	$(MAKE) html -C docs
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -334,7 +439,7 @@ info:
 	@echo "  Proyecto  : ClimaSafeAI"
 	@echo "  Módulo    : $(MODULE)"
 	@echo "  ML tipo   : $(ML_TYPE)"
-	@echo "  Python    : $(shell uv run python --version 2>/dev/null || python --version)"
+	@echo "  Python    : $(shell $(UVRUN) python --version 2>/dev/null || python --version)"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@uv pip list 2>/dev/null | head -40 || pip list | head -40

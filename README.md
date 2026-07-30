@@ -139,6 +139,94 @@ descargar el shapefile de https://centrodedescargas.cnig.es/CentroDescargas/limi
 
 Consulta el archivo `documentacion` para más detalles.
 
+## Claves de API
+
+Todas van en **`.env`**, en la raíz del repo. Está en `.gitignore`, así que no se
+sube. Es el único sitio: `make spacebot-start` lo carga, y el resto de comandos lo
+leen desde ahí.
+
+```bash
+# Datos climáticos
+ERA5S_API_KEY=...          # https://cds.climate.copernicus.eu  (además de ~/.cdsapirc)
+AEMET_API_KEY=...          # https://opendata.aemet.es/centrodedescargas/altaUsuario
+OpenUV_API_KEY=...         # https://www.openuv.io
+
+# Bot de Telegram
+TELEGRAM_BOT_TOKEN=...     # te lo da @BotFather — formato 1234567890:AA...
+GEMINI_API_KEY=...         # https://aistudio.google.com/api-keys
+GROQ_API_KEY=...           # https://console.groq.com/keys — formato gsk_...
+```
+
+> **No las exportes también en `~/.bashrc`.** Una copia vieja ahí pisa la de `.env`
+> y el bot falla con un 401 que no dice de dónde viene. Si ya la tienes puesta,
+> bórrala de `.bashrc` y déjala solo en `.env`.
+
+Para comprobar que las tres claves del bot valen — no el formato, sino que el
+proveedor las acepta:
+
+```bash
+make spacebot     # las prueba contra Groq, Google y Telegram y responde ✓ o ✗
+```
+
+### Formatos que despistan
+
+- **Google emite dos formatos de clave**: el clásico `AIzaSy…` de 39 caracteres y
+  el nuevo `AQ.…` de 53. Los dos son válidos. Que una clave tenga buena pinta no
+  significa que sirva: una revocada tiene el formato perfecto, por eso `make
+  spacebot` la prueba de verdad.
+- Si Google responde `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`, la clave no vale —
+  cópiala otra vez desde AI Studio con el botón de copiar de su fila.
+
+## El bot de Telegram (spacebot)
+
+```bash
+make spacebot         # instala binario + config + skill, y valida las claves
+make spacebot-start   # arranca (carga .env por ti)
+make spacebot-logs    # tail de los logs
+make spacebot-stop
+```
+
+El config vive en `agents/spacebot/config.toml` y se instala en
+`~/.spacebot/config.toml`. **Edita siempre el del repo** y vuelve a lanzar `make
+spacebot`: el instalado se regenera desde él (guardando copia del anterior).
+
+### Por qué el enrutado de modelos es el que es
+
+Los tres roles que invocan herramientas (`channel`, `branch`, `worker`) van por
+**Gemini**; `cortex` y `compactor` por **Groq**. No es una preferencia estética:
+
+- **Groq valida las tool calls en su servidor**, y los modelos llama se dejan el
+  campo `content` al llamar a la herramienta `reply`. El error es
+  `tool call validation failed: ... missing properties: 'content'` y **no dispara
+  el fallback** (spacebot solo reintenta ante errores de cuota), así que la
+  conversación se muere en el primer mensaje. Le pasa al 8b y también al 70b.
+- El free tier de Groq da 100k tokens al día en el 70b. Una petición del canal pesa
+  ~9k (system prompt + skill + esquemas MCP), o sea unos **11 mensajes al día**.
+  Y el 8b, con 6000 TPM, devuelve `413 Payload Too Large` con cualquier
+  conversación real.
+- Los ids de modelo se escriben **tal cual los devuelve el proveedor**. `GET
+  https://api.groq.com/openai/v1/models` con tu clave te da la lista buena:
+  `qwen-qwen3.6-27b` no existe, el id real lleva barra (`qwen/qwen3.6-27b`).
+- **Gemini no sirve para los roles que usan herramientas** con spacebot 0.5.0. Los
+  Gemini 3.x razonan, y al emitir una function call devuelven un
+  `thought_signature` que hay que reenviarles en la petición siguiente. Spacebot es
+  anterior a eso, así que el segundo turno —cuando hay que devolverle el resultado
+  de la herramienta— muere con `400: Function call is missing a thought_signature`.
+  Los Gemini 2.x no razonan y valdrían, pero esta cuenta ya no los tiene: `2.5`
+  responde `404 no longer available to new projects` y toda la familia `2.0`
+  responde `429`. Gemini se queda para `cortex` y `compactor`, que no llaman a
+  herramientas.
+
+Para comprobar cualquiera de estas cosas antes de tocar el config, la API se prueba
+en dos líneas — no hace falta reiniciar el bot ni leer logs:
+
+```bash
+curl -s https://generativelanguage.googleapis.com/v1beta/openai/models \
+  -H "Authorization: Bearer $GEMINI_API_KEY" | head
+curl -s https://api.groq.com/openai/v1/models \
+  -H "Authorization: Bearer $GROQ_API_KEY" | head
+```
+
 ---
 
 Template generado con https://github.com/cacelass/dskit
