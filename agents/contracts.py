@@ -106,27 +106,35 @@ CONTRACTS: dict[str, Contract] = {
 
     # ── Conocimiento e investigación ─────────────────────────────────────
     "knowledge": Contract(
-        role="Dueño del grafo de conocimiento y la bóveda Obsidian: los construye y mantiene al día.",
+        role="Dueño único de graphify-out/ y de la bóveda Obsidian: los construye, poda, cachea y mantiene al día.",
         can=(
             "construir/reconstruir el grafo (graphify), crear la bóveda, resumir nodos padre, sync",
+            "podar el grafo (clean con criterio fijo, prune arbitrario con dry-run) dejando .bak",
+            "gestionar la caché de graphify-out/cache/: warmup, estado y limpieza",
         ),
         cannot=(
-            "buscar o navegar por el grafo → docsearch",
+            "buscar o navegar por el grafo → doc",
             "buscar papers nuevos → research (knowledge los indexa cuando ya existen)",
         ),
-        owns=("graphify-out/ (construcción y sync del grafo)", "bóveda Obsidian del proyecto"),
-        collaborates=("docsearch", "research"),
+        # Un recurso, un dueño: antes graphify-out/ lo declaraban `knowledge`
+        # (construcción), `docsearch` (poda) y `cache` (caché) con redacciones
+        # distintas, así que el validador no veía la colisión. Ahora es uno.
+        owns=("graphify-out/", "bóveda Obsidian del proyecto"),
+        collaborates=("doc", "research"),
     ),
-    "docsearch": Contract(
-        role="Buscador del grafo de conocimiento: consulta, navega vecinos y poda nodos irrelevantes.",
-        can=("buscar en el grafo, listar vecinos/referencias, podar nodos innecesarios (con backup)",),
+    "doc": Contract(
+        role="Buscador unificado de documentación: grafo graphify, índice RAG y notas del vault. Solo lee.",
+        can=(
+            "buscar en todas las fuentes a la vez, consultar el grafo en lenguaje natural",
+            "listar vecinos de un nodo y referencias del grafo, grep sobre el vault",
+        ),
         cannot=(
-            "construir o reconstruir el grafo → knowledge",
-            "buscar fuera del grafo (papers nuevos, web) → research",
+            "construir, podar o modificar el grafo → knowledge",
+            "buscar fuera del proyecto (papers nuevos, web) → research",
+            "escribir documentación (README, CHANGELOG, docs/) → documentation",
         ),
         needs=("la consulta o el nodo del que partir",),
-        owns=("graphify-out/ (poda de nodos, con .bak)",),
-        collaborates=("knowledge",),
+        collaborates=("knowledge", "documentation"),
     ),
     "research": Contract(
         role="Investigador externo: busca papers (arXiv/OpenAlex) relacionados con el proyecto. Solo lee.",
@@ -257,11 +265,15 @@ CONTRACTS: dict[str, Contract] = {
         collaborates=("git",),
     ),
     "cicd": Contract(
-        role="Dueño de los workflows de GitHub Actions del proyecto generado.",
-        can=("generar y validar .github/workflows/*.yml cruzando los targets contra el Makefile real",),
+        role="Dueño de los workflows de GitHub Actions del proyecto, incluida su programación cron.",
+        can=(
+            "generar y validar .github/workflows/*.yml cruzando los targets contra el Makefile real",
+            "validar una expresión cron, describirla en lenguaje natural y calcular próximas ejecuciones",
+        ),
         cannot=(
             "modificar el Makefile → make",
             "hacer commit del workflow → git",
+            "instalar crontabs o programar tareas reales en el sistema — solo analiza expresiones",
         ),
         owns=(".github/workflows/",),
         collaborates=("make", "git"),
@@ -340,14 +352,27 @@ CONTRACTS: dict[str, Contract] = {
         ),
         collaborates=("env", "test", "data", "dependency", "git"),
     ),
-    "schedule": Contract(
-        role="Experto en cron: valida, describe y calcula próximas ejecuciones. No programa nada.",
-        can=("validar expresiones cron, describirlas en lenguaje natural, calcular próximas ejecuciones",),
-        cannot=(
-            "instalar crontabs o programar tareas reales en el sistema — solo analiza expresiones",
+
+    # ── Arnés ────────────────────────────────────────────────────────────
+    "harness": Contract(
+        role="Dueño mecánico del arnés: mantiene el backlog y el progreso, y ejecuta la puerta init.sh.",
+        can=(
+            "leer y actualizar featureslist.json (abrir, cerrar, bloquear y añadir features)",
+            "escribir progress/current.md y añadir entradas a progress/history.md",
+            "guardar los informes de los subagentes en progress/<agente>-<FEATURE-ID>.md",
+            "ejecutar ./init.sh y devolver el veredicto estructurado",
+            "rechazar el cierre de una feature si la puerta no pasa o si no hay evidencia",
         ),
-        needs=("la expresión cron a analizar",),
-        collaborates=(),
+        cannot=(
+            "decidir QUÉ feature toca ni cómo implementarla → eso lo razonan los agentes "
+            "markdown del arnés (lider, explorer, implementer, reviewer)",
+            "escribir código del producto → 'refactor' y el implementer",
+            "ejecutar los tests por su cuenta → los ejecuta init.sh, o el agente 'test'",
+            "cerrar una feature sin evidencia → devuelve needs, nunca la da por buena",
+        ),
+        needs=("el id de la feature", "la evidencia real de verificación para cerrarla"),
+        owns=("featureslist.json", "progress/"),
+        collaborates=("plan", "test", "review", "audit"),
     ),
 }
 

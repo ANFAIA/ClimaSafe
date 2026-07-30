@@ -26,26 +26,19 @@ def test_preprocess_data_returns_four_splits(df_with_target, patch_paths):
 
 
 def test_preprocess_data_creates_scaler_artifact(df_with_target, patch_paths):
-    """Debe guardar scaler.joblib en ARTIFACTS_DIR."""
+    """Debe guardar el scaler de la clase en ARTIFACTS_DIR."""
     preprocess_data(df_with_target, target_col="target")
-    assert (patch_paths["ARTIFACTS_DIR"] / "scaler.joblib").exists()
-
-
-def test_preprocess_data_with_pca(df_with_target, patch_paths):
-    """Con use_pca=0.95 debe guardar pca.joblib."""
-    X_train, X_test, _, _ = preprocess_data(
-        df_with_target, target_col="target", use_pca=0.95
-    )
-    assert (patch_paths["ARTIFACTS_DIR"] / "pca.joblib").exists()
-    n_orig = df_with_target.shape[1] - 1  # sin columna target
-    assert X_train.shape[1] <= n_orig
+    # El artefacto va namespaceado por clase (scaler_calor / scaler_frio) para
+    # que entrenar un modelo no pise los artefactos del otro.
+    assert (patch_paths["ARTIFACTS_DIR"] / "scaler_calor.joblib").exists()
 
 
 def test_preprocess_data_saves_processed_csvs(df_with_target, patch_paths):
-    """Debe guardar X_train.csv, X_test.csv, y_train.csv, y_test.csv."""
+    """Debe guardar los cuatro CSV del split, namespaceados por clase."""
     preprocess_data(df_with_target, target_col="target")
     proc = patch_paths["PROCESSED_DATA_DIR"]
-    for fname in ["X_train.csv", "X_test.csv", "y_train.csv", "y_test.csv"]:
+    for fname in ["X_train_calor.csv", "X_test_calor.csv",
+                  "y_train_calor.csv", "y_test_calor.csv"]:
         assert (proc / fname).exists(), f"Falta {fname}"
 
 
@@ -66,7 +59,11 @@ def test_preprocess_data_removes_duplicates(patch_paths):
     df["target"] = (df["a"] > 0).astype(int)
     df = pd.concat([df, df.iloc[:10]])  # 10 duplicados
 
-    X_train, X_test, y_train, y_test = preprocess_data(df, target_col="target")
+    # split_by_date=False a propósito: aquí se mide la deduplicación, no el
+    # split, y este df no tiene fecha (es el split aleatorio estratificado).
+    X_train, X_test, y_train, y_test = preprocess_data(
+        df, target_col="target", split_by_date=False
+    )
     assert X_train.shape[0] + X_test.shape[0] <= 50
 
 

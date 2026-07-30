@@ -22,8 +22,9 @@ class MLAgent(BaseAgent):
         "métricas dadas, importancia de variables, inspección de hiperparámetros."
     )
     capabilities = [
+        # "pipeline" NO va aquí: es del agente `make`, dueño del Makefile.
         "modelo", "overfitting", "underfitting", "hiperparametros", "importancia",
-        "metricas", "pipeline", "algoritmo", "entrenamiento",
+        "metricas", "algoritmo", "entrenamiento", "optuna", "comparar modelos",
     ]
 
     def actions(self) -> dict:

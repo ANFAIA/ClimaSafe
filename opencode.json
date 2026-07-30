@@ -1,12 +1,43 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    ".opencode/orchestrator.md"
+    "AGENTS.md"
   ],
   "agent": {
+    "lider": {
+      "description": "Punto de entrada del arnés: init.sh → progress → featureslist → delegar → verificar → done. No escribe código; orquesta subagentes con contexto mínimo y delega el trabajo determinista en los agentes Python.",
+      "mode": "primary",
+      "instructions": [
+        ".opencode/agents/lider.md"
+      ]
+    },
     "orquestador": {
-      "description": "Orquestador que recibe ideas en lenguaje natural, las descompone y delega en los agentes Python del proyecto (agents/)",
-      "mode": "primary"
+      "description": "Gateway al sistema de 26 agentes Python: para acciones sueltas (git, test, review, docker, doctor, plan...) sin abrir feature. El líder delega aquí cuando no hay que razonar, solo ejecutar.",
+      "mode": "subagent",
+      "instructions": [
+        ".opencode/orchestrator.md"
+      ]
+    },
+    "explorer": {
+      "description": "Arnés: investiga el proyecto en solo lectura y devuelve un informe corto en progress/. No modifica nada.",
+      "mode": "subagent",
+      "instructions": [
+        ".opencode/agents/explorer.md"
+      ]
+    },
+    "implementer": {
+      "description": "Arnés: implementa UNA feature del backlog con tests y deja la evidencia en progress/. Lo lanza el líder, no se usa suelto.",
+      "mode": "subagent",
+      "instructions": [
+        ".opencode/agents/implementer.md"
+      ]
+    },
+    "reviewer": {
+      "description": "Arnés: aprueba o rechaza el trabajo del implementer ejecutando init.sh y comprobando los criterios de aceptación uno a uno.",
+      "mode": "subagent",
+      "instructions": [
+        ".opencode/agents/reviewer.md"
+      ]
     }
   },
   "mcp": {

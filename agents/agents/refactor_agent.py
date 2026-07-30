@@ -26,6 +26,7 @@ class RefactorAgent(BaseAgent):
     capabilities = [
         "refactor", "refactorizar", "type hint", "tipado", "mutable default",
         "except desnudo", "bare except", "weights_only", "autofix",
+        "refactoriza", "type hints",
     ]
 
     def actions(self) -> dict:

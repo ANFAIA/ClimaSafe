@@ -10,3 +10,24 @@ con use_api=true.
 - Al cruzar endpoints declarados vs. documentados, un endpoint "sin
   documentar" no es necesariamente un bug — puede ser interno o estar en
   desarrollo. Repórtalo como una discrepancia a revisar, no como un error.
+
+<!-- BEGIN AUTOGEN — lo regenera `make prompts-sync`; no lo edites a mano -->
+
+## Acciones
+
+| Acción | Argumentos |
+|--------|------------|
+| `run api check_endpoints_documented` | — |
+| `run api smoke_test` | `--endpoint` |
+
+## Límites
+
+**Rol.** Revisor de la API FastAPI (solo con use_api=true): endpoints vs docs + smoke test.
+
+**No hace:**
+- modificar api/main.py — reporta discrepancias
+- desplegar la API
+
+**Se apoya en:** test
+
+<!-- END AUTOGEN -->

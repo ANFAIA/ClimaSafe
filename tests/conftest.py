@@ -23,11 +23,18 @@ def sample_df():
 
 @pytest.fixture
 def df_with_target(sample_df):
+    """
+    DataFrame con features numéricas + target binario + columna `fecha`.
 
-    """DataFrame con features numéricas + columna target binaria."""
+    La fecha va aquí porque `preprocess_data` parte train/test POR FECHA por
+    defecto (evita que días de la misma ola queden repartidos entre train y
+    test). No es una feature: `COLS_TO_DROP` la elimina de X después de usarla
+    para el split, así que añadirla no cambia lo que ve el modelo.
+    """
     df = sample_df.copy()
     np.random.seed(42)
     df["target"] = (df["feat_0"] + df["feat_1"] > 0).astype(int)
+    df["fecha"] = pd.date_range("2020-01-01", periods=len(df), freq="D")
     return df
 
 

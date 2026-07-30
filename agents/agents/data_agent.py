@@ -30,7 +30,7 @@ class DataAgent(BaseAgent):
     capabilities = [
         "dataset", "datos", "eda", "outlier", "outliers", "cardinalidad",
         "fuga de informacion", "leakage", "correlacion", "csv", "parquet",
-        "limpieza", "features",
+        "limpieza", "features", "profiling", "imputacion", "sesgo", "skewness",
     ]
 
     def actions(self) -> dict:

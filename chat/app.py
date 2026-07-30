@@ -510,6 +510,19 @@ async def api_rag_search(body: dict):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/api/rag/ask")
+async def api_rag_ask(body: dict):
+    query = body.get("query", "")
+    k = body.get("k", 5)
+    if not query.strip():
+        return {"success": False, "error": "query vacía"}
+    try:
+        result = _db.ask_rag(query, k=k)
+        return {"success": True, **result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/api/predict")
 async def api_predict(body: dict, date: str | None = None):
     provincia = body.get("provincia", "Madrid")

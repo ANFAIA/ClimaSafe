@@ -10,6 +10,7 @@ Uso:
     uv run python -m agents scout
     uv run python -m agents scout --dry-run
     uv run python -m agents scout --query transformers
+    uv run python -m agents --json ask "revisa el Dockerfile"   # salida JSON para agentes
 """
 
 from __future__ import annotations
@@ -22,10 +23,21 @@ from typing import Any
 from agents.context import get_context
 from agents.core.base_agent import AgentResult
 from agents.core.registry import agent_registry
-from agents.orchestrator import Orchestrator
+from agents.orchestrator import Orchestrator, RoutingDecision
 
 
-def _print_result(result: AgentResult) -> None:
+def _print_result(result: AgentResult, *, json_mode: bool = False) -> None:
+    if json_mode:
+        print(json.dumps({
+            "success": result.success,
+            "agent": result.agent,
+            "action": result.action,
+            "message": result.message,
+            "data": result.data,
+            "warnings": result.warnings,
+            "needs": result.needs,
+        }, indent=2, ensure_ascii=False, default=str))
+        return
     status = "✔" if result.success else "✘"
     print(f"{status} [{result.agent}.{result.action}] {result.message}")
     for warning in result.warnings:
@@ -35,6 +47,20 @@ def _print_result(result: AgentResult) -> None:
             print(json.dumps(result.data, indent=2, ensure_ascii=False, default=str))
         except TypeError:
             print(result.data)
+
+
+def _print_routing(decision: RoutingDecision, *, json_mode: bool = False) -> None:
+    if json_mode:
+        print(json.dumps({
+            "query": decision.query,
+            "selected_agent": decision.agent_name,
+            "confidence": round(decision.confidence, 3),
+            "candidates": [(name, round(score, 3)) for name, score in decision.candidates],
+        }, indent=2, ensure_ascii=False))
+        return
+    print(f"  Ruteo: '{decision.query}' → {decision.agent_name or 'ninguno'} "
+          f"(confianza {decision.confidence:.2f})")
+    print(f"  Candidatos: {[(n, f'{s:.2f}') for n, s in decision.candidates[:5]]}")
 
 
 def _parse_kwargs(pairs: list[str]) -> dict[str, Any]:
@@ -58,6 +84,7 @@ def _parse_kwargs(pairs: list[str]) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m agents", description="Sistema de agentes del proyecto.")
+    parser.add_argument("--json", "-j", action="store_true", help="Salida en JSON estructurado (para consumo por herramientas/agentes).")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("list", help="Lista todos los agentes registrados.")
@@ -106,17 +133,26 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    json_mode = args.json
     orchestrator = Orchestrator(context=get_context())
 
     if args.command == "list":
-        for info in orchestrator.list_agents():
-            print(f"- {info['name']}: {info['description']}")
+        agents = orchestrator.list_agents()
+        if json_mode:
+            print(json.dumps(agents, indent=2, ensure_ascii=False))
+        else:
+            for info in agents:
+                print(f"- {info['name']}: {info['description']}")
         return 0
 
     if args.command == "describe":
         agent_registry.discover()
         if args.agent_name not in agent_registry.all():
-            print(f"No existe el agente '{args.agent_name}'. Disponibles: {sorted(agent_registry.all())}")
+            msg = f"No existe el agente '{args.agent_name}'. Disponibles: {sorted(agent_registry.all())}"
+            if json_mode:
+                print(json.dumps({"error": msg, "available": sorted(agent_registry.all())}, ensure_ascii=False))
+            else:
+                print(msg)
             return 1
         agent = orchestrator._get_instance(args.agent_name)  # noqa: SLF001 — CLI interna, acceso intencional
         print(json.dumps(agent.describe(), indent=2, ensure_ascii=False))
@@ -125,19 +161,29 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         kwargs = _parse_kwargs(args.kwargs)
         result = orchestrator.run(args.agent_name, args.action, **kwargs)
-        _print_result(result)
+        _print_result(result, json_mode=json_mode)
         return 0 if result.success else 1
 
     if args.command == "ask":
+        if json_mode:
+            decision = orchestrator.select_agent(args.query)
+            _print_routing(decision, json_mode=True)
         result = orchestrator.dispatch(args.query)
-        _print_result(result)
+        _print_result(result, json_mode=json_mode)
         return 0 if result.success else 1
 
     if args.command == "pipeline":
         from agents.gstack.pipelines import run_pipeline
         pipe_kwargs = _parse_kwargs(args.params)
         result = run_pipeline(args.name, **pipe_kwargs)
-        print(result.summary)
+        if json_mode:
+            print(json.dumps({
+                "success": result.success,
+                "summary": result.summary,
+                "steps": getattr(result, "steps", []),
+            }, indent=2, ensure_ascii=False, default=str))
+        else:
+            print(result.summary)
         return 0 if result.success else 1
 
     if args.command == "doctor":
@@ -147,20 +193,29 @@ def main(argv: list[str] | None = None) -> int:
         else:
             from agents.gstack.pipelines import auto_analyze
             result = auto_analyze()
-        print(result.summary)
+        if json_mode:
+            print(json.dumps({
+                "success": result.success,
+                "summary": result.summary,
+                "sections": getattr(result, "sections", []),
+            }, indent=2, ensure_ascii=False, default=str))
+        else:
+            print(result.summary)
         return 0 if result.success else 1
 
     if args.command == "plan":
         result = orchestrator.run("plan", "intake", brief=args.brief)
-        _print_result(result)
+        _print_result(result, json_mode=json_mode)
         for question in result.needs:
+            if json_mode:
+                continue  # las preguntas ya van dentro de `needs` en el JSON
             print(f"  ? {question}")
         return 0 if result.success else 1
 
     if args.command == "audit":
         action = {"report": "report", "failures": "failures", "suggest": "suggest_improvements"}[args.what]
         result = orchestrator.run("audit", action)
-        _print_result(result)
+        _print_result(result, json_mode=json_mode)
         return 0 if result.success else 1
 
     if args.command == "tools":
@@ -168,8 +223,12 @@ def main(argv: list[str] | None = None) -> int:
         # Las herramientas se registran al importarse; importar los agentes
         # (que a su vez importan sus herramientas) las descubre todas.
         agent_registry.discover()
-        for name in sorted(tool_registry.all()):
-            print(f"- {name}")
+        names = sorted(tool_registry.all())
+        if json_mode:
+            print(json.dumps(names, indent=2))
+        else:
+            for name in names:
+                print(f"- {name}")
         return 0
 
     if args.command == "scout":
@@ -177,7 +236,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.review:
             return scout_review()
         result = scout_run(dry_run=args.dry_run, queries=args.query)
-        print(scout_summary(result))
+        if json_mode:
+            print(json.dumps({
+                "success": not result.errors,
+                "summary": scout_summary(result),
+                "errors": list(result.errors),
+            }, indent=2, ensure_ascii=False, default=str))
+        else:
+            print(scout_summary(result))
         return 0 if not result.errors else 1
 
     parser.print_help()

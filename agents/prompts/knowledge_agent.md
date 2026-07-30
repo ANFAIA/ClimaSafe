@@ -55,3 +55,36 @@ grado, vecinos compartidos, comunidad), no una lectura semántica del contenido.
 Un resumen dice "agrupa 12 hijos, los más relacionados son X e Y", no "trata
 sobre redes de atención". La extracción semántica la hace graphify con
 `GEMINI_API_KEY` configurada.
+
+<!-- BEGIN AUTOGEN — lo regenera `make prompts-sync`; no lo edites a mano -->
+
+## Acciones
+
+| Acción | Argumentos |
+|--------|------------|
+| `run knowledge status` | — |
+| `run knowledge setup_vault` | `--vault_dir`, `--create_if_missing` |
+| `run knowledge build` | `--vault_dir`, `--export_obsidian` |
+| `run knowledge summarize_parents` | `--min_children`, `--top`, `--no_cache` |
+| `run knowledge preprocess` | `--force` |
+| `run knowledge clean` | `--drop_rationale`, `--drop_isolated`, `--re_cluster` |
+| `run knowledge prune` | `--node_types`, `--node_ids`, `--drop_isolated`, `--dry_run` |
+| `run knowledge sync` | `--vault_dir` |
+| `run knowledge cache_warmup` | — |
+| `run knowledge cache_status` | — |
+| `run knowledge cache_clear` | `--name` |
+| `run knowledge graph_stats` | — |
+
+## Límites
+
+**Rol.** Dueño único de graphify-out/ y de la bóveda Obsidian: los construye, poda, cachea y mantiene al día.
+
+**No hace:**
+- buscar o navegar por el grafo → doc
+- buscar papers nuevos → research (knowledge los indexa cuando ya existen)
+
+**Escribe en (nadie más toca esto):** graphify-out/, bóveda Obsidian del proyecto
+
+**Se apoya en:** doc, research
+
+<!-- END AUTOGEN -->

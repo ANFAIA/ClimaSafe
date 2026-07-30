@@ -11,3 +11,25 @@ use_mlflow=true.
 - El backend de tracking (archivo local, SQLite, servidor remoto) depende
   de cómo esté configurado mlflow en el entorno — no asumas dónde están
   los datos si algo no aparece como se esperaba.
+
+<!-- BEGIN AUTOGEN — lo regenera `make prompts-sync`; no lo edites a mano -->
+
+## Acciones
+
+| Acción | Argumentos |
+|--------|------------|
+| `run mlflow list_runs` | `--experiment_name`, `--max_results` |
+| `run mlflow best_run` | `--metric` (obligatorio) · `--experiment_name`, `--higher_is_better` |
+| `run mlflow compare_latest` | `--metric` (obligatorio) · `--experiment_name`, `--higher_is_better` |
+
+## Límites
+
+**Rol.** Consulta el tracking de experimentos MLflow (solo con use_mlflow=true).
+
+**No hace:**
+- borrar o modificar runs
+- juzgar el modelo en sí → ml
+
+**Se apoya en:** ml
+
+<!-- END AUTOGEN -->

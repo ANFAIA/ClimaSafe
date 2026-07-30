@@ -18,7 +18,12 @@ from agents.tools.code_analysis_tool import CodeAnalysisTool
 class ReviewAgent(BaseAgent):
     name = "review"
     description = "Revisa código Python: funciones largas, demasiados argumentos, except desnudos, duplicación."
-    capabilities = ["revisar", "review", "code smell", "duplicacion", "refactor", "calidad de codigo", "bug"]
+    # "refactor" NO va aquí: es del agente `refactor`, que además de detectar
+    # arregla. Tenerlo en los dos era la única colisión literal de keywords.
+    capabilities = [
+        "revisar", "review", "code smell", "duplicacion", "calidad de codigo",
+        "bug", "todo", "fixme",
+    ]
 
     def actions(self) -> dict:
         return {

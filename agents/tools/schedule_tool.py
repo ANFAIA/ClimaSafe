@@ -102,22 +102,22 @@ class ScheduleTool:
             parts.append("cada minuto")
         elif len(hours) == 24:
             mins = sorted(minutes)
-            parts.append(f"en los minutos {self._fmt_list(mins)} de cada hora")
+            parts.append(f"en los minutos {ScheduleTool._fmt_list(mins)} de cada hora")
         elif len(hours) == 1 and len(minutes) == 1:
             h = list(hours)[0]
             m = list(minutes)[0]
             parts.append(f"a las {h:02d}:{m:02d}")
         elif len(hours) == 1:
             h = list(hours)[0]
-            parts.append(f"a la hora {h:02d} (minutos: {self._fmt_list(sorted(minutes))})")
+            parts.append(f"a la hora {h:02d} (minutos: {ScheduleTool._fmt_list(sorted(minutes))})")
         else:
-            parts.append(f"horas {self._fmt_list(sorted(hours))}, minuto {self._fmt_list(sorted(minutes))}")
+            parts.append(f"horas {ScheduleTool._fmt_list(sorted(hours))}, minuto {ScheduleTool._fmt_list(sorted(minutes))}")
         if len(months) < 12:
-            parts.append(f"en {self._fmt_list([_MONTH_NAMES[m] for m in sorted(months)])}")
+            parts.append(f"en {ScheduleTool._fmt_list([_MONTH_NAMES[m] for m in sorted(months)])}")
         if len(days) < 31:
-            parts.append(f"día {self._fmt_list(sorted(days))} del mes")
+            parts.append(f"día {ScheduleTool._fmt_list(sorted(days))} del mes")
         if len(weekdays) < 7:
-            parts.append(self._fmt_list([_DAY_NAMES[d] for d in sorted(weekdays)]))
+            parts.append(ScheduleTool._fmt_list([_DAY_NAMES[d] for d in sorted(weekdays)]))
         return ", ".join(parts) if parts else expr
 
     @staticmethod
@@ -171,8 +171,12 @@ class ScheduleTool:
             "days_of_month": sorted(days),
             "months": sorted(months),
             "weekdays": sorted(weekdays),
-            "frequency": "cada minuto" if len(hours) == 24 and len(minutes) == 60
-                        else f"cada hora" if len(hours) == 24
-                        else f"cada día" if len(hours) == 1 and len(minutes) == 1 and len(weekdays) == 7 and len(days) == 31
-                        else "personalizada",
+            "frequency": (
+                "cada minuto" if len(hours) == 24 and len(minutes) == 60
+                else "cada hora" if len(hours) == 24
+                else "cada día"
+                if (len(hours) == 1 and len(minutes) == 1
+                    and len(weekdays) == 7 and len(days) == 31)
+                else "personalizada"
+            ),
         }

@@ -28,13 +28,16 @@ def _make_Xy():
 
 @pytest.mark.smoke
 def test_build_models_returns_dict():
-    models = _build_models()
+    # tune_knn=False: con el default (True) _build_models busca el mejor k por
+    # GridSearchCV y exige X_train/y_train o un best_params_KNN.joblib ya
+    # cacheado. Aquí solo se comprueba qué modelos define, no el ajuste de k.
+    models = _build_models(tune_knn=False)
     assert isinstance(models, dict)
     assert len(models) > 0
 
 
 def test_build_models_expected_keys():
-    models = _build_models()
+    models = _build_models(tune_knn=False)
 
 
     assert "RandomForest" in models
@@ -57,8 +60,10 @@ def test_train_models_saves_joblib_files(patch_paths):
     trained = train_models(X, y, tune_knn=False, cv_evaluate=False)
     saved = list(patch_paths["MODELS_DIR"].glob("*.joblib"))
     assert len(saved) == len(trained)
+    # Los modelos se guardan namespaceados por clase (RandomForest_calor.joblib)
+    # para que entrenar calor no pise los modelos de frío.
     for name in trained:
-        assert (patch_paths["MODELS_DIR"] / f"{name}.joblib").exists()
+        assert (patch_paths["MODELS_DIR"] / f"{name}_calor.joblib").exists()
 
 
 def test_load_models_loads_saved(patch_paths):

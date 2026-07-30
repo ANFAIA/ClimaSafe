@@ -17,18 +17,27 @@ import re
 from agents.core.base_agent import AgentResult, BaseAgent
 from agents.core.registry import register_agent
 from agents.tools.cicd_tool import WORKFLOWS_DIR, CICDTool
+from agents.tools.schedule_tool import ScheduleTool
 
 
 @register_agent
 class CICDAgent(BaseAgent):
     name = "cicd"
     description = "Genera y valida workflows de GitHub Actions, cruzando referencias contra el Makefile real del proyecto."
-    capabilities = ["ci", "cd", "cicd", "github actions", "workflow", "pipeline de integracion continua"]
+    # Absorbidas de `schedule`, que era redundante: validate_cron ya devolvía
+    # todo lo que hacían sus tres acciones (validar, traducir y próximas
+    # ejecuciones), y el cron de un proyecto vive en un workflow de Actions.
+    capabilities = [
+        "ci", "cd", "cicd", "github actions", "workflow",
+        "pipeline de integracion continua",
+        "cron", "schedule", "programar", "temporizador", "scheduler", "calendarizar",
+    ]
 
     def action_aliases(self) -> dict:
         return {
             "validate_workflow": ["valida", "revisa el workflow", "comprueba"],
             "generate_workflow": ["genera", "crea el workflow", "añade ci"],
+            "validate_cron": ["cron", "schedule", "programar", "valida cron"],
         }
 
     def actions(self) -> dict:
@@ -36,7 +45,22 @@ class CICDAgent(BaseAgent):
             "validate_workflow": self.validate_workflow,
             "generate_workflow": self.generate_workflow,
             "list_workflows": self.list_workflows,
+            "validate_cron": self.validate_cron,
         }
+
+    def validate_cron(self, *, expression: str) -> AgentResult:
+        """Valida y describe una expresión cron (5 campos o alias @daily, @hourly...)."""
+        valid = ScheduleTool.validate(expression)
+        if not valid["valid"]:
+            return AgentResult(False, self.name, "validate_cron", valid["error"], data=valid)
+        human = ScheduleTool.to_human(expression)
+        summary = ScheduleTool.summary(expression)
+        next_runs = ScheduleTool.next_run(expression)
+        return AgentResult(
+            True, self.name, "validate_cron",
+            f"Expresión válida: {human}",
+            data={"expression": expression, "human": human, **summary, "next_runs": next_runs},
+        )
 
     def list_workflows(self) -> AgentResult:
         workflows_dir = self.ctx.root / WORKFLOWS_DIR

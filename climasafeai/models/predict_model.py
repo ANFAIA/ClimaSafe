@@ -338,7 +338,28 @@ def _shap_beeswarm(shap_values, X_explain, feat_names, model_name, max_display):
 
 
 
-def predict_new(model_name: str, X_new, class_thresholds=None, calibrate_isotonic=False) -> np.ndarray:
+def _ruta_modelo(model_name: str, clase: str = "calor"):
+    """
+    Resuelve el .joblib de un modelo aceptando el nombre con o sin clase.
+
+    `train_models` guarda namespaceado (`RandomForest_calor.joblib`) y
+    `load_models` ya lo tenía en cuenta, pero `predict_new`/`predict_proba_new`
+    no: buscaban `{nombre}.joblib` a secas, así que el nombre que devuelve
+    `train_models()` nunca encontraba su propio fichero. Se prueban las dos
+    formas para no romper a quien ya pase el nombre completo.
+    """
+    for candidato in (f"{model_name}_{clase}.joblib", f"{model_name}.joblib"):
+        path = MODELS_DIR / candidato
+        if path.exists():
+            return path
+    raise FileNotFoundError(
+        f"Modelo no encontrado: {MODELS_DIR / f'{model_name}_{clase}.joblib'} "
+        f"(ni {MODELS_DIR / f'{model_name}.joblib'})"
+    )
+
+
+def predict_new(model_name: str, X_new, class_thresholds=None, calibrate_isotonic=False,
+                clase: str = "calor") -> np.ndarray:
     """Carga un modelo y predice sobre nuevas muestras (ya preprocesadas).
 
     Parameters
@@ -355,10 +376,7 @@ def predict_new(model_name: str, X_new, class_thresholds=None, calibrate_isotoni
         antes de aplicar los thresholds. Los thresholds de frío están
         calibrados sobre probabilidades post-isotonic; recomendado=True.
     """
-    path = MODELS_DIR / f"{model_name}.joblib"
-    if not path.exists():
-        raise FileNotFoundError(f"Modelo no encontrado: {path}")
-    model = joblib.load(path)
+    model = joblib.load(_ruta_modelo(model_name, clase))
     if class_thresholds is None and not calibrate_isotonic:
         return model.predict(X_new)
 
@@ -391,12 +409,9 @@ def predict_new(model_name: str, X_new, class_thresholds=None, calibrate_isotoni
 
 
 
-def predict_proba_new(model_name: str, X_new) -> np.ndarray:
+def predict_proba_new(model_name: str, X_new, clase: str = "calor") -> np.ndarray:
     """Carga un modelo y devuelve probabilidades de clase."""
-    path = MODELS_DIR / f"{model_name}.joblib"
-    if not path.exists():
-        raise FileNotFoundError(f"Modelo no encontrado: {path}")
-    model = joblib.load(path)
+    model = joblib.load(_ruta_modelo(model_name, clase))
     if not hasattr(model, "predict_proba"):
         raise ValueError(f"{model_name} no soporta predict_proba")
     return model.predict_proba(X_new)

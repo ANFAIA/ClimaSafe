@@ -1,0 +1,220 @@
+{
+  "$comment": "Backlog del arnés. Fuente de verdad de QUÉ hay que hacer. Los agentes leen la primera feature pendiente, la marcan in_progress y no la marcan done hasta que ./init.sh pasa en verde. Estados válidos: pending | in_progress | done | blocked. Dueño: el agente `harness` — no editar a mano.",
+  "version": 1,
+  "project": "ClimaSafeAI",
+  "features": [
+    {
+      "id": "BOT-001",
+      "title": "Estabilizar las llamadas a herramientas del bot de Telegram",
+      "description": "OBSOLETO — BOT-002 reemplaza spacebot por un bot determinista. Cerrar spacebot y usar climasafeai.bot.telegram_bot.",
+      "acceptance_criteria": [
+        "BOT-001 queda obsoleto y reemplazado por BOT-002"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-07-29"
+    },
+    {
+      "id": "CSV-001",
+      "title": "Riesgo colectivo desde un CSV de personas",
+      "description": "Endpoint que acepta un CSV con perfiles (nombre, edad, sexo, grasa, actividad...) y devuelve el riesgo individual de cada persona más las estadísticas del grupo. Incluye el factor 'orgullo colectivo': en un evento deportivo el riesgo individual se multiplica porque la gente se exige más en grupo. Roadmap §1.2.",
+      "acceptance_criteria": [
+        "POST con un CSV de ejemplo devuelve una fila de riesgo por persona y un bloque de estadísticas del grupo",
+        "El factor de orgullo colectivo solo se aplica cuando el tipo de actividad es competición/deporte, y está documentado su valor y de dónde sale",
+        "Un CSV con columnas faltantes o valores inválidos devuelve un error explicativo, no un 500",
+        "Hay tests del endpoint (caso feliz, CSV malformado, factor colectivo) y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "MAPA-001",
+      "title": "Exportar el mapa de riesgo por zona",
+      "description": "El grid de riesgo por km² ya se pinta sobre Leaflet (Fase 2.1). Falta poder llevárselo: captura PNG del mapa y descarga de los datos subyacentes en GeoJSON. Roadmap §2.3.",
+      "acceptance_criteria": [
+        "Un botón en la vista de mapa descarga un PNG con el overlay de riesgo visible",
+        "Un segundo botón descarga el GeoJSON de las celdas con su clase de riesgo y su HI pico",
+        "El GeoJSON generado se abre sin errores en un validador de GeoJSON",
+        "make test pasa y hay al menos un test del endpoint de exportación"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "TG-002",
+      "title": "Perfil vinculado al chat de Telegram",
+      "description": "La columna telegram_chat_id y buscar_por_telegram() ya existen. Falta enlazar el perfil automáticamente al cargar perfil o predecir desde el bot, para que un chat privado no tenga que volver a pedir los datos en cada conversación. Roadmap §4.4.",
+      "acceptance_criteria": [
+        "Al cargar un perfil desde el bot, el chat_id queda asociado a ese perfil en SQLite",
+        "Una segunda predicción en el mismo chat no vuelve a pedir los datos del perfil",
+        "Un chat sin perfil asociado sigue funcionando: pide los datos como hasta ahora",
+        "Hay tests de la vinculación y de la ruta sin perfil, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "BOT-002"
+      ]
+    },
+    {
+      "id": "FORECAST-001",
+      "title": "Tendencia semanal con bandas de confianza",
+      "description": "Ampliar la predicción más allá del día actual: mostrar la tendencia de riesgo a lo largo de la semana con bandas de confianza, apoyándose en el conformal prediction ya en producción (α=0.1). Roadmap §3.1.",
+      "acceptance_criteria": [
+        "La UI muestra la curva semanal de riesgo con su banda de confianza",
+        "La banda procede del conformal ya implementado, no de un intervalo inventado — está documentado de dónde sale",
+        "Cuando el forecast meteorológico no cubre los 7 días, se indica explícitamente hasta dónde llega en vez de extrapolar en silencio",
+        "Hay tests del cálculo de la serie semanal y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ENS-001",
+      "title": "Ensemble conformal-weighted (max-vote → conformal average)",
+      "description": "Ensemble conformal-weighted (max-vote → conformal average)",
+      "acceptance_criteria": [
+        "El ensemble combina XGBoost_calor, LSTM_calor y Formula_calor en una media ponderada por set_size conformal para calor",
+        "El ensemble combina RF_frio, LSTM_frio y Formula_frio en media ponderada por set_size conformal para frio",
+        "Personalizacion se aplica DESPUES del ensemble igual que ahora",
+        "Safety overrides (HI>=39, WC<=-25) se aplican despues de personalizacion igual que ahora",
+        "La salida JSON es compatible hacia atras",
+        "make test pasa en verde"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-29",
+      "review_rounds": 0,
+      "closed": "2026-07-29"
+    },
+    {
+      "id": "FORECAST-002",
+      "title": "Modelos fundacionales para forecasting (TimesFM, Granite-TTM, WeatherNext)",
+      "description": "Modelos fundacionales para forecasting (TimesFM, Granite-TTM, WeatherNext)",
+      "acceptance_criteria": [
+        "Evaluar TimesFM 2.5 como reemplazo de modelos propios para forecasting semanal",
+        "Evaluar Granite-TTM-R3 (1.4M params, CPU) como alternativa ligera",
+        "Evaluar WeatherNext 2 (DeepMind) para forecasting meteorologico global",
+        "Documentar ventajas/desventajas de cada uno con benchmark sobre datos espanoles",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "MSG-001",
+      "title": "Abstraccion de mensajeria (interfaz comun Telegram/Hermes/Webhook)",
+      "description": "Abstraccion de mensajeria (interfaz comun Telegram/Hermes/Webhook)",
+      "acceptance_criteria": [
+        "Interfaz abstracta MessageAdapter con metodos send() y send_batch()",
+        "Adaptadores concretos para Telegram, Hermes y Webhook",
+        "El sistema actual de Telegram sigue funcionando sin cambios",
+        "Tests de cada adaptador con mocked transport",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "MSG-002",
+      "title": "Crontab en Docker para evaluaciones programadas",
+      "description": "Crontab en Docker para evaluaciones programadas",
+      "acceptance_criteria": [
+        "Contenedor Docker que ejecuta evaluaciones de riesgo programadas (manana/resumen diario)",
+        "Se configura con variable de entorno CRON_SCHEDULE",
+        "Los resultados se envian via MessageAdapter",
+        "Dockerfile y docker-compose.yml en raiz del proyecto",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "MSG-003",
+      "title": "Worker de notificaciones con cola de mensajes",
+      "description": "Worker de notificaciones con cola de mensajes",
+      "acceptance_criteria": [
+        "Cola de mensajes con N workers compitiendo (basado en redis/rabbitmq o sqlite)",
+        "Workers procesan notificaciones en paralelo",
+        "Misma interfaz MessageAdapter que MSG-001",
+        "Tests de concurrencia y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "AGENT-001",
+      "title": "Publicar skill ClimaSafeAI en skills.sh registry",
+      "description": "Publicar skill ClimaSafeAI en skills.sh registry",
+      "acceptance_criteria": [
+        "Skill ClimaSafeAI publicado en skills.sh con setup reproducible",
+        "Incluye MCP tools, configuracion de Spacebot y dependencias",
+        "README del skill documenta uso basico y requisitos",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "RAG-001",
+      "title": "Fine-tuning Gemma 4 + RAG local para consultas en lenguaje natural",
+      "description": "Fine-tuning Gemma 4 + RAG local para consultas en lenguaje natural",
+      "acceptance_criteria": [
+        "Fine-tuning Gemma 4 via Unsloth en GPU local (8-10GB VRAM)",
+        "Modelo exportado a GGUF y servido via Ollama",
+        "RAG sobre documentos del proyecto (documentacion/, papers/) con sqlite-vec",
+        "Consultas en lenguaje natural respondidas con sintesis del RAG",
+        "make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-29",
+      "closed": "2026-07-29"
+    },
+    {
+      "id": "UX-001",
+      "title": "Agente conversacional en GUI (estilo SymptomAI)",
+      "description": "Agente conversacional en GUI (estilo SymptomAI)",
+      "acceptance_criteria": [
+        "Interfaz conversacional en la GUI web con preguntas iterativas",
+        "Perfilado progresivo del usuario a traves de la conversacion",
+        "Recomendaciones contextuales generadas por el agente",
+        "Integrado con el sistema de prediccion existente",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "RESEARCH-001",
+      "title": "Retos tecnicos: HMM, Bayesianas, GPs, GNNs, TFT, RL",
+      "description": "Retos tecnicos: HMM, Bayesianas, GPs, GNNs, TFT, RL",
+      "acceptance_criteria": [
+        "Documentar viabilidad de Cadenas de Markov/HMM para trayectoria de riesgo",
+        "Documentar viabilidad de Redes Bayesianas como grafo causal",
+        "Documentar viabilidad de Procesos Gaussianos para incertidumbre nativa",
+        "Documentar viabilidad de GNNs para embeddings de factores",
+        "Documentar viabilidad de TFT/N-BEATS para seriaes temporales",
+        "Documentar viabilidad de RL para pasar de predecir a reducir riesgo",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-002",
+      "title": "Bot de Telegram determinista: formulario con botones y LLM solo para redactar",
+      "description": "Sustituir spacebot por un bot propio contra la Bot API de Telegram. El diagnóstico está medido (ver progress/history.md y los comentarios de agents/spacebot/config.toml): spacebot gasta ~7.900 tokens por mensaje, de los cuales 4.700 son su propio system prompt (Rules, Delegation, Worker Types, Task Board...) que no se puede desactivar. Con 8.000 TPM del free tier de Groq eso da para UN mensaje por minuto, y de ahí los 413/429 constantes. Recoger un formulario de 10 campos no necesita un LLM: los campos, su orden y su validacion son deterministas. El LLM solo hace falta para convertir el resultado en texto legible, y con un resumen de ~550 tokens basta (medido sobre una prediccion real). Eso baja una conversacion entera de ~40.000 tokens a ~700, saca al modelo del camino critico (si falla, plantilla y el bot sigue vivo) y da botones nativos via sendPoll/inline keyboards, que era lo que se pedia. La logica de prediccion ya existe y la usa la web en chat/app.py:526 (_normalize_perfil + predict_ensemble). Ojo: dos procesos no pueden hacer polling del mismo token, asi que hay que parar spacebot o usar un segundo bot de @BotFather para probar.",
+      "acceptance_criteria": [
+        "El formulario recoge los 10 campos en Telegram con botones nativos para los de opcion cerrada (sexo, aclimatado, intensidad, trabajo/ocio) y texto para los numericos, y se demuestra con capturas o con el log de la conversacion",
+        "Una conversacion completa no consume mas de 1.000 tokens de LLM en total, medido y pegado como evidencia",
+        "Si la llamada al LLM falla o no hay clave, el bot responde igual con una plantilla: clase de riesgo y recomendaciones, sin quedarse mudo",
+        "La prediccion reutiliza el camino que ya usa la web (_normalize_perfil + predict_ensemble), sin duplicar la logica de riesgo",
+        "Hay tests del parseo de respuestas del formulario y de la ruta sin LLM, y make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-29",
+      "closed": "2026-07-29"
+    }
+  ]
+}

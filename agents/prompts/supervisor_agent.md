@@ -28,3 +28,26 @@ uv run python -m agents run supervisor compete --candidates \
 
 La métrica es el punto de extensión si quieres un arbitraje más sofisticado —
 el resto del sistema no cambia.
+
+<!-- BEGIN AUTOGEN — lo regenera `make prompts-sync`; no lo edites a mano -->
+
+## Acciones
+
+| Acción | Argumentos |
+|--------|------------|
+| `run supervisor research` | `--max_results`, `--top_keywords`, `--backends` |
+| `run supervisor compete` | `--candidates` (obligatorio) · `--parallel` |
+
+## Límites
+
+**Rol.** Coordina workers en COMPETICIÓN: lanza N variantes de una tarea y arbitra cuál gana.
+
+**No hace:**
+- orquestar un encargo secuencial paso a paso → plan (él delega a dueños, no arbitra)
+- hacer el trabajo de los workers él mismo — solo coordina y evalúa
+
+**Necesita que le den:** la tarea a poner en competición y el criterio de evaluación
+
+**Se apoya en:** research
+
+<!-- END AUTOGEN -->

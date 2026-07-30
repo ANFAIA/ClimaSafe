@@ -57,6 +57,7 @@ class PlanAgent(BaseAgent):
     capabilities = [
         "planificar", "plan de trabajo", "orden de trabajo", "workorder",
         "encargo", "delegar", "brief", "organiza el trabajo",
+        "planea", "planifica",
     ]
 
     def actions(self) -> dict:

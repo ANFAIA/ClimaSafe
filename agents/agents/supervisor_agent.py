@@ -46,6 +46,7 @@ class SupervisorAgent(BaseAgent):
         "supervisor", "supervisa", "coordina", "competir", "competición",
         "competicion", "propuesta", "arbitro", "árbitro", "elige", "compara",
         "evalua", "evalúa", "mejor",
+        "compite", "estrategias",
     ]
 
     def action_aliases(self) -> dict:

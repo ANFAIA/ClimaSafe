@@ -20,3 +20,24 @@ uv run python -m agents run doctor summary
 uv run python -m agents doctor              # CLI shortcut: checkup
 uv run python -m agents doctor --fix        # checkup + auto_fix pipeline
 ```
+
+<!-- BEGIN AUTOGEN — lo regenera `make prompts-sync`; no lo edites a mano -->
+
+## Acciones
+
+| Acción | Argumentos |
+|--------|------------|
+| `run doctor checkup` | — |
+| `run doctor disk_usage` | — |
+| `run doctor summary` | — |
+
+## Límites
+
+**Rol.** Diagnóstico integral del proyecto: agrega las verificaciones de los demás.
+
+**No hace:**
+- arreglar lo que encuentra por su cuenta → cada dueño (pipeline fix lo orquesta)
+
+**Se apoya en:** env, test, data, dependency, git
+
+<!-- END AUTOGEN -->

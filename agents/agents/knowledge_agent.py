@@ -57,9 +57,15 @@ class KnowledgeAgent(BaseAgent):
         "Crea/sincroniza una bóveda con estructura de árbol, resume cada nodo "
         "padre con la correlación entre sus hijos, y mantiene el grafo al día."
     )
+    # `graphify-out/` tiene UN dueño: este agente. Las palabras de búsqueda
+    # ("busca", "vecinos", "referencias") son de `doc`, que solo lee.
     capabilities = [
         "conocimiento", "knowledge", "grafo", "graph", "graphify", "obsidian",
         "boveda", "vault", "indexar", "nodo padre", "resumen del grafo",
+        "sincroniza el grafo",
+        # Absorbidas de `cache`, que era el tercer agente tocando graphify-out/.
+        "cache", "caché", "cachear", "warmup", "precarga", "precalentar",
+        "limpiar cache", "estado de cache", "podar el grafo",
     ]
 
     def action_aliases(self) -> dict:
@@ -67,10 +73,15 @@ class KnowledgeAgent(BaseAgent):
             "setup_vault": ["obsidian", "boveda", "vault", "crea la boveda", "estructura"],
             "build": ["construye", "genera el grafo", "indexa", "graphify"],
             "summarize_parents": ["resume", "nodo padre", "padres", "resumen", "correlacion"],
-            "preprocess": ["preprocesa", "enriquece", "precarga", "cachea resumenes"],
-            "clean": ["limpia", "podar", "elimina ruido", "rationale", "purga", "noise"],
+            "preprocess": ["preprocesa", "enriquece", "cachea resumenes"],
+            "clean": ["limpia", "elimina ruido", "rationale", "purga", "noise"],
+            "prune": ["poda", "podar", "quita", "elimina nodos", "descarta"],
             "sync": ["sincroniza", "actualiza", "update"],
             "status": ["estado", "situacion"],
+            "cache_warmup": ["warmup", "precarga", "precalienta", "prepara cache"],
+            "cache_status": ["estado de cache", "tamano de cache", "cuantas entradas"],
+            "cache_clear": ["limpia la cache", "borra la cache", "vacia", "resetea"],
+            "graph_stats": ["estadisticas del grafo", "nodos", "aristas", "comunidades"],
         }
 
     def actions(self) -> dict:
@@ -81,7 +92,12 @@ class KnowledgeAgent(BaseAgent):
             "summarize_parents": self.summarize_parents,
             "preprocess": self.preprocess,
             "clean": self.clean,
+            "prune": self.prune,
             "sync": self.sync,
+            "cache_warmup": self.cache_warmup,
+            "cache_status": self.cache_status,
+            "cache_clear": self.cache_clear,
+            "graph_stats": self.graph_stats,
         }
 
     # -------------------------------------------------------------------------
@@ -90,6 +106,14 @@ class KnowledgeAgent(BaseAgent):
         cache_dir = GraphifyTool.cache_dir(self.ctx.root)
         CacheTool.set_cache_dir(cache_dir)
         return cache_dir
+
+    def _require_graph(self, action: str) -> AgentResult | None:
+        if not GraphifyTool.graph_exists(self.ctx.root):
+            return AgentResult(
+                False, self.name, action,
+                "No hay grafo (graphify-out/graph.json). Ejecuta 'knowledge build' primero.",
+            )
+        return None
 
     def status(self) -> AgentResult:
         """Resume el estado del grafo, la caché y las bóvedas de Obsidian."""
@@ -518,7 +542,7 @@ class KnowledgeAgent(BaseAgent):
             f"Grafo limpiado: {removed} nodos ruidosos eliminados "
             f"({before_nodes} → {stats['nodes_remaining']})."
             + cluster_msg
-            + " Caché invalidada. Ejecuta 'cache warmup' para recargar."
+            + " Caché invalidada. Ejecuta 'knowledge cache_warmup' para recargar."
         )
 
         return AgentResult(
@@ -530,6 +554,61 @@ class KnowledgeAgent(BaseAgent):
                 "backup": str(GraphifyTool.graph_json(root).with_suffix(".json.bak")),
                 "re_clustered": bool(cluster_msg),
             },
+        )
+
+    def prune(
+        self,
+        *,
+        node_types: list[str] | None = None,
+        node_ids: list[str] | None = None,
+        drop_isolated: bool = False,
+        dry_run: bool = True,
+    ) -> AgentResult:
+        """
+        Poda nodos del grafo por tipo (p. ej. ``references``) o por id, y
+        opcionalmente los nodos que queden aislados. Por seguridad es
+        ``dry_run=True`` por defecto: informa de qué quitaría sin escribir.
+        Pasa ``dry_run=False`` para persistir (deja un ``graph.json.bak``).
+
+        Se diferencia de ``clean`` en que ``clean`` es la poda con criterio
+        fijo (ruido: rationale + aislados, y re-clustering); ésta es la poda
+        arbitraria, para cuando sabes exactamente qué quitar.
+        """
+        guard = self._require_graph("prune")
+        if guard:
+            return guard
+        if not node_types and not node_ids and not drop_isolated:
+            return AgentResult(
+                False, self.name, "prune",
+                "Indica qué podar: node_types=['reference'], node_ids=[...] o drop_isolated=True.",
+            )
+        try:
+            graph = GraphifyTool.load_graph(self.ctx.root)
+        except Exception as exc:  # noqa: BLE001
+            return AgentResult(False, self.name, "prune", f"No se pudo leer el grafo: {exc}")
+
+        pruned, stats = GraphifyTool.prune(
+            graph, node_types=node_types, node_ids=node_ids, drop_isolated=drop_isolated,
+        )
+
+        if dry_run:
+            return AgentResult(
+                True, self.name, "prune",
+                f"[dry-run] Se quitarían {stats['nodes_removed']} nodo(s) y "
+                f"{stats['edges_removed']} arista(s) "
+                f"(quedarían {stats['nodes_remaining']} nodos). "
+                f"Pasa dry_run=False para aplicarlo.",
+                data=stats,
+                warnings=["Nada escrito — esto es una simulación."],
+            )
+
+        GraphifyTool.save_graph(self.ctx.root, pruned, backup=True)
+        return AgentResult(
+            True, self.name, "prune",
+            f"Grafo podado: -{stats['nodes_removed']} nodo(s), "
+            f"-{stats['edges_removed']} arista(s). Quedan {stats['nodes_remaining']} nodos. "
+            f"Backup en graph.json.bak.",
+            data=stats,
         )
 
     def sync(self, *, vault_dir: str | None = None) -> AgentResult:
@@ -546,3 +625,144 @@ class KnowledgeAgent(BaseAgent):
                 data={"skipped": True},
             )
         return self.build(vault_dir=vault_dir, export_obsidian=True)
+
+    # -- caché del grafo ------------------------------------------------------
+    # Absorbido del agente `cache`: la caché vive en graphify-out/cache/ y este
+    # agente es el dueño de graphify-out/. Tenerla en otro agente obligaba a
+    # coordinar dos dueños para el mismo directorio.
+    def cache_status(self) -> AgentResult:
+        """Estado de la caché: número de entradas, tamaño y antigüedad."""
+        cache_dir = self._cache_dir()
+        if not cache_dir.exists():
+            return AgentResult(True, self.name, "cache_status",
+                               "La caché está vacía (graphify-out/cache/ no existe).",
+                               data={"entries": 0, "size_bytes": 0})
+
+        import time
+
+        entries = list(cache_dir.glob("*.joblib"))
+        total_bytes = sum(f.stat().st_size for f in entries)
+        now = time.time()
+        oldest = min((now - f.stat().st_mtime) for f in entries) if entries else 0
+
+        return AgentResult(
+            True, self.name, "cache_status",
+            f"{len(entries)} entrada(s) en caché, {_human_size(total_bytes)}, "
+            f"la más antigua hace {oldest / 60:.0f} min.",
+            data={
+                "entries": len(entries),
+                "size_bytes": total_bytes,
+                "size_human": _human_size(total_bytes),
+                "oldest_minutes": round(oldest / 60, 1),
+                "cache_dir": str(cache_dir),
+            },
+        )
+
+    def cache_clear(self, *, name: str | None = None) -> AgentResult:
+        """
+        Limpia la caché. ``name`` opcional: solo borra entradas de una función
+        concreta (p. ej. ``parents_*``, ``preprocess_*``).
+        """
+        self._cache_dir()
+        removed = CacheTool.clear(name=name)
+        return AgentResult(
+            True, self.name, "cache_clear",
+            f"Entradas eliminadas: {removed}{' (todas)' if name is None else f' (filtro: {name})'}.",
+            data={"removed": removed, "filter": name},
+        )
+
+    def cache_warmup(self) -> AgentResult:
+        """
+        Precarga todo lo cacheable:
+          1. Resúmenes de nodo padre (top 20, min 2 hijos)
+          2. Resúmenes de los padres grandes (≥5 hijos)
+          3. Exportación a Obsidian si hay bóveda
+        """
+        root = self.ctx.root
+        self._cache_dir()
+
+        guard = self._require_graph("cache_warmup")
+        if guard:
+            return guard
+
+        graph = GraphifyTool.load_graph(root)
+        graph_stats = {"nodes": len(graph["nodes"]), "edges": len(GraphifyTool._links(graph))}
+        results: list[str] = []
+
+        try:
+            summaries = GraphifyTool.parent_summaries(graph, min_children=2, top=20)
+            results.append(f"{len(summaries)} resúmenes de padres cacheados")
+        except Exception as exc:  # noqa: BLE001
+            results.append(f"resúmenes de padres: error ({exc})")
+
+        try:
+            big_summaries = GraphifyTool.parent_summaries(graph, min_children=5, top=5)
+            results.append(f"{len(big_summaries)} resúmenes grandes (≥5 hijos) precargados")
+        except Exception as exc:  # noqa: BLE001
+            results.append(f"resúmenes grandes: error ({exc})")
+
+        try:
+            vaults = GraphifyTool.detect_obsidian_vaults(root)
+            if vaults:
+                exp = GraphifyTool.export_obsidian(root, vaults[0])
+                if exp.returncode == 0:
+                    results.append(f"exportado a Obsidian ({vaults[0].name})")
+        except Exception:  # noqa: BLE001
+            pass
+
+        cache_dir = GraphifyTool.cache_dir(root)
+        n_entries = len(list(cache_dir.glob("*.joblib"))) if cache_dir.exists() else 0
+
+        return AgentResult(
+            True, self.name, "cache_warmup",
+            f"Warmup completado. {n_entries} entrada(s) en caché tras:\n  "
+            + "\n  ".join(results),
+            data={"graph": graph_stats, "cache_entries": n_entries},
+        )
+
+    def graph_stats(self) -> AgentResult:
+        """Estadísticas rápidas del grafo (desde caché si está preprocesado)."""
+        root = self.ctx.root
+        guard = self._require_graph("graph_stats")
+        if guard:
+            return guard
+
+        graph = GraphifyTool.load_graph(root)
+        adj = GraphifyTool._adjacency(graph)
+        nodes = GraphifyTool._node_index(graph)
+
+        degrees = [len(adj.get(nid, set())) for nid in nodes]
+        avg_degree = sum(degrees) / len(degrees) if degrees else 0
+        max_degree = max(degrees) if degrees else 0
+
+        type_counts: dict[str, int] = {}
+        for n in graph["nodes"]:
+            ft = str(n.get("file_type", n.get("type", "unknown")))
+            type_counts[ft] = type_counts.get(ft, 0) + 1
+
+        communities = len({n.get("community") for n in graph["nodes"] if n.get("community") is not None})
+        orphans = sum(1 for d in degrees if d == 0)
+
+        return AgentResult(
+            True, self.name, "graph_stats",
+            f"{len(nodes)} nodos, {len(GraphifyTool._links(graph))} aristas, "
+            f"{communities} comunidades, {orphans} aislados. "
+            f"Grado medio: {avg_degree:.1f}, máximo: {max_degree}.",
+            data={
+                "nodes": len(nodes),
+                "edges": len(GraphifyTool._links(graph)),
+                "communities": communities,
+                "orphans": orphans,
+                "avg_degree": round(avg_degree, 1),
+                "max_degree": max_degree,
+                "types": type_counts,
+            },
+        )
+
+
+def _human_size(bytes_: int) -> str:
+    for unit in ("B", "KB", "MB"):
+        if bytes_ < 1024:
+            return f"{bytes_:.1f} {unit}"
+        bytes_ /= 1024
+    return f"{bytes_:.1f} GB"

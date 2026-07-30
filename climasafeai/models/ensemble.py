@@ -144,6 +144,7 @@ def _predecir_tabular(
     prob_riesgo = float(1.0 - proba[0, 0])
 
     conformal_conf = None
+    conformal_set_size = 2
     try:
         from climasafeai.models.conformal import SplitConformalCalibrator, confidence_label
         _conformal_path = ARTIFACTS_DIR / f"conformal_{clase}.joblib"
@@ -152,6 +153,7 @@ def _predecir_tabular(
             cal.load(str(_conformal_path))
             conf, sizes = cal.confidence(proba)
             conformal_conf = confidence_label(int(sizes[0]))
+            conformal_set_size = int(sizes[0])
     except Exception:
         pass
 
@@ -162,6 +164,7 @@ def _predecir_tabular(
         "prob_riesgo": round(prob_riesgo, 4),
         "thresholds_usados": u,
         "conformal_confianza": conformal_conf,
+        "conformal_set_size": conformal_set_size,
         "_X": X,
     }
 
@@ -314,6 +317,140 @@ def perfil_horario_desde_df(df_hora) -> list[dict] | None:
     ]
 
 
+def _proba_from_formula(current: dict) -> dict:
+    """Convierte salida de la Fórmula a probabilidad de riesgo.
+
+    Añade prob_riesgo a los campos que ya devuelve _predecir_formulas,
+    manteniendo compatibilidad hacia atrás.
+    """
+    t = current.get("t2m_c", 20.0)
+    rh = current.get("rh", 50.0)
+    ws = current.get("wind_speed_kmh", 10.0)
+    hi = heat_index(t, rh)
+    wc = wind_chill(t, ws)
+
+    # Calor: HI -> prob_riesgo
+    if hi >= 39:
+        prob_calor = 0.95
+    elif hi >= 32:
+        prob_calor = 0.60
+    elif hi >= 27:
+        prob_calor = 0.35
+    else:
+        prob_calor = 0.05 + (hi / 27.0) * 0.20
+
+    # Frío: WC -> prob_riesgo
+    if wc <= -25:
+        prob_frio = 0.95
+    elif wc <= -10:
+        prob_frio = 0.55
+    elif wc <= 0:
+        prob_frio = 0.30
+    else:
+        prob_frio = 0.05
+
+    # Clase según thresholds existentes
+    hi_clase = 2 if hi >= 39 else (1 if hi >= 27 else 0)
+    wc_clase = 2 if wc <= -25 else (1 if wc <= 0 else 0)
+
+    return {
+        "calor": {
+            "prob_riesgo": round(min(prob_calor, 1.0), 4),
+            "clase": hi_clase,
+            "heat_index_c": round(float(hi), 2),
+            "categoria": ["seguro", "precaucion", "peligro", "peligro_extremo"][
+                min(hi_clase, 3)
+            ],
+        },
+        "frio": {
+            "prob_riesgo": round(min(prob_frio, 1.0), 4),
+            "clase": wc_clase,
+            "wind_chill_c": round(float(wc), 2),
+        },
+    }
+
+
+def _conformal_weighted_ensemble(model_results: dict, tipo: str) -> dict:
+    """Media ponderada por set_size conformal de los modelos del ensemble.
+
+    Parameters
+    ----------
+    model_results : dict
+        Resultados de todos los modelos (XGBoost_calor, RandomForest_frio,
+        LSTM, Formula).
+    tipo : str
+        "calor" o "frio".
+
+    Returns
+    -------
+    dict con "prob_riesgo" (float) y "clase" (int).
+    """
+    if tipo == "calor":
+        model_keys = ["XGBoost_calor", "LSTM", "Formula"]
+    else:
+        model_keys = ["RandomForest_frio", "LSTM", "Formula"]
+
+    prob_sum = 0.0
+    weight_sum = 0.0
+
+    for key in model_keys:
+        res = model_results.get(key)
+        if res is None:
+            continue
+        if isinstance(res, dict) and "error" in res:
+            continue
+
+        if key == "LSTM":
+            sub = res.get(tipo, {})
+            if not sub or not isinstance(sub, dict) or "error" in sub:
+                continue
+            prob = sub.get("prob_riesgo")
+            if prob is None:
+                continue
+            # LSTM no tiene conformal → set_size por defecto = 2
+            weight = 1.0 / 2.0
+        elif key == "Formula":
+            sub = res.get(tipo, {})
+            if not sub or not isinstance(sub, dict):
+                continue
+            prob = sub.get("prob_riesgo")
+            if prob is None:
+                continue
+            # Fórmula no tiene conformal → set_size por defecto = 2
+            weight = 1.0 / 2.0
+        else:
+            # XGBoost_calor o RandomForest_frio — tienen conformal_set_size
+            prob = res.get("prob_riesgo")
+            if prob is None:
+                continue
+            set_size = res.get("conformal_set_size", 2)
+            if set_size is None or set_size <= 0:
+                set_size = 2
+            weight = 1.0 / set_size
+
+        prob_sum += prob * weight
+        weight_sum += weight
+
+    if weight_sum <= 0:
+        return {"prob_riesgo": 0.0, "clase": 0}
+
+    prob_ens = prob_sum / weight_sum
+    prob_ens = min(max(prob_ens, 0.0), 1.0)
+
+    # Clase del ensemble sobre prob RAW (no personalizada).
+    # Usamos el mismo umbral que personalización PERS_THRESHOLD_PELIGRO para
+    # que el ensemble refleje el riesgo poblacional con el mismo criterio.
+    thresholds = CLASS_THRESHOLDS_RECOMENDADOS.get(tipo, {"t1": 0.25})
+    if prob_ens >= PERS_THRESHOLD_PELIGRO:
+        clase = 2
+    elif prob_ens >= thresholds["t1"]:
+        clase = 1
+    else:
+        clase = 0
+
+    return {"prob_riesgo": round(prob_ens, 4), "clase": clase}
+
+
 def predict_ensemble(
     lat: float | None = None,
     lon: float | None = None,
@@ -343,29 +480,15 @@ def predict_ensemble(
     lstm_result = _predecir_lstm(df_hora, df_features, provincia, grupo_edad=estrato)
     resultados["LSTM"] = lstm_result
 
-    formula_result = _predecir_formulas(weather["current"])
+    formula_result = _proba_from_formula(weather["current"])
     resultados["Formula"] = formula_result
 
-    todas_clases = []
-    for key, res in resultados.items():
-        if isinstance(res, dict) and "error" in res:
-            continue
-        # Formula no vota en el ensemble — solo actúa como override de seguridad
-        # vía HI_peak después de personalización. Así los modelos ML son el
-        # determinante real y el usuario no ve "Formula" cuando XGBoost/LSTM
-        # ya acertaron.
-        if key == "Formula":
-            continue
-        if "calor" in res and isinstance(res["calor"], dict):
-            c = res["calor"]
-            todas_clases.append(c.get("clase_threshold") or c.get("clase", 0))
-        if "frio" in res and isinstance(res["frio"], dict):
-            c = res["frio"]
-            todas_clases.append(c.get("clase_threshold") or c.get("clase", 0))
-        if "clase_threshold" in res:
-            todas_clases.append(res["clase_threshold"])
+    # Ensemble conformal-weighted: media ponderada por set_size
+    ens_calor = _conformal_weighted_ensemble(resultados, "calor")
+    ens_frio = _conformal_weighted_ensemble(resultados, "frio")
 
-    clase_final = max(todas_clases) if todas_clases else 0
+    # Clase del ensemble (para clase_ml_original / explicación)
+    clase_ml_original = max(ens_calor["clase"], ens_frio["clase"])
 
     perfil_aplicado = {}
 
@@ -393,8 +516,6 @@ def predict_ensemble(
         else:
             HI = max(h["HI"] for h in perfil_horario)
 
-    clase_ml_original = int(clase_final)
-
     def _personalizar_si_hay(prob_poblacional, tipo):
         perfil_uv = dict(perfil) if perfil else {}
         uv = weather.get("uv_index")
@@ -418,8 +539,8 @@ def predict_ensemble(
             "factores": [],
         }
 
-    prob_calor = xgb_result.get("prob_riesgo", 0.5)
-    prob_frio = rf_result.get("prob_riesgo", 0.5)
+    prob_calor = ens_calor["prob_riesgo"]
+    prob_frio = ens_frio["prob_riesgo"]
 
     res_calor = _personalizar_si_hay(prob_calor, "calor")
     res_frio = _personalizar_si_hay(prob_frio, "frio")
@@ -570,7 +691,7 @@ def predict_ensemble(
         explicacion["modelo_determinante"] = f"Override — {razon}"
         explicacion["override"] = override_fisico
     elif override_fisico is None:
-        clase_modelos = max(todas_clases) if todas_clases else 0
+        clase_modelos = clase_ml_original
         if clase_pers != clase_modelos:
             direccion = "subió" if clase_pers > clase_modelos else "bajó"
             explicacion["modelo_determinante"] = f"Personalización ({direccion} de {CLASES[clase_modelos]} a {CLASES[clase_pers]})"

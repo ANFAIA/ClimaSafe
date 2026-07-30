@@ -21,7 +21,10 @@ class TestAgent(BaseAgent):
 
     name = "test"
     description = "Ejecuta pytest, resume fallos y cobertura, y detecta módulos sin test aparente por convención de nombres."
-    capabilities = ["test", "tests", "pytest", "cobertura", "coverage", "corre los tests"]
+    capabilities = [
+        "test", "tests", "pytest", "cobertura", "coverage", "corre los tests",
+        "generar test",
+    ]
 
     def action_aliases(self) -> dict:
         return {

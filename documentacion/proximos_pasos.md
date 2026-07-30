@@ -1,6 +1,6 @@
 # Próximos pasos — hoja de ruta
 
-**Última revisión:** 2026-07-27 (tarde)
+**Última revisión:** 2026-07-29
 
 ---
 
@@ -44,6 +44,11 @@
 | ✅ | Fecha de nacimiento en lugar de edad (campo date, cálculo automático) | `climasafeai/db/manager.py`, `chat/static/index.html`, `data/schema.sql` |
 | ✅ | Comorbilidades/medicación en collapsible | `chat/static/index.html` |
 
+### ENS-001 — Ensemble conformal-weighted ✅
+| # | Qué | Archivos |
+|---|-----|----------|
+| ✅ | **ENS-001**: max-vote → conformal-weighted average. XGBoost_calor, LSTM_calor, Formula_calor se combinan con pesos `1/set_size` del conformal. Ídem para frío (RF, LSTM, Formula). Personalización y overrides intactos. | `climasafeai/models/ensemble.py` |
+
 ### 1.1 Múltiples edades en una pantalla (sesión 2026-07-27)
 
 Todas las curvas de riesgo por edad a la vez sobre el eje horario, con los
@@ -64,16 +69,18 @@ umbrales resaltados y tooltip comparativo hora a hora.
 
 ## Pendiente — Fase 1: Riesgo colectivo y demográfico
 
-### 1.2 Riesgo colectivo por CSV
+### 1.2 Riesgo colectivo por CSV — ⬜ [**CSV-001**]
 Endpoint que acepte un **CSV de personas** con sus perfiles:
 ```csv
 nombre,edad,sexo,grasa,actividad,...
 Juan,25,hombre,18,ligera,...
 María,70,mujer,28,reposo,...
 ```
-- Devuelve: riesgo individual de cada uno + estadísticas del grupo
-- **Factor "orgullo colectivo"**: si es un evento deportivo, el riesgo individual
-  se multiplica por un factor (la gente se exige más en grupo)
+**Criterios de aceptación:**
+- POST con un CSV de ejemplo devuelve una fila de riesgo por persona + estadísticas del grupo
+- El factor de orgullo colectivo solo se aplica cuando la actividad es competición/deporte, y está documentado su valor y origen
+- Un CSV con columnas faltantes o valores inválidos devuelve error explicativo, no 500
+- Tests del endpoint (caso feliz, CSV malformado, factor colectivo) y `make test` pasa
 
 ### 1.3 Predicción por volumen ✅
 | # | Qué | Archivos |
@@ -113,9 +120,12 @@ María,70,mujer,28,reposo,...
 ### 2.2 Selector de radio — ✅
 Input tipo slider ya implementado (0.5-25 km, paso 0.5 km).
 
-### 2.3 Exportar mapa — ⬜
-- Captura PNG del mapa de riesgo
-- Datos subyacentes en GeoJSON
+### 2.3 Exportar mapa — ⬜ [**MAPA-001**]
+**Criterios de aceptación:**
+- Botón en la vista de mapa descarga un PNG con el overlay de riesgo visible
+- Segundo botón descarga el GeoJSON de las celdas con su clase de riesgo y HI pico
+- El GeoJSON generado se abre sin errores en un validador GeoJSON
+- Tests del endpoint de exportación y `make test` pasa
 
 ---
 
@@ -146,41 +156,80 @@ Contenedor con evaluaciones programadas (mañana/resumen).
 ### 4.3 Worker de notificaciones
 Cola de mensajes con N workers compitiendo.
 
-### 4.4 Telegram
-- Chat privado con perfil guardado
-- Grupo con comandos `/clima`, `/recomendaciones`
+### 4.4 Telegram — ⚠️ Parcial (con errores)
+| # | Qué | Estado |
+|---|-----|--------|
+| ✅ | Bot @climasafebot creado y desplegado vía Spacebot | |
+| ✅ | Identidad, rol y skill configurados (IDENTITY.md, ROLE.md, SKILL.md) | |
+| ✅ | Proxy Groq para llamadas LLM (agents/spacebot/proxy.py) | |
+| ✅ | MCP tools conectadas (predict_risk_mcp, listar_usuarios_mcp, cargar_perfil_mcp) | |
+| ✅ | Columna `telegram_chat_id` en tabla `perfiles` para vincular chat a perfil | |
+| ✅ | `buscar_por_telegram()` en DBManager | |
+| ⚠️ | **Errores LLM por resolver**: tool call validation, rate limits (TPM/TPD) de Groq free tier, malformed function calls | 🔴 |
+| ⬜ | Enlazar perfil automáticamente desde chat_id al cargar perfil o predecir | |
+| ⬜ | Chat privado con perfil guardado (cargar sin re-pedir datos) | |
+| ⬜ | Grupo con comandos `/clima`, `/recomendaciones` | |
+
+**Problemas conocidos en producción (logs ~/.spacebot/logs/):**
+1. `parameters for tool reply did not match schema: missing properties: 'content'` — el LLM omite el campo `content` al llamar a la herramienta `reply`
+2. `Groq TPM limit: Requested 8803, Limit 6000` — excede límite de tokens por minuto en llama-3.1-8b-instant
+3. `Groq TPD limit: Used 99775, Requested 8884` — excede límite diario de la 70B
+4. `Failed to call a function. Please adjust your prompt.` — función malformada por el LLM
+
+**Medidas aplicadas (2026-07-28):**
+- ❌ Cortex movido de 70B a 8B, tick_interval de 30s → 600s (ahorra ~95% tokens)
+- ❌ Channel y worker cambiados a 70B (mejor tool calling), worker antes era 8B
+- ❌ context_window reducido: 1500 → 800 tokens
+- ❌ max_turns reducido: 5 → 3
+- ❌ compaction thresholds bajados: compacta antes (70/80/90 vs 80/85/95)
+- ❌ rate_limit_cooldown: 5 → 10s
+- ❌ Proxy mejorado: validaba tool calls antes de enviar (eliminado, Spacebot habla directo a Groq)
+- ⬜ Pendiente: configurar OPENROUTER_API_KEY en .env para fallback real
+- ⬜ Pendiente: verificar en logs que los cambios reducen los errores
+
+**Próximos pasos recomendados:**
+- Monitorizar logs tras aplicar cambios
+- Si sigue habiendo rate limits, activar OpenRouter como provider principal
+- Si tool calls de 70B son estables, mantener configuración
 
 ---
 
-## Fase 5: Agentes e integración MCP
+## Fase 5: Orquestación de agentes (agentizar, no Docker)
 
-| # | Qué |
-|---|-----|
-| ✅ | MCP Server con 3 tools: predict_risk_mcp, listar_usuarios_mcp, cargar_perfil_mcp · `agents/tools/prediction_mcp_tool.py` |
-| ⬜ | Agente Harness (WebSocket, queries en lenguaje natural) |
-| ⬜ | Plugin Skills.sh / MCP publicable |
-| ⬜ | Investigar Hermes como orquestador |
+| # | Qué | Recursos |
+|---|-----|----------|
+| ✅ | MCP Server con 3 tools: predict_risk_mcp, listar_usuarios_mcp, cargar_perfil_mcp · `agents/tools/prediction_mcp_tool.py` | |
+| ✅ | **Spacebot** — setup reproducible vía `make spacebot`. Binary descargado a `~/.local/bin/`, config en `~/.spacebot/`, skill ClimaSafeAI instalado. Web UI en localhost:19898. | [`agents/spacebot/config.toml`](agents/spacebot/config.toml) · [`scripts/setup_spacebot.sh`](scripts/setup_spacebot.sh) · `make spacebot` |
+| ✅ | MCP tools conectadas a workers de Spacebot (`uv run python -m agents.tools.prediction_mcp_tool`) | |
+| ✅ | Bot Telegram @climasafebot configurado con token desde .env | |
+| ✅ | Ciclo completo probado: chat → worker → MCP → predicción (con errores LLM) | |
+| ⬜ | **Arreglar errores LLM del bot** (tool call validation, rate limits Groq) | 🔴 |
+| ⬜ | Publicar skill ClimaSafeAI en skills.sh registry | |
+| ⬜ | **Flue Framework** — alternativa TypeScript. Ejecución durable, sandboxes, skills, MCP. Basado en Pi (el harness de OpenClaw). | [flueframework.com](https://flueframework.com) |
+| ⬜ | **SymptomAI** — inspiración Google Research: agente conversacional para evaluación de síntomas via Gemini. Valida el enfoque de entrevista diagnóstica. | [research.google/blog/symptomai](https://research.google/blog/symptomai-towards-a-conversational-ai-agent-for-everyday-symptom-assessment) · [paper](https://arxiv.org/pdf/2605.04012) |
 
 ---
 
 ## Fase 6: RAG + LLM local
 
-| # | Qué |
-|---|-----|
-| ⬜ | Resúmenes con Gemma 3 vía Unsloth |
-| ⬜ | Fine-tuning LoRA con documentos del proyecto |
-| ⬜ | Consultas en lenguaje natural con respuesta sintetizada |
+| # | Qué | Recursos |
+|---|-----|----------|
+| ⬜ | Fine-tuning Gemma 4 vía Unsloth. E2B en 8GB VRAM, E4B en 10GB. Unsloth Studio (UI web local). Exportable a GGUF → Ollama. | [unsloth.ai/docs/gemma-4/train](https://unsloth.ai/docs/models/gemma-4/train) |
+| ⬜ | **gemma-tuner-multimodal** — skill.sh para fine-tune Gemma 4 en Apple Silicon (MPS) | [skills.sh/aradotso/gemma-tuner-multimodal](https://www.skills.sh/aradotso/trending-skills/gemma-tuner-multimodal) |
+| ⬜ | **gemma-trainer** — skill oficial de Google para entrenar Gemma 4 (recomienda Unsloth single-GPU, TRL multi-GPU) | [skills.sh/google-gemma/gemma-trainer](https://www.skills.sh/google-gemma/gemma-skills/gemma-trainer) |
+| ⬜ | Resúmenes con Gemma 4 + RAG sobre documentos del proyecto | |
+| ⬜ | Consultas en lenguaje natural con respuesta sintetizada | |
 
 ---
 
-## Fase 7: UX y despliegue
+## Fase 7: UX y agente conversacional
 
-| # | Qué |
-|---|-----|
-| ✅ | Fecha de nacimiento (campo date, cálculo automático de edad) |
-| ⬜ | Chat iterativo en la GUI (asistente conversacional) |
-| ✅ | Capturas para LinkedIn con marca de agua |
-| ⬜ | Despliegue simplificado (Dockploy / Skills.sh) |
+| # | Qué | Recursos |
+|---|-----|----------|
+| ✅ | Fecha de nacimiento (campo date, cálculo automático de edad) | |
+| ⬜ | Agente conversacional en GUI (inspiración SymptomAI: preguntas iterativas, perfilado, recomendaciones) | |
+| ✅ | Capturas para LinkedIn con marca de agua | |
+| ⬜ | **Formato Teach de Matt Pocock** — estructura para skills de enseñanza (glosario, learning record, mission, resources) — applicable a documentación de factores de riesgo | [github.com/mattpocock/skills/teach](https://github.com/mattpocock/skills/tree/main/skills/productivity/teach) |
 
 ---
 
@@ -201,13 +250,13 @@ Cola de mensajes con N workers compitiendo.
 ## Resumen visual
 
 ```
-Fase 1 ── Curvas por edad ✅ · CSV, volumen ✅        [PENDIENTE — 1.2 CSV]
-Fase 2 ── Mapa de riesgo por km², colores, exportar  [✅ Grid + perfiles hecho, ⬜ exportar]
-Fase 3 ── Tendencia semanal, TimesFM, márgenes de error
-Fase 4 ── Telegram, Hermes, crontab, worker
-Fase 5 ── MCP server ✅ · Harness, Skills.sh plugin
-Fase 6 ── Gemma 3 + Unsloth + LoRA para RAG
-Fase 7 ── Chat, LinkedIn, Dockploy
+Fase 1 ── Curvas edad ✅ · Volumen ✅ · CSV colectivo      [⬜ 1.2 CSV]
+Fase 2 ── Mapa riesgo ✅ · Exportar                        [⬜ exportar]
+Fase 3 ── Tendencia semanal · TimesFM · márgenes error
+Fase 4 ── Telegram bot ⚠️ errores LLM · nofic.            [🔄 arreglar errores]
+Fase 5 ── MCP ✅ · Spacebot ⚠️ LLM · Flue / Skills.sh     [⬜ publicar skill]
+Fase 6 ── Gemma 4 + Unsloth + LoRA + RAG                  [⬜]
+Fase 7 ── Chat conversacional (estilo SymptomAI)          [⬜]
 ```
 
 ## Referencias

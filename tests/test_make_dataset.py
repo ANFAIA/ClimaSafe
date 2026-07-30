@@ -35,12 +35,24 @@ def test_load_data_raises_on_missing_file(patch_paths):
 # Estadísticas de la distribución diaria (24h) -- _agregar_estadisticas_diarias
 # ---------------------------------------------------------------------------
 def _df_horario(provincia, heat_values, cold_values):
-    """Helper: DataFrame horario de un único (provincia, fecha)."""
+    """
+    Helper: DataFrame horario de un único (provincia, fecha).
+
+    `datetime` y `t2m_c` son obligatorias desde las features nocturnas
+    (2026-07-14): de `datetime` sale la hora que marca la madrugada (0-8) y
+    sobre `t2m_c` se calcula `t2m_min_noche`. Las horas van en orden, así que
+    el último valor de cada lista —el pico de calor o el bajón de frío— cae a
+    las 23:00. `t2m_c` se deja constante porque estos dos tests miden la
+    distribución de heat_index/wind_chill, no la mínima nocturna.
+    """
     n = len(heat_values)
+    inicio = pd.Timestamp("2020-07-01")
     return pd.DataFrame(
         {
             "provincia": [provincia] * n,
-            "fecha": [pd.Timestamp("2020-07-01").date()] * n,
+            "fecha": [inicio.date()] * n,
+            "datetime": pd.date_range(inicio, periods=n, freq="h"),
+            "t2m_c": [20.0] * n,
             "heat_index_c": heat_values,
             "wind_chill_c": cold_values,
         }

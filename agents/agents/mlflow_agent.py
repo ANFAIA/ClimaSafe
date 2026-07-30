@@ -20,7 +20,7 @@ from agents.tools.mlflow_tool import MLflowTool
 class MLflowAgent(BaseAgent):
     name = "mlflow"
     description = "Lista runs de MLflow, encuentra el mejor por una métrica, y avisa si el run más reciente empeoró respecto al anterior."
-    capabilities = ["mlflow", "experimentos", "runs", "tracking de modelos"]
+    capabilities = ["estado de mlflow", "mlflow", "experimentos", "runs", "tracking de modelos"]
 
     def actions(self) -> dict:
         return {

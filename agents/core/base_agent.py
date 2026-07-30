@@ -21,12 +21,32 @@ from __future__ import annotations
 
 import inspect
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
 from agents.context import SharedContext, get_context
 from agents.exceptions import ActionNotSupportedError
+
+
+def _fold(text: str) -> str:
+    """
+    Minúsculas sin acentos. El ruteo compara palabra completa, así que sin
+    esto la tilde parte la coincidencia: un usuario escribe "documentación" y
+    la palabra clave declarada es "documentacion" — misma palabra, cero
+    puntos. En un proyecto en español eso descarta media consulta típica.
+    """
+    # La eñe se protege antes de descomponer: NFD la parte en "n" + tilde
+    # combinante, así que el filtro de acentos la convertiría en "n". Pero la
+    # ñ no es una "n con adorno", es otra letra — "año" y "ano" no son la
+    # misma palabra, y un agente no debería creer que sí.
+    protected = text.lower().replace("ñ", "\0")
+    folded = "".join(
+        ch for ch in unicodedata.normalize("NFD", protected)
+        if unicodedata.category(ch) != "Mn"
+    )
+    return folded.replace("\0", "ñ")
 
 
 @dataclass
@@ -151,18 +171,23 @@ class BaseAgent(ABC):
         """
         if not self.capabilities:
             return 0.0
-        text = query.lower()
-        matched = [kw for kw in self.capabilities if re.search(rf"\b{re.escape(kw.lower())}\b", text)]
+        text = _fold(query)
+        matched = [kw for kw in self.capabilities if re.search(rf"\b{re.escape(_fold(kw))}\b", text)]
         if not matched:
             return 0.0
-        # Desempate por especificidad: dos agentes con el mismo nº de aciertos
-        # empataban y ganaba el descubierto antes (orden alfabético) — puro
-        # azar. Caso real: "pre-commit" acierta 'pre-commit' (env) y también
-        # 'commit' (git, el guion es límite de palabra). La coincidencia más
-        # larga (más específica) gana el empate; el bonus (≤0.1) nunca puede
-        # alterar el ranking entre números de aciertos distintos (0.4 cada uno).
+        # Cada acierto vale por las PALABRAS que cubre, no por ser un acierto.
+        # Contar aciertos a secas hacía que dos palabras genéricas ganaran a
+        # una frase específica: en "busca en el grafo de conocimiento",
+        # `knowledge` sumaba 2 (grafo + conocimiento) y `doc` solo 1
+        # (busca en el grafo) — ganaba el genérico justo cuando la frase
+        # larga es la señal más fiable de intención.
+        covered = sum(len(kw.split()) for kw in matched)
+        # Desempate por especificidad entre coberturas iguales. Caso real:
+        # "pre-commit" acierta 'pre-commit' (env) y también 'commit' (git, el
+        # guion es límite de palabra). El bonus (≤0.1) nunca puede alterar el
+        # ranking entre coberturas distintas (0.4 cada palabra cubierta).
         specificity = min(0.1, sum(len(kw) for kw in matched) * 0.001)
-        return min(1.0, len(matched) * 0.4 + specificity)
+        return min(1.0, covered * 0.4 + specificity)
 
     def action_aliases(self) -> dict[str, list[str]]:
         """

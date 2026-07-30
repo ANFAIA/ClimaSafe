@@ -20,7 +20,11 @@ class GraphAgent(BaseAgent):
         "Inspecciona los gráficos generados en reports/figures/: detecta figuras "
         "vacías o mal renderizadas y aspect ratios inusuales."
     )
-    capabilities = ["grafico", "gráfico", "figura", "plot", "reports/figures", "visualizacion", "chart"]
+    capabilities = [
+        "grafico", "gráfico", "figura", "plot", "reports/figures",
+        "visualizacion", "chart", "resolucion", "calidad imagen",
+        "figuras", "figuras del reporte",
+    ]
 
     def actions(self) -> dict:
         return {

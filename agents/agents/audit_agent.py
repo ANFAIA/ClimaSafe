@@ -45,6 +45,7 @@ class AuditAgent(BaseAgent):
     capabilities = [
         "auditoria", "auditoría", "audit", "auditar",
         "rendimiento de agentes", "historial de ejecuciones",
+        "audita", "equipo de agentes",
     ]
 
     def actions(self) -> dict:
