@@ -32,11 +32,12 @@ CREATE TABLE IF NOT EXISTS perfiles (
     lat             REAL,
     lon             REAL,
     provincia       TEXT,
-    tags            TEXT                             -- coma-separadas: electricista,fontanero
+    tags            TEXT,                            -- coma-separadas: electricista,fontanero
+    telegram_chat_id TEXT UNIQUE                     -- chat_id de Telegram para vincular conversación
 );
-
 CREATE INDEX IF NOT EXISTS idx_perfiles_alias ON perfiles(alias);
 CREATE INDEX IF NOT EXISTS idx_perfiles_created ON perfiles(created_at);
+-- El índice idx_perfiles_telegram se crea en _migrate() tras añadir la columna
 
 -- ── Relaciones muchos-a-muchos ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS perfil_comorbilidades (

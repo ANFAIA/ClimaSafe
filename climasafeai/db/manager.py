@@ -50,6 +50,12 @@ class DBManager:
             return []
         return self.rag.search_factores(query, k=k)
 
+    def ask_rag(self, query: str, k: int = 5) -> dict:
+        """RAG completo: retrieve + generate."""
+        if self.rag is None:
+            return {"answer": None, "sources": [], "error": "RAG no disponible"}
+        return self.rag.ask(query, k=k)
+
     # ── Conexión ────────────────────────────────────────────────────
 
     @contextmanager
@@ -84,6 +90,9 @@ class DBManager:
                 c.execute("ALTER TABLE perfiles ADD COLUMN fecha_nacimiento TEXT")
             if "tags" not in cols:
                 c.execute("ALTER TABLE perfiles ADD COLUMN tags TEXT")
+            if "telegram_chat_id" not in cols:
+                c.execute("ALTER TABLE perfiles ADD COLUMN telegram_chat_id TEXT")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_perfiles_telegram ON perfiles(telegram_chat_id)")
 
     def tablas(self) -> list[str]:
         with self.conn() as c:
@@ -184,7 +193,7 @@ class DBManager:
         """Todos los perfiles (sin arrays, solo cabecera)."""
         with self.conn() as c:
             rows = c.execute(
-                "SELECT id, alias, edad, sexo, lat, lon, provincia, tags, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
+                "SELECT id, alias, edad, sexo, lat, lon, provincia, tags, telegram_chat_id, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -268,6 +277,17 @@ class DBManager:
                 "SELECT id, alias, updated_at FROM perfiles WHERE alias = ?", (alias,)
             ).fetchone()
             return dict(row) if row else None
+
+    def buscar_por_telegram(self, chat_id: str) -> dict | None:
+        """Busca un perfil vinculado a un chat_id de Telegram."""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT id, alias, telegram_chat_id, updated_at FROM perfiles WHERE telegram_chat_id = ?",
+                (chat_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return dict(row)
 
     def buscar_por_tag(self, tag: str) -> list[dict]:
         """Busca perfiles que contengan una etiqueta (tags separados por coma).

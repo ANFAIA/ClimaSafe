@@ -135,6 +135,11 @@ try:
         """Búsqueda semántica sobre factores de riesgo usando sqlite-vec. Devuelve los k factores más relevantes para la consulta con su distancia coseno."""
         return json.dumps(_db().search_factores(query, k=k), indent=2, default=str)
 
+    @_mcp.tool()
+    def ask_rag_mcp(query: str, k: int = 5) -> str:
+        """RAG completo: responde una pregunta en lenguaje natural sobre factores de riesgo térmico. Busca factores relevantes y genera respuesta con IA."""
+        return json.dumps(_db().ask_rag(query, k=k), indent=2, default=str)
+
     _HAS_MCP = True
 except ImportError:
     _HAS_MCP = False
@@ -142,6 +147,11 @@ except ImportError:
 
 def search_factors(query: str, k: int = 5) -> list[dict]:
     return _db().search_factores(query, k=k)
+
+
+def ask_rag(query: str, k: int = 5) -> dict:
+    """RAG completo: retrieve + generate."""
+    return _db().ask_rag(query, k=k)
 
 
 def run_mcp_server(

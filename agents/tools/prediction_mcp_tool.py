@@ -250,17 +250,23 @@ def predict_risk(
     nivel_actividad: str = "ligera",
     hora_inicio: int = 10, duracion_h: float = 2.0,
     aclimatado: bool | None = None,
-    peso: float | None = None, altura: float | None = None,
     grasa: float | None = None, entrenado: bool | None = None,
     ocupacion: str | None = None, deporte: str | None = None,
     comorbilidades: list[str] | None = None,
     medicacion: list[str] | None = None,
+    fototipo: str | None = None,
+    situacion_social: list[str] | None = None,
+    falta_sueno: bool | None = None,
+    enfermedad_reciente: bool | None = None,
+    fiesta: bool | None = None,
     fecha: str | None = None,
     incluir_contrafactuales: bool = True,
     incluir_recomendaciones: bool = True,
 ) -> dict:
     target_date = _parse_date(fecha)
-    from climasafeai.features.personalizacion import riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad
+    from climasafeai.features.personalizacion import (
+        riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad,
+    )
 
     perfil: dict[str, Any] = {
         "edad": edad,
@@ -271,22 +277,28 @@ def predict_risk(
     }
     if aclimatado is not None:
         perfil["aclimatado"] = aclimatado
-    if peso is not None:
-        perfil["peso"] = peso
-    if altura is not None:
-        perfil["altura"] = altura
     if grasa is not None:
-        perfil["grasa_corporal"] = grasa
+        perfil["porcentaje_grasa"] = grasa
     if entrenado is not None:
         perfil["entrenado"] = entrenado
     if ocupacion is not None:
         perfil["ocupacion"] = ocupacion
     if deporte is not None:
         perfil["deporte"] = deporte
+    if fototipo is not None:
+        perfil["fototipo"] = fototipo
+    if situacion_social:
+        perfil["situacion_social"] = set(situacion_social)
+    if falta_sueno is not None:
+        perfil["falta_sueno"] = falta_sueno
+    if enfermedad_reciente is not None:
+        perfil["enfermedad_reciente"] = enfermedad_reciente
+    if fiesta is not None:
+        perfil["fiesta"] = fiesta
     if comorbilidades:
         perfil["comorbilidades"] = set(comorbilidades)
     if medicacion:
-        perfil["medicacion"] = set(medicacion)
+        perfil["farmacos"] = set(medicacion)
 
     result = _try_prediction(lat, lon, provincia, perfil, target_date)
 
@@ -647,27 +659,46 @@ try:
         hora_inicio: int = 10,
         duracion_h: float = 2.0,
         aclimatado: bool = False,
-        peso: Optional[float] = None,
-        altura: Optional[float] = None,
+        grasa: Optional[float] = None,
+        ocupacion: Optional[str] = None,
+        entrenado: Optional[bool] = None,
+        deporte: Optional[str] = None,
         comorbilidades: Optional[str] = None,
         medicacion: Optional[str] = None,
+        fototipo: Optional[str] = None,
+        situacion_social: Optional[str] = None,
+        falta_sueno: Optional[bool] = None,
+        enfermedad_reciente: Optional[bool] = None,
+        fiesta: Optional[bool] = None,
         fecha: Optional[str] = None,
     ) -> str:
         """Predice riesgo cardiovascular para 1 persona.
 
-REGLAS ESTRICTAS (léelas todas antes de usar la herramienta):
-1. Los datos fijos del perfil (edad, sexo, peso, altura, aclimatado, comorbilidades, medicación) los proporciona cargar_perfil_mcp. No los preguntes al usuario ni los inventes ni los confundas.
-2. Los datos variables (hora_inicio, duracion_h, nivel_actividad, ubicación) DEBES preguntarlos al usuario explícitamente. NO los deduzcas de la conversación. NO asumas hora. NO asumas duración. NO asumas el nivel de actividad aunque el usuario diga "correr" o "andar". Pregunta textualmente hasta que el usuario responda cada uno.
-3. ACLIMATADO se refiere exclusivamente a aclimatación al CALOR (vivir en clima cálido). No tiene nada que ver con estar acostumbrado a un deporte. No confundir.
-4. Pregunta uno a uno. No asumas nada."""
+hora_inicio, duracion_h, nivel_actividad y ubicación son de ESTA salida, no del
+perfil. `aclimatado` es al CALOR ambiental, no a un deporte. Del cuerpo solo se usa
+`grasa` (%): si el usuario no la sabe, omítela.
+
+`ocupacion` describe ESTA salida, no el oficio del usuario: mándala SOLO si sale a
+trabajar (reparto, mantenimiento, construccion, campo; oficina si es bajo techo).
+Un peón de campo que sale a pasear el domingo NO lleva ocupacion — pesa hasta ×2.7.
+`entrenado` es si está acostumbrado a ESA actividad: reduce a la mitad el extra de
+esfuerzo. `deporte` es solo la etiqueta ("senderismo").
+
+`situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
+vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
         comorb_list = [c.strip() for c in comorbilidades.split(",")] if comorbilidades else None
         med_list = [m.strip() for m in medicacion.split(",")] if medicacion else None
+        sit_list = [s.strip() for s in situacion_social.split(",")] if situacion_social else None
         result = predict_risk(
             lat=lat, lon=lon, provincia=provincia,
             edad=edad, sexo=sexo, nivel_actividad=nivel_actividad,
             hora_inicio=hora_inicio, duracion_h=duracion_h,
-            aclimatado=aclimatado, peso=peso, altura=altura,
+            aclimatado=aclimatado, grasa=grasa,
+            ocupacion=ocupacion, entrenado=entrenado, deporte=deporte,
             comorbilidades=comorb_list, medicacion=med_list,
+            fototipo=fototipo, situacion_social=sit_list,
+            falta_sueno=falta_sueno, enfermedad_reciente=enfermedad_reciente,
+            fiesta=fiesta,
             fecha=fecha,
         )
         _sanitize(result)
@@ -675,12 +706,7 @@ REGLAS ESTRICTAS (léelas todas antes de usar la herramienta):
 
     @_mcp.tool()
     def listar_usuarios_mcp() -> str:
-        """Lista todos los usuarios/perfiles guardados. Muestra alias, edad y sexo de cada uno. No tiene parámetros.
-
-FLUJO CORRECTO:
-1. Pregunta al usuario si tiene perfil guardado o si es nuevo.
-2a. Si tiene perfil: pregúntale su alias, usa listar_usuarios_mcp para comprobar que existe, luego cargar_perfil_mcp.
-2b. Si es nuevo: pregúntale TODOS los datos (edad, sexo, peso, altura, si está aclimatado al calor, comorbilidades, medicación) para llamar a predict_risk_mcp directamente. Ofrece guardar el perfil para futuras veces."""
+        """Lista los perfiles guardados: alias, edad, sexo."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
         perfiles = db.listar_perfiles()
@@ -698,12 +724,8 @@ FLUJO CORRECTO:
 
     @_mcp.tool()
     def cargar_perfil_mcp(alias: str) -> str:
-        """Carga un perfil de usuario por su alias exacto y devuelve sus datos estáticos: edad, sexo, peso, altura, aclimatado (al CALOR, no al deporte), comorbilidades, medicación, nivel_actividad_base.
-
-REGLAS:
-- Aclimatado se refiere exclusivamente a aclimatación al CALOR AMBIENTAL, no a estar acostumbrado a hacer ejercicio.
-- nivel_actividad, hora_inicio y duracion del perfil son valores genéricos. NO los uses para la predicción. Pregunta al usuario hora_inicio, duracion_h y nivel_actividad concretos para esta salida.
-- Después de cargar el perfil, pregunta los datos variables (hora, duración, actividad, ubicación) UNO A UNO."""
+        """Carga un perfil por su alias exacto. Su nivel_actividad, hora_inicio y duracion
+son genéricos: no valen para la predicción, pide los de esta salida."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
         match = db.buscar_por_alias(alias)
@@ -713,6 +735,66 @@ REGLAS:
         if not perfil:
             return json.dumps({"error": f"Perfil ID {match['id']} no encontrado"}, ensure_ascii=False)
         return json.dumps(perfil, indent=2, ensure_ascii=False, default=str)
+
+    @_mcp.tool()
+    def cargar_perfil_por_chat_id_mcp(chat_id: str) -> str:
+        """Carga el perfil vinculado a un chat_id de Telegram, si lo hay."""
+        from climasafeai.db.manager import DBManager
+        db = DBManager()
+        match = db.buscar_por_telegram(chat_id)
+        if not match:
+            return json.dumps({"encontrado": False, "mensaje": "No hay perfil vinculado a este chat. Pregunta al usuario si tiene un alias o si quiere crear un perfil nuevo."}, ensure_ascii=False)
+        perfil = db.obtener_perfil(match["id"])
+        if not perfil:
+            return json.dumps({"encontrado": False, "mensaje": "Perfil no encontrado"}, ensure_ascii=False)
+        perfil["encontrado"] = True
+        return json.dumps(perfil, indent=2, ensure_ascii=False, default=str)
+
+    @_mcp.tool()
+    def vincular_chat_id_mcp(alias: str, chat_id: str) -> str:
+        """Vincula un chat_id de Telegram a un perfil existente, buscado por alias."""
+        from climasafeai.db.manager import DBManager
+        db = DBManager()
+        match = db.buscar_por_alias(alias)
+        if not match:
+            return json.dumps({"success": False, "error": f"No se encontró perfil con alias '{alias}'"}, ensure_ascii=False)
+        db.actualizar_perfil(match["id"], {"telegram_chat_id": chat_id})
+        return json.dumps({"success": True, "alias": alias, "chat_id": chat_id, "mensaje": f"Chat vinculado a '{alias}'"}, ensure_ascii=False)
+
+    @_mcp.tool()
+    def crear_perfil_mcp(alias: str, edad: int, sexo: str, grasa: Optional[float] = None, aclimatado: bool = False, comorbilidades: Optional[str] = None, medicacion: Optional[str] = None, nivel_actividad: Optional[str] = None, fototipo: Optional[str] = None, situacion_social: Optional[str] = None, chat_id: Optional[str] = None) -> str:
+        """Crea un perfil y opcionalmente lo vincula a un chat de Telegram.
+
+`grasa` es el % graso; si no lo sabe, omítela. `comorbilidades` y `medicacion` van
+separadas por comas, p. ej.
+"cardiovascular,diabetes" y "diureticos_asa,antipsicoticos".
+
+`situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
+vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
+        from climasafeai.db.manager import DBManager
+        db = DBManager()
+        exist = db.buscar_por_alias(alias)
+        if exist:
+            return json.dumps({"success": False, "error": f"Ya existe un perfil con alias '{alias}'"}, ensure_ascii=False)
+        datos = {"alias": alias, "edad": edad, "sexo": sexo}
+        # La tabla `perfiles` guarda porcentaje_grasa; no hay columna de peso ni altura.
+        if grasa is not None:
+            datos["porcentaje_grasa"] = grasa
+        datos["aclimatado"] = aclimatado
+        if comorbilidades:
+            datos["comorbilidades"] = [c.strip() for c in comorbilidades.split(",")]
+        if medicacion:
+            datos["farmacos"] = [m.strip() for m in medicacion.split(",")]
+        if nivel_actividad:
+            datos["nivel_actividad"] = nivel_actividad
+        if fototipo is not None:
+            datos["fototipo"] = fototipo
+        if situacion_social:
+            datos["situacion_social"] = [s.strip() for s in situacion_social.split(",")]
+        if chat_id:
+            datos["telegram_chat_id"] = chat_id
+        pid = db.crear_perfil(datos)
+        return json.dumps({"success": True, "id": pid, "alias": alias, "mensaje": f"Perfil '{alias}' creado correctamente"}, indent=2, ensure_ascii=False)
 
     _HAS_MCP = True
 except ImportError:
