@@ -487,6 +487,37 @@
       ],
       "status": "pending",
       "depends_on": []
+    },
+    {
+      "id": "BOT-006",
+      "title": "Recomendaciones personalizadas con LLM local tras la predicción",
+      "description": "Pedido por el usuario: si hay un LLM local disponible (Ollama con qwen2.5), detectarlo y tras la predicción generar recomendaciones más personalizadas y adaptadas al contexto del usuario (ubicación, actividad, perfil, clima) en lugar de solo la plantilla. Si no hay modelo local, el bot sigue con la plantilla determinista actual. Se apoya en lo que ya hace BOT-005: el prompt de ask_con_perfil ya recibe ubicación, UV y recomendación contextual.",
+      "acceptance_criteria": [
+        "El bot detecta si hay LLM local (Ollama) disponible y lo usa solo si lo hay",
+        "Tras la predicción, la recomendación se genera con el LLM local usando el contexto real (ubicación, actividad, perfil, temperatura, UV) y se pega una conversación de ejemplo",
+        "Si no hay LLM local, la respuesta usa la plantilla determinista de BOT-005 sin cambiar su formato",
+        "El coste de tokens o latencia de la llamada al LLM se mide y se pega",
+        "Hay tests del modo con LLM y del fallback, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DOC-003",
+      "title": "README con el formato original: solo cambia lo esencial, el contenido nuevo va a documentacion/",
+      "description": "Pedido por el usuario: el README se reescribió por completo y eso no gusta. Quiere que mantenga el formato original (el de HEAD, con badges, estructura de dskit) y solo cambie lo esencial: versión, secciones que dependan de la versión, y que lo que se quiera ampliar viva en documentacion/ con enlaces. Hay que revertir la reescritura (working tree) y aplicar solo el bump de versión + enlaces a documentacion/.",
+      "acceptance_criteria": [
+        "El README vuelve al formato original de HEAD (badges y estructura previos) y SOLO cambia lo esencial: versión, y secciones que dependan de ella",
+        "El contenido ampliado que se había metido en el README se mueve a documentacion/ (o se descarta si ya existe allí) y se enlaza desde el README",
+        "La versión del README coincide con la de pyproject.toml (0.0.2)",
+        "No queda contenido duplicado entre README y documentacion/",
+        "init.sh sigue en verde"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-31",
+      "review_rounds": 0,
+      "closed": "2026-07-31"
     }
   ]
 }

@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%2F%20RandomForest-orange)
 ![Tracking](https://img.shields.io/badge/Experiment%20Tracking-MLflow-blue?logo=mlflow)
-![Version](https://img.shields.io/badge/Version-0.0.1-green)
+![Version](https://img.shields.io/badge/Version-0.0.4-green)
 ![Author](https://img.shields.io/badge/Author-Alejandro%20Cancelas%20Chapela-blueviolet)
 ![Template](https://img.shields.io/badge/Generado%20con-dskit-58a6ff?logo=github)
 
@@ -11,7 +11,7 @@
 
 **Tipo de ML:** `supervisado`  
 **Autor:** Alejandro Cancelas Chapela  
-**Versión:** 0.0.1 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
+**Versión:** 0.0.4 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
 
 
 ClimaSafe estima, para cada **provincia y día**, el nivel de riesgo por temperatura
@@ -137,7 +137,11 @@ chmod 600 ~/.cdsapirc
 ```
 descargar el shapefile de https://centrodedescargas.cnig.es/CentroDescargas/limites-municipales-provinciales-autonomicos y aañdirlo a data/raw
 
-Consulta el archivo `documentacion` para más detalles.
+Consulta la [documentación del proyecto](documentacion/README.md) para más
+detalles: [pipeline de predicción](documentacion/arquitectura/pipeline_prediccion.md),
+[personalización individual](documentacion/riesgo/personalizacion_individual.md),
+[predicción conforme](documentacion/conformal_prediction.md) y
+[componentes (bot, web, MCP, RAG)](documentacion/componentes.md).
 
 ## Claves de API
 
