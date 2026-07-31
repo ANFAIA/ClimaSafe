@@ -114,6 +114,60 @@ def _factor_edad_frio(edad: int) -> float:
     return 1.0
 
 
+# Tasa metabólica por deporte, en MET, del Compendium of Physical Activities
+# (Ainsworth et al., 2024 Adult Compendium — J Sport Health Sci 13(1):6-12,
+# doi:10.1016/j.jshs.2023.10.010; tablas en https://pacompendium.com).
+#
+# El deporte NO tiene coeficiente de riesgo propio: no existe en la literatura un
+# "fútbol x1.2". Lo que está medido es cuánto calor metabólico genera cada
+# actividad, y de ahí sale la intensidad, que sí está calibrada en
+# _ACTIVIDAD_CALOR. Así el usuario elige "fútbol" en vez de adivinar si eso es
+# moderada o intensa, y el valor viene de una tabla publicada.
+#
+# Solo están los deportes con MET medido en el Compendium. El pádel no aparece, así
+# que no se ofrece: es mejor no darlo que inventarle un número.
+DEPORTE_MET: dict[str, tuple[float, str]] = {
+    "pasear":            (3.5, "Walking for pleasure"),
+    "caminar":           (4.0, "Walking, self-selected speed, firm surface"),
+    "senderismo":        (6.0, "Hiking, cross country"),
+    "ciclismo_suave":    (6.8, "Bicycling, 10-11.9 mph, leisure, light effort"),
+    "ciclismo":          (7.0, "Bicycling, general"),
+    "futbol":            (7.0, "Soccer, casual, general"),
+    "trekking_mochila":  (7.8, "Backpacking, hiking with a daypack"),
+    "correr_suave":      (7.5, "Jogging, general, self-selected pace"),
+    "tenis_dobles":      (6.0, "Tennis, doubles"),
+    "tenis":             (8.0, "Tennis, singles"),
+    "btt":               (8.5, "Bicycling, mountain, general"),
+    "futbol_competicion": (9.0, "Soccer, competitive"),
+    "ciclismo_fuerte":   (9.0, "Bicycling, self-selected vigorous pace"),
+    "correr":            (10.5, "Running, self-selected pace"),
+}
+
+# Bandas de intensidad del Compendium: sedentario 1.0-1.5, ligero 1.6-2.9,
+# moderado 3.0-5.9, vigoroso >=6.0. Se parten los vigorosos en dos porque el
+# proyecto distingue intensa de muy_intensa, y 8 MET (tenis individual) no es lo
+# mismo que 6 MET (senderismo).
+def nivel_actividad_desde_met(met: float) -> str:
+    """Traduce MET a uno de los niveles de actividad del proyecto."""
+    if met < 1.6:
+        return "reposo"
+    if met < 3.0:
+        return "ligera"
+    if met < 6.0:
+        return "moderada"
+    if met < 8.0:
+        return "intensa"
+    return "muy_intensa"
+
+
+def nivel_actividad_de_deporte(deporte: str | None) -> str | None:
+    """Nivel de actividad de un deporte conocido, o None si no está en la tabla."""
+    if not deporte:
+        return None
+    entrada = DEPORTE_MET.get(deporte.strip().lower())
+    return nivel_actividad_desde_met(entrada[0]) if entrada else None
+
+
 _ACTIVIDAD_CALOR = {"reposo": 1.0, "ligera": 1.1, "moderada": 1.3, "intensa": 1.6, "muy_intensa": 2.0}
 # En frío la actividad moderada GENERA calor (protectora); la intensa con
 # sudor+viento empapa la ropa y acelera la pérdida (perjudicial).
@@ -362,7 +416,10 @@ def _factores_calor(perfil: dict) -> list[tuple[str, str, float]]:
 def _factores_frio(perfil: dict) -> list[tuple[str, str, float]]:
     f: list[tuple[str, str, float]] = []
 
-    fisio_frio = _factores_implementados("frio", "fisiologico")
+    # Nota: en frio NO hay factores para falta_sueno, enfermedad_reciente ni
+    # farmacos — la base de conocimiento solo tiene los de calor. Por eso aqui no se
+    # consultan: no es un olvido, es que no existen coeficientes publicados para
+    # frio. Si algun dia se anaden, hay que leerlos como hace `_factores_calor`.
     if (sx := perfil.get("sexo")) in ("hombre", "mujer"):
         v = 1.15 if sx == "hombre" else 0.87
         f.append((f"sexo {sx}", "fisiologico", v))
