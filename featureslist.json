@@ -469,8 +469,11 @@
         "La explicación del modelo incluye la ubicación del usuario (p.ej. 'Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%)')",
         "Hay tests de los mensajes nuevos y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-31",
+      "review_rounds": 0,
+      "closed": "2026-07-31"
     },
     {
       "id": "CHAT-002",

@@ -247,3 +247,52 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
             unicos.append(r)
 
     return unicos
+
+
+def recomendacion_resumen(resultado: dict) -> str:
+    """Recomendación de una línea adaptada al contexto (frío/calor/UV).
+
+    No es SPF 30+ siempre: si hace frío se recomienda abrigo, si hay calor
+    evitar las horas centrales, y la protección solar solo aparece cuando el
+    índice UV lo justifica. Es el texto que cierra el parte final del bot.
+    """
+    w = resultado.get("weather", {})
+    cur = w.get("current", {})
+    t = cur.get("t2m_c")
+    uv = w.get("uv_index")
+    if uv is None:
+        uv = cur.get("uv_index")
+    formula = (resultado.get("modelos") or {}).get("Formula") or {}
+    wc = formula.get("frio", {}).get("wind_chill_c")
+    hi = formula.get("calor", {}).get("heat_index_c")
+
+    # Riesgo PELIGRO: lo primero es no hacer la actividad
+    if resultado.get("clase_final", 0) >= 2:
+        return ("Riesgo alto: evita la actividad física al aire libre y "
+                "permanece en un lugar fresco. Mantente hidratado.")
+
+    frio = (wc is not None and wc <= 0) or (t is not None and t <= 10)
+    calor = (hi is not None and hi >= 32) or (t is not None and t >= 30)
+
+    if frio:
+        frase = ("Mantente hidratado y abrígate con varias capas; "
+                 "protege las extremidades del viento.")
+        if uv is not None and uv >= 6:
+            frase += " El índice UV sigue alto: usa protección solar."
+        return frase
+
+    partes = ["Mantente hidratado"]
+    if uv is not None and uv >= 8:
+        partes.append("utiliza protector solar SPF 50+ (renueva cada 2 horas)")
+    elif uv is not None and uv >= 6:
+        partes.append("utiliza protector solar SPF 30+")
+    elif uv is not None and uv >= 3:
+        partes.append("lleva protección solar básica")
+    if calor:
+        partes.append("evita la exposición prolongada entre las horas de mayor calor")
+    else:
+        partes.append("busca sombra si el sol aprieta")
+
+    if len(partes) == 1:
+        return partes[0] + "."
+    return ", ".join(partes[:-1]) + f" y {partes[-1]}."

@@ -21,6 +21,7 @@ import textwrap
 from enum import Enum, auto
 
 from climasafeai.bot.geocoding import buscar_lugar, provincia_desde_coords
+from climasafeai.features.personalizacion import nivel_actividad_de_deporte
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,14 @@ from typing import Any
 import httpx
 
 from climasafeai.db.manager import DBManager
+from climasafeai.llm.rag_qwen import (
+    LLMConfig,
+    ask_con_perfil,
+    ask_with_rag,
+    check_ollama,
+)
 from climasafeai.models.ensemble import predict_ensemble
+from climasafeai.models.recomendaciones import recomendacion_resumen
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +69,27 @@ OCUPACIONES = {
 
 # Deportes predefinidos (mismos que la web + más). Se muestran como botones inline
 # en lugar de texto libre. "otro" permite escribir un deporte no listado.
+# Solo deportes con MET medido en el Compendium of Physical Activities: elegirlos
+# fija la intensidad con un número publicado en vez de dejar que el usuario adivine
+# si su partido de fútbol es "moderada" o "intensa". El pádel y la natación no
+# aparecen con MET utilizable, así que no se ofrecen: mejor no darlos que
+# inventarles un valor. El resto se escribe a mano con "Otro" y entonces la
+# intensidad la elige el usuario, como antes.
 DEPORTES: dict[str, str] = {
-    "correr": "Correr",
-    "ciclismo": "Ciclismo",
-    "futbol": "Futbol",
-    "tenis": "Tenis",
-    "padel": "Padel",
+    "pasear": "Pasear",
+    "caminar": "Caminar",
     "senderismo": "Senderismo",
-    "natacion": "Natacion",
+    "trekking_mochila": "Trekking con mochila",
+    "correr_suave": "Trotar",
+    "correr": "Correr",
+    "ciclismo_suave": "Bici tranquila",
+    "ciclismo": "Bici",
+    "ciclismo_fuerte": "Bici fuerte",
+    "btt": "BTT / montaña",
+    "futbol": "Futbol",
+    "futbol_competicion": "Futbol de competicion",
+    "tenis_dobles": "Tenis dobles",
+    "tenis": "Tenis individual",
 }
 
 # Cómo llega el usuario a la salida. Son los tres factores situacionales que el
@@ -113,6 +134,27 @@ SITUACION_SOCIAL_OPTS = {
 }
 
 
+# Strings de modelo LiteLLM. El usuario puede escribir cualquier modelo
+# soportado por LiteLLM: "ollama/qwen2.5:1.5b", "groq/llama-3.3-70b-versatile", etc.
+MODELO_LOCAL = "ollama/qwen2.5:1.5b"
+MODELO_API = "groq/llama-3.3-70b-versatile"
+MODELO_DETERMINISTA = "__determinista__"  # valor centinela: sin LLM
+
+
+def _modelo_por_defecto() -> str:
+    """Auto-detecta el mejor modelo local; si no hay Ollama, determinista.
+
+    Antes devolvía `MODELO_LOCAL` fijo (el 1.5B) aunque hubiera un 7B instalado, y
+    la diferencia se nota: el 1.5B contesta con titulares en negrita y viñetas —
+    indistinguible de la plantilla— mientras el 7B da el parte de una línea.
+    `check_ollama()` ya calcula cuál es el mejor, así que se usa.
+    """
+    st = check_ollama()
+    if st.get("available"):
+        return st.get("best_model") or MODELO_LOCAL
+    return MODELO_DETERMINISTA
+
+
 class Estado(Enum):
     IDLE = auto()
     SEXO = auto()
@@ -134,6 +176,8 @@ class Estado(Enum):
     UBICACION = auto()
     GUARDAR_PERFIL = auto()
     DONE = auto()
+    # Fuera del flujo de formulario: chat libre con LLM
+    CHAT = auto()
 
 
 # Estados de opción múltiple: se acumulan clics hasta que el usuario pulsa
@@ -238,10 +282,27 @@ def _kb_situacion_social() -> list[list[dict]]:
 
 
 def _kb_deporte() -> list[list[dict]]:
-    kb = [[{"text": v, "callback_data": k}] for k, v in DEPORTES.items()]
+    items = list(DEPORTES.items())
+    kb = [[{"text": v, "callback_data": k} for k, v in items[i:i + 2]]
+          for i in range(0, len(items), 2)]
     kb.append([{"text": "Otro (lo escribo)", "callback_data": "__otro__"}])
     kb.append([{"text": "Saltar", "callback_data": "__saltar__"}])
     return kb
+
+
+def _kb_modelos(modelo_actual: str) -> list[list[dict]]:
+    """Teclado para elegir modelo LLM."""
+    opciones = [
+        ("Qwen 2.5 local (CPU)", MODELO_LOCAL),
+        ("API externa (Groq)", MODELO_API),
+        ("Determinista (sin LLM)", MODELO_DETERMINISTA),
+    ]
+    return [[{"text": f"{'→ ' if m == modelo_actual else '  '}{t}",
+              "callback_data": f"modelo_{m}"}] for t, m in opciones]
+
+
+def _kb_salir_chat() -> list[list[dict]]:
+    return [[{"text": "Salir del chat", "callback_data": "__salir_chat__"}]]
 
 
 def _kb_ubicacion() -> dict:
@@ -334,79 +395,63 @@ FIELD_LABELS: dict[Estado, tuple[str, str, Any]] = {
 # ── Formateo de respuesta ─────────────────────────────────────────────────
 
 RESPONSE_TEMPLATE = textwrap.dedent("""\
-    *Riesgo {clase}* — {provincia}
-    Probabilidad {prob:.0%} · {temp:.1f}°C · HI {hi:.1f}°C · HR {rh:.0f}%
+    {ubicacion} — Riesgo {clase} ({prob:.0%})
 
-    {recomendaciones}
+    🟡 Nivel de riesgo: {clase} ({prob:.0%})
+    🌡️ Temperatura prevista: {temp:.1f} °C
+    ☀️ Índice UV (media): {uv}
+    ❗ Recomendación: {recomendacion}
 """)
 
 
-def _format_template(result: dict) -> str:
-    """Respuesta sin LLM: plantilla fija."""
+def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[float]:
+    """Temperaturas previstas en las horas en las que el usuario estará fuera."""
+    inicio = perfil_usuario.get("hora_inicio")
+    duracion = perfil_usuario.get("duracion_actividad_h")
+    if inicio is not None and duracion is not None:
+        en_ventana = [
+            h["temp"] for h in perfil_horario
+            if inicio <= h["hora"] < inicio + duracion and h.get("temp") is not None
+        ]
+        if en_ventana:
+            return en_ventana
+    return [h["temp"] for h in perfil_horario if h.get("temp") is not None]
+
+
+def _format_uv(uv) -> str:
+    """Índice UV legible: 6 en vez de 6.0; n/d si no hay dato."""
+    if uv is None:
+        return "n/d"
+    return f"{uv:.1f}".rstrip("0").rstrip(".")
+
+
+def _format_template(result: dict, lugar: str | None = None) -> str:
+    """Respuesta sin LLM: plantilla fija con el parte completo.
+
+    Incluye la ubicación del usuario, el nivel de riesgo con su porcentaje, la
+    temperatura prevista (media en las horas de actividad), el índice UV medio
+    y una recomendación adaptada al contexto (frío/calor/UV), no solo la clase.
+    """
     w = result.get("weather", {})
     cur = w.get("current", {})
-    hi = max(h["HI"] for h in (w.get("perfil_horario") or [])) if w.get("perfil_horario") else cur.get("t2m_c", 0)
-    recs = result.get("recomendaciones", [])
+    perfil_h = w.get("perfil_horario") or []
+    perfil_u = result.get("perfil_usuario") or {}
+    temps = _temps_en_ventana(perfil_h, perfil_u)
+    temp = round(sum(temps) / len(temps), 1) if temps else (cur.get("t2m_c") or 0)
+    uv = w.get("uv_index")
+    if uv is None:
+        uv = cur.get("uv_index")
+    clase = result.get("clase_final_label", "?")
+    prob = result.get("perfil", {}).get("calor", {}).get("prob_personalizada") or 0
 
     return RESPONSE_TEMPLATE.format(
-        clase=result.get("clase_final_label", "?"),
-        provincia=w.get("provincia", "?"),
-        prob=result.get("perfil", {}).get("calor", {}).get("prob_personalizada", 0),
-        temp=cur.get("t2m_c", 0),
-        hi=hi,
-        rh=cur.get("rh", 0),
-        recomendaciones="\n".join(f"• {r}" for r in recs[:4]),
+        ubicacion=lugar or w.get("provincia") or "?",
+        clase=clase,
+        prob=prob,
+        temp=temp,
+        uv=_format_uv(uv),
+        recomendacion=recomendacion_resumen(result),
     )
-
-
-async def _format_with_llm(result: dict) -> str | None:
-    """Intenta redactar la respuesta con LLM. Devuelve None si falla.
-
-    La llamada al LLM es síncrona (OpenAI client) — la ejecutamos en un
-    hilo separado con asyncio.to_thread para no bloquear el event loop.
-    """
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return None
-
-    w = result.get("weather", {})
-    cur = w.get("current", {})
-    hi = max(h["HI"] for h in (w.get("perfil_horario") or [])) if w.get("perfil_horario") else cur.get("t2m_c", 0)
-    recs = result.get("recomendaciones", [])
-    p = result.get("perfil", {}).get("calor", {})
-    factores = p.get("factores", [])
-
-    prompt = textwrap.dedent(f"""\
-        Provincia: {w.get("provincia", "?")}
-        Clase de riesgo: {result.get("clase_final_label", "?")}
-        Probabilidad personalizada: {p.get("prob_personalizada", 0):.0%}
-        Temperatura: {cur.get("t2m_c", 0):.1f}°C (HI pico: {hi:.1f}°C)
-        Humedad: {cur.get("rh", 0):.0f}%
-        Factores de riesgo: {', '.join(f['nombre'] for f in factores) if factores else 'ninguno'}
-        Recomendaciones: {'; '.join(recs[:4])}
-
-        Escribe un parte médico de una línea con la clase, la probabilidad
-        y la recomendación principal. Sin rodeos, sin emojis.
-        Ejemplo: "Riesgo ALTO en Sevilla (72%). Evita la calle entre las 14 y las 18."
-    """)
-
-    def _call_llm() -> str | None:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1", timeout=15)
-        resp = client.chat.completions.create(
-            model=os.getenv("RAG_MODEL", "llama-3.3-70b-versatile"),
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=550,
-        )
-        return resp.choices[0].message.content.strip()
-
-    try:
-        respuesta = await asyncio.to_thread(_call_llm)
-        return respuesta
-    except Exception as exc:
-        logger.warning("LLM falló, uso plantilla: %s", exc)
-        return None
 
 
 # ── Lógica del bot (stateless por conversación) ───────────────────────────
@@ -464,10 +509,18 @@ def _data_a_perfil(data: dict, alias: str, chat_id: str) -> dict:
 async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
     """Procesa un mensaje de texto del usuario. Devuelve texto a enviar."""
     conv = _conversaciones.setdefault(chat_id, {"estado": Estado.IDLE, "data": {}})
+    # Modelo por defecto al crear conversación
+    if "modelo" not in conv:
+        conv["modelo"] = _modelo_por_defecto()
     estado = conv["estado"]
     data = conv["data"]
 
-    if texto and texto.startswith("/start"):
+    if texto is None:
+        return None
+
+    # ── Comandos ──────────────────────────────────────────────────────
+
+    if texto.startswith("/start"):
         conv["data"] = {}
         # ¿Tiene perfil guardado?
         match = _db.buscar_por_telegram(str(chat_id))
@@ -476,9 +529,90 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
             conv["data"].update(_perfil_a_data(perfil))
             conv["estado"] = Estado.ACTIVIDAD  # saltar personales
             alias = perfil.get("alias") or match.get("alias", "")
-            return f"Hola de nuevo, {alias}! Solo las preguntas del dia:"
+            return f"Hola de nuevo, {alias}! Se cargaron tus datos previos. Solo las preguntas del dia:"
         conv["estado"] = Estado.SEXO
         return None  # quien llama debe enviar el campo siguiente
+
+    # ── Cambio de modelo ──────────────────────────────────────────────
+    modelo_str = conv.get("modelo", MODELO_DETERMINISTA)
+    if modelo_str == MODELO_DETERMINISTA:
+        modelo_mostrar = "Determinista (sin LLM)"
+    else:
+        modelo_mostrar = modelo_str
+
+    if texto.startswith("/model"):
+        return (
+            f"Modelo actual: *{modelo_mostrar}*\n\n"
+            "Atajos:\n"
+            "  /qwen — Qwen 2.5 local\n"
+            "  /api — API externa (Groq)\n"
+            "  /determinista — Sin LLM\n\n"
+            "O escribe cualquier modelo LiteLLM:\n"
+            "  ollama/qwen2.5:7b, groq/llama-3.3-70b, gpt-4o…\n\n"
+            "Usa los botones de abajo."
+        )
+
+    # Atajos de modelo
+    if texto.startswith("/qwen"):
+        # Si tiene 7b en Ollama, usar ese; si no, 1.5b
+        st = check_ollama()
+        if "qwen2.5:7b" in st.get("models", []):
+            conv["modelo"] = "ollama/qwen2.5:7b"
+            return "Modo cambiado a *Qwen 2.5 7B* (GPU + RAG)."
+        conv["modelo"] = MODELO_LOCAL
+        return "Modo cambiado a *Qwen 2.5 1.5B* (CPU + RAG)."
+    if texto.startswith("/api"):
+        conv["modelo"] = MODELO_API
+        return "Modo cambiado a *API externa* (Groq Llama 3 70B)."
+    if texto.startswith("/determinista"):
+        conv["modelo"] = MODELO_DETERMINISTA
+        return "Modo cambiado a *Determinista* (plantilla, sin LLM)."
+
+    # ¿Es un modelo LiteLLM escrito directamente?
+    if texto and ("/" in texto and not texto.startswith("/")):
+        # Podría ser "ollama/qwen2.5:7b" escrito por el usuario
+        if any(prefix in texto for prefix in ("ollama/", "groq/", "gpt-", "gemini/")):
+            conv["modelo"] = texto.strip()
+            return f"Modelo cambiado a *{texto.strip()}*."
+
+    if texto.startswith("/chat"):
+        # Entrar en modo chat libre
+        if conv["modelo"] == MODELO_DETERMINISTA:
+            return (
+                "El modo chat requiere un LLM activo. "
+                "Cambia a /qwen o /api primero."
+            )
+        conv["estado"] = Estado.CHAT
+        return (
+            "Modo chat activado. Pregúntame sobre riesgo térmico, "
+            "factores, recomendaciones…\n"
+            "/start para volver al formulario."
+        )
+
+    if texto.startswith("/help"):
+        return (
+            "Comandos:\n"
+            "/start — Formulario de predicción\n"
+            "/chat — Chatear con el LLM\n"
+            "/model — Ver / cambiar modelo\n"
+            "  /qwen — Qwen local  (1.5B CPU / 7B GPU)\n"
+            "  /api — API externa  (Groq)\n"
+            "  /determinista — Sin LLM (plantilla)\n"
+            "/help — Esto"
+        )
+
+    # ── Modo chat libre ────────────────────────────────────────────────
+    if estado == Estado.CHAT:
+        if texto.lower() in ("salir", "exit"):
+            conv["estado"] = Estado.IDLE
+            return "Saliendo del chat. /start para el formulario."
+        # Responder con LLM + RAG (o raw si el modelo no es Ollama)
+        config = LLMConfig(model=conv["modelo"])
+        res = ask_with_rag(texto, k_factores=3, k_docs=3, config=config)
+        ans = res.get("answer")
+        if ans:
+            return ans
+        return f"El LLM no respondió. Revisa que {conv['modelo']} esté disponible."
 
     if estado == Estado.IDLE:
         return "Envía /start para comenzar."
@@ -627,6 +761,13 @@ async def procesar_callback(chat_id: int, callback_data: str) -> tuple[str | Non
             return "Escribe el nombre del deporte:", False
         else:
             data["deporte"] = DEPORTES.get(callback_data, callback_data)
+            # El MET del deporte es más fiable que el adjetivo que elija el
+            # usuario: 8 MET de tenis individual son muy_intensa aunque él haya
+            # dicho "moderada". Si el deporte no está en la tabla, se respeta.
+            nivel = nivel_actividad_de_deporte(callback_data)
+            if nivel:
+                data["nivel_actividad"] = nivel
+                data["_nivel_desde_deporte"] = True
     elif estado == Estado.GUARDAR_PERFIL:
         if callback_data == "guardar_si":
             data["_esperando_alias"] = True
@@ -694,13 +835,25 @@ async def ejecutar_prediccion(chat_id: int) -> str:
         logger.exception("Error en predicción")
         return f"Error al calcular el riesgo: {exc}"
 
-    # Intentar LLM, fallback a plantilla
-    texto = await _format_with_llm(result)
-    if texto is None:
-        texto = _format_template(result)
-
+    # Respuesta según el modelo elegido
+    modelo = conv.get("modelo", MODELO_DETERMINISTA)
     lugar = data.get("lugar")
-    return f"{lugar}\n\n{texto}" if lugar else texto
+    if modelo != MODELO_DETERMINISTA:
+        config = LLMConfig(model=modelo)
+        texto = await asyncio.to_thread(ask_con_perfil, perfil, result, config, lugar)
+        if texto:
+            logger.info("Respuesta redactada por %s", modelo)
+        else:
+            # Sin esta línea la degradación es invisible: el usuario ve la
+            # plantilla y cree que el LLM está funcionando.
+            logger.warning("%s no contestó; se responde con la plantilla", modelo)
+    else:
+        texto = None
+        logger.info("Modo determinista: respuesta con plantilla")
+    if not texto:
+        texto = _format_template(result, lugar)
+
+    return texto
 
 
 async def enviar_mensaje(
@@ -871,8 +1024,18 @@ async def procesar_update(update: dict) -> None:
         logger.info("Mensaje de %s: %s", chat_id, texto[:50])
 
         if texto.startswith("/start"):
-            await procesar_mensaje(chat_id, texto)
+            respuesta = await procesar_mensaje(chat_id, texto)
+            if respuesta:
+                await enviar_mensaje(chat_id, respuesta)
             await enviar_siguiente_pregunta(chat_id)
+            return
+
+        if texto.startswith("/model"):
+            conv_actual = _conversaciones.get(chat_id, {})
+            modelo_act = conv_actual.get("modelo", MODELO_DETERMINISTA)
+            texto_resp = await procesar_mensaje(chat_id, texto)
+            if texto_resp:
+                await enviar_mensaje(chat_id, texto_resp, kb=_kb_modelos(modelo_act))
             return
 
         respuesta = await procesar_mensaje(chat_id, texto)
@@ -885,6 +1048,38 @@ async def procesar_update(update: dict) -> None:
         chat_id = cb["message"]["chat"]["id"]
         data = cb.get("data", "")
         logger.info("Callback de %s: %s", chat_id, data[:30])
+
+        # Cambio de modelo inline
+        if data and data.startswith("modelo_"):
+            modelo = data[7:]
+            conv_post = _conversaciones.setdefault(chat_id, {"estado": Estado.IDLE, "data": {}})
+            conv_post["modelo"] = modelo
+            try:
+                await _tg("answerCallbackQuery", {
+                    "callback_query_id": cb["id"],
+                    "text": f"Modelo: {modelo}" if modelo != MODELO_DETERMINISTA else "Modo determinista",
+                })
+            except Exception:
+                pass
+            await _tg("editMessageText", {
+                "chat_id": chat_id,
+                "message_id": cb["message"]["message_id"],
+                "text": f"✓ Modelo cambiado a: `{modelo}`" if modelo != MODELO_DETERMINISTA else "✓ Modo determinista (sin LLM)",
+                "parse_mode": "Markdown",
+            })
+            return
+
+        # Salir del chat
+        if data == "__salir_chat__":
+            conv_post = _conversaciones.get(chat_id)
+            if conv_post:
+                conv_post["estado"] = Estado.IDLE
+            try:
+                await _tg("answerCallbackQuery", {"callback_query_id": cb["id"]})
+            except Exception:
+                pass
+            await enviar_mensaje(chat_id, "Saliendo del chat. /start para el formulario.")
+            return
 
         # Guardar estado antes de procesar para detectar toggles multiselect
         conv_pre = _conversaciones.get(chat_id)
@@ -921,12 +1116,49 @@ async def procesar_update(update: dict) -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────
 
+class _OcultarToken(logging.Filter):
+    """Tapa el token de Telegram en cualquier linea que pase por el log.
+
+    La Bot API lleva el token en la RUTA (api.telegram.org/bot<TOKEN>/sendMessage) y
+    httpx registra la URL entera en INFO. El resultado era el token en claro en cada
+    linea de logs/bot.log — un fichero que se rota y se queda en disco, y con el que
+    cualquiera puede controlar el bot.
+    """
+
+    _MARCA = "bot<TOKEN_OCULTO>"
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if token:
+            if isinstance(record.msg, str) and token in record.msg:
+                record.msg = record.msg.replace(f"bot{token}", self._MARCA).replace(token, "<OCULTO>")
+            if record.args:
+                record.args = tuple(
+                    a.replace(f"bot{token}", self._MARCA).replace(token, "<OCULTO>")
+                    if isinstance(a, str) else a
+                    for a in (record.args if isinstance(record.args, tuple) else (record.args,))
+                )
+        return True
+
+
 def _setup_logging() -> None:
-    """Logging a consola + archivo rotativo en logs/bot.log."""
+    """Logging a consola + archivo rotativo en logs/bot.log.
+
+    Idempotente: `run_bot.sh` reinicia el proceso en bucle y, sin esta guarda, cada
+    arranque anadia otro par de handlers al root y cada linea salia repetida.
+    """
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
+    root = logging.getLogger()
+    if any(getattr(h, "_climasafe", False) for h in root.handlers):
+        return
+    # basicConfig() de terceros deja un handler suelto que duplica todo
+    for h in list(root.handlers):
+        root.removeHandler(h)
+
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    filtro = _OcultarToken()
 
     # Consola
     console = logging.StreamHandler(sys.stdout)
@@ -938,10 +1170,16 @@ def _setup_logging() -> None:
     )
     file_handler.setFormatter(formatter)
 
-    root = logging.getLogger()
+    for h in (console, file_handler):
+        h.addFilter(filtro)
+        h._climasafe = True          # marca para no volver a anadirlos
+        root.addHandler(h)
     root.setLevel(logging.INFO)
-    root.addHandler(console)
-    root.addHandler(file_handler)
+
+    # httpx registra la URL completa de cada peticion, token incluido. El filtro ya
+    # lo tapa, pero no hace falta ese ruido: una linea por peticion HTTP no aporta
+    # nada cuando ya se loguea el mensaje y la respuesta.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def main() -> None:

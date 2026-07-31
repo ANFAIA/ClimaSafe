@@ -33,8 +33,8 @@ class TestOrdenCampos:
     def test_estados_en_orden(self):
         """Verifica que todos los estados están en FIELD_LABELS y en orden."""
         order = list(Estado)
-        # IDLE y DONE no tienen campo
-        no_campo = {Estado.IDLE, Estado.DONE}
+        # IDLE, DONE y CHAT no tienen campo (CHAT es modo chat libre, no formulario)
+        no_campo = {Estado.IDLE, Estado.DONE, Estado.CHAT}
         etiquetados = [e for e in order if e not in no_campo]
         for est in etiquetados:
             assert est in FIELD_LABELS, f"Falta FIELD_LABELS para {est}"
@@ -274,12 +274,15 @@ class TestTemplate:
     def test_template_siempre_funciona(self):
         """La plantilla no requiere LLM ni API key."""
         result = {
+            "clase_final": 2,
             "clase_final_label": "PELIGRO",
             "perfil": {"calor": {"prob_personalizada": 0.72}},
+            "perfil_usuario": {"hora_inicio": 15, "duracion_actividad_h": 1},
             "weather": {
                 "provincia": "Sevilla",
                 "current": {"t2m_c": 38.5, "rh": 45},
-                "perfil_horario": [{"hora": 15, "HI": 39.0}],
+                "uv_index": 8,
+                "perfil_horario": [{"hora": 15, "HI": 39.0, "temp": 38.0}],
             },
             "recomendaciones": [
                 "No te expongas al sol",
@@ -288,11 +291,132 @@ class TestTemplate:
                 "Evita esfuerzos",
             ],
         }
+        texto = _format_template(result, "Sevilla")
+        assert "🟡 Nivel de riesgo: PELIGRO (72%)" in texto
+        assert "🌡️ Temperatura prevista: 38.0 °C" in texto
+        assert "☀️ Índice UV (media): 8" in texto
+        assert "Recomendación:" in texto
+        assert "Sevilla — Riesgo PELIGRO (72%)" in texto
+
+
+class TestParteFinal:
+    """BOT-005: el parte incluye riesgo con %, temperatura y UV, no solo la clase."""
+
+    def _resultado(self, lugar="Moaña, Pontevedra"):
+        return {
+            "clase_final": 1,
+            "clase_final_label": "PRECAUCIÓN",
+            "perfil": {"calor": {"prob_personalizada": 0.2}},
+            "perfil_usuario": {"hora_inicio": 8, "duracion_actividad_h": 2},
+            "weather": {
+                "provincia": "Pontevedra",
+                "current": {"t2m_c": 30.0, "rh": 60},
+                "uv_index": 6,
+                "perfil_horario": [
+                    {"hora": 8, "HI": 25.0, "temp": 20.0},
+                    {"hora": 9, "HI": 26.0, "temp": 22.0},
+                    {"hora": 10, "HI": 28.0, "temp": 24.0},
+                ],
+            },
+            "recomendaciones": ["Mantente hidratado"],
+        }
+
+    def test_parte_incluye_riesgo_temperatura_uv_y_ubicacion(self):
+        texto = _format_template(self._resultado(), "Moaña, Pontevedra")
+        assert "Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%)" in texto
+        assert "🟡 Nivel de riesgo: PRECAUCIÓN (20%)" in texto
+        # Temperatura: media en las horas de actividad (8-9 → (20+22)/2)
+        assert "🌡️ Temperatura prevista: 21.0 °C" in texto
+        assert "☀️ Índice UV (media): 6" in texto
+
+    def test_sin_perfil_horario_cae_a_temperatura_actual_y_uv_nd(self):
+        result = self._resultado()
+        result["weather"].pop("perfil_horario")
+        result["weather"]["current"] = {"t2m_c": 22.0, "rh": 70}
+        result["weather"]["uv_index"] = None
         texto = _format_template(result)
-        assert "PELIGRO" in texto
-        assert "Sevilla" in texto
-        assert "72%" in texto or "0.72" in texto
-        assert "No te expongas" in texto
+        assert "🌡️ Temperatura prevista: 22.0 °C" in texto
+        assert "☀️ Índice UV (media): n/d" in texto
+
+
+class TestStartConPerfil:
+    """BOT-005: con perfil previo, /start avisa y pregunta la intensidad."""
+
+    @pytest.mark.asyncio
+    async def test_start_con_perfil_avisa_y_pregunta_intensidad(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        class _FakeDB:
+            def buscar_por_telegram(self, chat_id: str):
+                return {"id": 7, "alias": "Aldán"} if chat_id == "1" else None
+
+            def obtener_perfil(self, _pid: int):
+                return {
+                    "alias": "Aldán", "sexo": "hombre", "edad": 57,
+                    "comorbilidades": [], "farmacos": [], "situacion_social": [],
+                }
+
+        enviados: list[str] = []
+
+        async def _fake_tg(method: str, **kwargs):
+            if method == "sendMessage":
+                enviados.append(kwargs["text"])
+            return {"ok": True, "result": {}}
+
+        monkeypatch.setattr(mod, "_db", _FakeDB())
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+
+        assert len(enviados) == 2, enviados
+        assert "se cargaron tus datos previos" in enviados[0].lower(), enviados[0]
+        assert "¿Qué intensidad tendrá la actividad?" in enviados[1], enviados
+        assert _conversaciones[1]["estado"] == Estado.ACTIVIDAD
+
+
+class TestRecomendacionContexto:
+    """BOT-005: la recomendación se adapta al contexto, no es SPF 30+ siempre."""
+
+    @staticmethod
+    def _resultado(t=None, uv=None, wc=None, hi=None, clase=1):
+        return {
+            "clase_final": clase,
+            "weather": {
+                "current": {"t2m_c": t},
+                "uv_index": uv,
+            },
+            "modelos": {
+                "Formula": {
+                    "frio": {"wind_chill_c": wc},
+                    "calor": {"heat_index_c": hi},
+                },
+            },
+        }
+
+    def test_frio_recomienda_abrigo_sin_spf(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+        rec = recomendacion_resumen(self._resultado(t=5, uv=1, wc=-2, hi=5))
+        assert "abrígate" in rec
+        assert "SPF" not in rec
+
+    def test_calor_con_uv_recomienda_spf_y_evitar_horas_centrales(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+        rec = recomendacion_resumen(self._resultado(t=34, uv=7, wc=20, hi=36))
+        assert "Mantente hidratado" in rec
+        assert "SPF 30+" in rec
+        assert "evita la exposición prolongada entre las horas de mayor calor" in rec
+
+    def test_tiempo_suave_sin_uv_no_impone_spf(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+        rec = recomendacion_resumen(self._resultado(t=22, uv=2, wc=15, hi=22, clase=0))
+        assert "SPF" not in rec
+        assert "hidratado" in rec
+
+    def test_peligro_recomienda_no_hacer_actividad(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+        rec = recomendacion_resumen(self._resultado(t=38, uv=9, wc=25, hi=42, clase=2))
+        assert "evita la actividad física" in rec
 
 
 class TestFlujoCompleto:
@@ -392,11 +516,11 @@ class TestFlujoCompleto:
                 "recomendaciones": [],
             }
 
-        async def _sin_llm(_result):
+        def _sin_llm(_perfil, _result, _config=None):
             return None
 
         monkeypatch.setattr(mod, "predict_ensemble", _fake_predict)
-        monkeypatch.setattr(mod, "_format_with_llm", _sin_llm)
+        monkeypatch.setattr("climasafeai.llm.rag_qwen.ask_con_perfil", _sin_llm)
 
         _conversaciones.clear()
         _conversaciones[1] = {"estado": Estado.DONE, "data": {
@@ -455,3 +579,108 @@ class TestGeocodificacion:
         from climasafeai.bot.geocoding import buscar_lugar
         assert buscar_lugar("") is None
         assert buscar_lugar("   ") is None
+
+
+class TestDeporteMET:
+    """El deporte no tiene coeficiente propio: fija la intensidad por su MET.
+
+    Fuente de los MET: 2024 Adult Compendium of Physical Activities
+    (doi:10.1016/j.jshs.2023.10.010).
+    """
+
+    @pytest.mark.parametrize("deporte, nivel", [
+        ("pasear", "moderada"),          # 3.5 MET
+        ("senderismo", "intensa"),       # 6.0
+        ("futbol", "intensa"),           # 7.0
+        ("tenis", "muy_intensa"),        # 8.0
+        ("correr", "muy_intensa"),       # 10.5
+    ])
+    def test_met_fija_la_intensidad(self, deporte, nivel):
+        from climasafeai.features.personalizacion import nivel_actividad_de_deporte
+        assert nivel_actividad_de_deporte(deporte) == nivel
+
+    def test_deporte_desconocido_no_inventa_intensidad(self):
+        """El pádel no está en el Compendium: mejor None que un número inventado."""
+        from climasafeai.features.personalizacion import nivel_actividad_de_deporte
+        assert nivel_actividad_de_deporte("padel") is None
+        assert nivel_actividad_de_deporte(None) is None
+
+    def test_solo_se_ofrecen_deportes_con_met(self):
+        from climasafeai.bot.telegram_bot import DEPORTES
+        from climasafeai.features.personalizacion import DEPORTE_MET
+        assert set(DEPORTES) <= set(DEPORTE_MET), "hay deportes en el menú sin MET medido"
+
+    @pytest.mark.asyncio
+    async def test_elegir_deporte_sobrescribe_la_intensidad(self):
+        _conv_limpia()
+        _conversaciones[1]["estado"] = Estado.DEPORTE
+        _conversaciones[1]["data"]["nivel_actividad"] = "moderada"   # lo que dijo él
+        await procesar_callback(1, "tenis")                          # 8 MET
+        assert _conversaciones[1]["data"]["nivel_actividad"] == "muy_intensa"
+        assert _conversaciones[1]["data"]["_nivel_desde_deporte"] is True
+
+    @pytest.mark.asyncio
+    async def test_deporte_escrito_a_mano_respeta_la_intensidad(self):
+        _conv_limpia()
+        _conversaciones[1]["estado"] = Estado.DEPORTE
+        _conversaciones[1]["data"]["nivel_actividad"] = "ligera"
+        _conversaciones[1]["data"]["_texto_deporte"] = True
+        await procesar_mensaje(1, "padel")
+        assert _conversaciones[1]["data"]["deporte"] == "padel"
+        assert _conversaciones[1]["data"]["nivel_actividad"] == "ligera"
+
+
+class TestLogging:
+    """BOT-004: el token no puede acabar en el log, y las lineas no se duplican."""
+
+    def _preparar(self, tmp_path, monkeypatch, token="123456789:AAFAKE_token_de_prueba_xxxxxxxxxxxx"):
+        import logging
+        from climasafeai.bot.telegram_bot import _setup_logging
+        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+        monkeypatch.chdir(tmp_path)
+        raiz = logging.getLogger()
+        previos = list(raiz.handlers)
+        for h in previos:
+            raiz.removeHandler(h)
+        yield_data = (raiz, previos, token, _setup_logging)
+        return yield_data
+
+    def test_el_token_no_aparece_en_el_log(self, tmp_path, monkeypatch):
+        import logging
+        raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
+        try:
+            setup()
+            logging.getLogger("httpx").setLevel(logging.INFO)
+            logging.getLogger("httpx").info(
+                "HTTP Request: POST https://api.telegram.org/bot%s/sendMessage" % token
+            )
+            for h in raiz.handlers:
+                h.flush()
+            texto = (tmp_path / "logs" / "bot.log").read_text()
+            assert token not in texto
+            assert "TOKEN_OCULTO" in texto
+        finally:
+            for h in list(raiz.handlers):
+                raiz.removeHandler(h)
+            for h in previos:
+                raiz.addHandler(h)
+
+    def test_varios_arranques_no_duplican_las_lineas(self, tmp_path, monkeypatch):
+        """run_bot.sh reinicia en bucle: cada arranque anadia otro par de handlers."""
+        import logging
+        raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
+        try:
+            setup()
+            setup()
+            setup()
+            assert len(raiz.handlers) == 2, "un arranque no puede anadir handlers de mas"
+            logging.getLogger("prueba").info("una sola vez")
+            for h in raiz.handlers:
+                h.flush()
+            lineas = [l for l in (tmp_path / "logs" / "bot.log").read_text().splitlines() if l.strip()]
+            assert len(lineas) == 1, f"la linea se ha escrito {len(lineas)} veces"
+        finally:
+            for h in list(raiz.handlers):
+                raiz.removeHandler(h)
+            for h in previos:
+                raiz.addHandler(h)
