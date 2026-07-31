@@ -11,6 +11,7 @@ o directamente:
 """
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -23,7 +24,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from climasafeai.db.manager import DBManager
+from climasafeai.db.manager import CampoDesconocidoError, DBManager
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -556,27 +559,38 @@ async def api_predict(body: dict, date: str | None = None):
     # no deben crear filas en SQLite ni contar como consulta del usuario.
     if body.get("persistir", True):
         # Guardar perfil en SQLite (sin perfil_id ni alias en datos)
+        #
+        # Esto va DESPUÉS de la predicción a propósito: si el guardado falla, el
+        # usuario ya tiene su riesgo calculado. Antes un campo de más aquí —`peso`,
+        # que no es columna de `perfiles`— tumbaba la peticion entera con un 500
+        # mudo, aunque la predicción hubiera salido bien.
         alias = raw_perfil.get("alias")
-        datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
-        # Quitar campos internos que no deben persistir en SQLite
-        for _k in ("_perfil_horario", "perfil_id", "alias"):
-            datos_perfil.pop(_k, None)
-        datos_perfil["lat"] = lat
-        datos_perfil["lon"] = lon
-        datos_perfil["provincia"] = provincia
-        if alias:
-            existente = _db.buscar_por_alias(alias)
-            if existente:
-                perfil_id = existente["id"]
-                datos_perfil["alias"] = alias
+        try:
+            datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
+            # Quitar campos internos que no deben persistir en SQLite
+            for _k in ("_perfil_horario", "perfil_id", "alias"):
+                datos_perfil.pop(_k, None)
+            datos_perfil["lat"] = lat
+            datos_perfil["lon"] = lon
+            datos_perfil["provincia"] = provincia
+            if alias:
+                existente = _db.buscar_por_alias(alias)
+                if existente:
+                    perfil_id = existente["id"]
+                    datos_perfil["alias"] = alias
+                    _db.actualizar_perfil(perfil_id, datos_perfil)
+                else:
+                    datos_perfil["alias"] = alias
+                    perfil_id = _db.crear_perfil(datos_perfil)
+            elif perfil_id:
                 _db.actualizar_perfil(perfil_id, datos_perfil)
             else:
-                datos_perfil["alias"] = alias
                 perfil_id = _db.crear_perfil(datos_perfil)
-        elif perfil_id:
-            _db.actualizar_perfil(perfil_id, datos_perfil)
-        else:
-            perfil_id = _db.crear_perfil(datos_perfil)
+        except CampoDesconocidoError as exc:
+            # El error se devuelve, no se esconde: un campo mal escrito en el
+            # frontend tiene que salir a la luz, no tirarse en silencio.
+            result["error_perfil"] = str(exc)
+            logger.warning("Perfil no guardado: %s", exc)
 
         # Guardar consulta
         clase = result.get("clase_final_label", result.get("clase_final"))
@@ -1090,19 +1104,27 @@ async def api_save_perfil(body: dict):
     perfil_id = body.get("perfil_id")
     datos = {k: v for k, v in body.items() if k not in ("perfil_id", "alias")}
 
-    if alias:
-        existente = _db.buscar_por_alias(alias)
-        if existente:
-            perfil_id = existente["id"]
-            datos["alias"] = alias
+    # Mismo fallo que /api/predict: un campo que no sea columna de `perfiles`
+    # llegaba al INSERT y salia como 500 mudo. Aqui SI es un error de verdad —
+    # guardar el perfil es lo unico que hace este endpoint— asi que se devuelve
+    # el error en vez de un perfil_id que no existe.
+    try:
+        if alias:
+            existente = _db.buscar_por_alias(alias)
+            if existente:
+                perfil_id = existente["id"]
+                datos["alias"] = alias
+                _db.actualizar_perfil(perfil_id, datos)
+            else:
+                datos["alias"] = alias
+                perfil_id = _db.crear_perfil(datos)
+        elif perfil_id:
             _db.actualizar_perfil(perfil_id, datos)
         else:
-            datos["alias"] = alias
             perfil_id = _db.crear_perfil(datos)
-    elif perfil_id:
-        _db.actualizar_perfil(perfil_id, datos)
-    else:
-        perfil_id = _db.crear_perfil(datos)
+    except CampoDesconocidoError as exc:
+        logger.warning("Perfil no guardado: %s", exc)
+        return {"error": str(exc)}
 
     return {"perfil_id": perfil_id}
 

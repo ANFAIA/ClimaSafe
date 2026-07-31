@@ -1,0 +1,84 @@
+"""Tests del endpoint /api/predict de la web (WEB-003).
+
+El fallo que blindan: el endpoint escribía en SQLite todo lo que le mandaba el
+frontend, así que un campo que no fuera columna de `perfiles` —`peso`, por ejemplo,
+que no lo es— tumbaba la petición entera con un 500 mudo, aunque la predicción
+hubiera salido bien.
+"""
+
+import pathlib
+import tempfile
+
+import pytest
+
+from climasafeai.db.manager import CampoDesconocidoError, DBManager
+
+
+@pytest.fixture
+def db():
+    """Una BD limpia con el esquema real del proyecto."""
+    gestor = DBManager(tempfile.mktemp(suffix=".db"))
+    esquema = pathlib.Path("data/schema.sql").read_text(encoding="utf-8")
+    with gestor.conn() as c:
+        c.executescript(esquema)
+    return gestor
+
+
+def test_columnas_perfiles_se_leen_del_esquema(db):
+    cols = db.columnas_perfiles()
+    assert {"alias", "edad", "sexo", "porcentaje_grasa", "aclimatado"} <= cols
+    # Los dos campos que el modelo no usa y que la tabla nunca tuvo
+    assert "peso" not in cols
+    assert "altura" not in cols
+
+
+def test_perfil_valido_se_guarda(db):
+    pid = db.crear_perfil({"alias": "alex", "edad": 21, "sexo": "hombre"})
+    assert db.obtener_perfil(pid)["edad"] == 21
+
+
+def test_campo_desconocido_se_rechaza_con_su_nombre(db):
+    """El error dice QUÉ campo falla; antes salía un OperationalError de sqlite."""
+    with pytest.raises(CampoDesconocidoError) as exc:
+        db.crear_perfil({"alias": "b", "edad": 21, "peso": 86})
+    assert "peso" in str(exc.value)
+    assert exc.value.campos == ["peso"]
+
+
+def test_varios_campos_desconocidos_se_listan(db):
+    with pytest.raises(CampoDesconocidoError) as exc:
+        db.crear_perfil({"alias": "c", "peso": 86, "altura": 180})
+    assert exc.value.campos == ["altura", "peso"]
+
+
+def test_actualizar_perfil_valida_igual(db):
+    pid = db.crear_perfil({"alias": "d", "edad": 30})
+    with pytest.raises(CampoDesconocidoError):
+        db.actualizar_perfil(pid, {"peso": 70})
+
+
+def test_arrays_no_cuentan_como_columnas(db):
+    """comorbilidades y farmacos van a tablas aparte, no son columnas de perfiles."""
+    pid = db.crear_perfil({
+        "alias": "e", "edad": 40,
+        "comorbilidades": ["cardiovascular"],
+        "farmacos": ["diureticos_asa"],
+        "situacion_social": ["vive_solo"],
+    })
+    perfil = db.obtener_perfil(pid)
+    assert perfil["comorbilidades"] == ["cardiovascular"]
+    assert perfil["farmacos"] == ["diureticos_asa"]
+
+
+def test_endpoint_perfil_tambien_valida(db, monkeypatch):
+    """WEB-004: /api/perfil tenia el mismo 500 mudo que /api/predict."""
+    import chat.app as web
+    monkeypatch.setattr(web, "_db", db)
+    import asyncio
+
+    ok = asyncio.run(web.api_save_perfil({"alias": "z", "edad": 30}))
+    assert "perfil_id" in ok and "error" not in ok
+
+    malo = asyncio.run(web.api_save_perfil({"alias": "y", "peso": 80}))
+    assert "error" in malo and "peso" in malo["error"]
+    assert "perfil_id" not in malo

@@ -23,6 +23,18 @@ _SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "schema.
 _FACTORES_JSON = Path(__file__).resolve().parent.parent.parent / "data" / "factores_riesgo.json"
 
 
+class CampoDesconocidoError(ValueError):
+    """El perfil trae campos que no existen en la tabla `perfiles`."""
+
+    def __init__(self, campos: list[str]):
+        self.campos = campos
+        plural = "s" if len(campos) > 1 else ""
+        super().__init__(
+            f"campo{plural} desconocido{plural} en el perfil: {', '.join(campos)}. "
+            "No existe{} en la tabla 'perfiles'.".format("n" if plural else "")
+        )
+
+
 class DBManager:
     def __init__(self, db_path: str | Path | None = None):
         self.db_path = Path(db_path) if db_path else _DB_PATH
@@ -118,6 +130,24 @@ class DBManager:
                 c.execute("ALTER TABLE perfiles ADD COLUMN telegram_chat_id TEXT")
                 c.execute("CREATE INDEX IF NOT EXISTS idx_perfiles_telegram ON perfiles(telegram_chat_id)")
 
+    def columnas_perfiles(self) -> set[str]:
+        """Columnas reales de la tabla `perfiles`, leídas del esquema."""
+        with self.conn() as c:
+            return {r["name"] for r in c.execute("PRAGMA table_info(perfiles)").fetchall()}
+
+    def _validar_campos_perfil(self, escalares: dict) -> None:
+        """Rechaza claves que no son columnas, antes de que lo haga sqlite.
+
+        Sin esto, un campo de más en el perfil llega al INSERT y sale como
+        `sqlite3.OperationalError: table perfiles has no column named X`, que en la
+        API se convierte en un 500 mudo. Escribir mal una clave ya ha costado dos
+        veces en este proyecto (`medicacion` por `farmacos`, `grasa_corporal` por
+        `porcentaje_grasa`), y las dos se descubrieron tarde porque nadie avisaba.
+        """
+        desconocidos = sorted(set(escalares) - self.columnas_perfiles())
+        if desconocidos:
+            raise CampoDesconocidoError(desconocidos)
+
     def tablas(self) -> list[str]:
         with self.conn() as c:
             rows = c.execute(
@@ -139,6 +169,8 @@ class DBManager:
         """
         array_fields = {"comorbilidades", "farmacos", "situacion_social", "ocupacional"}
         escalares = {k: v for k, v in datos.items() if k not in array_fields}
+
+        self._validar_campos_perfil(escalares)
 
         # Booleans: convertir True/False a 1/0
         for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente", "fiesta"):
@@ -225,6 +257,8 @@ class DBManager:
         """Actualiza campos de un perfil. Reemplaza arrays completamente."""
         array_fields = {"comorbilidades", "farmacos", "situacion_social", "ocupacional"}
         escalares = {k: v for k, v in datos.items() if k not in array_fields}
+
+        self._validar_campos_perfil(escalares)
 
         nuevo_aclimatado = None
         if "aclimatado" in escalares:
