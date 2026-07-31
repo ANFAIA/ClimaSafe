@@ -106,7 +106,7 @@ class GitAgent(BaseAgent):
             warnings=warnings,
         )
 
-    def suggest_commit_message(self, *, staged: bool = True) -> AgentResult:
+    def suggest_commit_message(self, *, staged: bool = True, hint: str = "") -> AgentResult:
         guard = self._guard_repo("suggest_commit_message")
         if guard:
             return guard
@@ -125,12 +125,19 @@ class GitAgent(BaseAgent):
         scope_part = f"({scope})" if scope else ""
         files_preview = ", ".join(changed[:3]) + (f" y {len(changed) - 3} más" if len(changed) > 3 else "")
 
-        suggestion = f"{commit_type}{scope_part}: actualiza {files_preview}"
+        # `hint` da un subject real (p. ej. "cierra GIT-001") en vez del
+        # placeholder genérico: lo usa `harness finish` al proponer el commit
+        # de cierre de una feature. Quien lo pase sabe de qué va el cambio;
+        # quien no, recibe la heurística y su aviso de que es un placeholder.
+        suggestion = f"{commit_type}{scope_part}: {hint}" if hint else f"{commit_type}{scope_part}: actualiza {files_preview}"
+        warnings = [] if hint else [
+            "El 'subject' es un placeholder genérico: sustitúyelo por una descripción real del cambio."
+        ]
         return AgentResult(
             True, self.name, "suggest_commit_message",
             "Sugerencia generada — revísala antes de usarla, es un punto de partida.",
             data={"suggested_message": suggestion, "detected_type": commit_type, "changed_files": changed},
-            warnings=["El 'subject' es un placeholder genérico: sustitúyelo por una descripción real del cambio."],
+            warnings=warnings,
         )
 
     def generate_changelog(self, *, since_tag: str | None = None, max_count: int = 100) -> AgentResult:

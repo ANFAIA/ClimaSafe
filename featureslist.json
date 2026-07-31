@@ -215,6 +215,275 @@
       "depends_on": [],
       "started": "2026-07-29",
       "closed": "2026-07-29"
+    },
+    {
+      "id": "LLM-001",
+      "title": "Qwen 2.5 7B local + RAG + skill ClimaSafe + fallback determinista",
+      "description": "Sistema completo de LLM local para ClimaSafe, con tres capas de servicio y RAG integrado para respuestas profundas. Sustituir la dependencia de Groq (LLM externo) por Qwen 2.5 7B corriendo en local. El flujo: el sistema propone al usuario descargar el modelo; si no quiere, bot determinista; si quiere modo conversacional sin fine-tuning, Qwen raw con prompting. El RAG (sqlite-vec ya existente) se integra para que el LLM pueda responder preguntas de fondo citando fuentes (factores, papers, documentación). El problema original con Spacebot (rate limits 8.000 TPM, contexto caro) desaparece porque el modelo es local. Empaquetar como skill publicable en skills.sh con su deploy manifest para que un agente IA monte todo sin Docker.",
+      "acceptance_criteria": [
+        "Fine-tuning LoRA de Qwen 2.5 7B con Unsloth, exportado a GGUF, servido via Ollama o llama.cpp",
+        "Dataset sintético generado a partir de las conversaciones reales del bot (pull de pares datos_respuesta → respuesta_ideal) con al menos 100 ejemplos; cubre todos los estados del formulario y todas las combinaciones de factores",
+        "Tres modos de servicio: (1) Qwen fine-tuneado como mejor experiencia, (2) Qwen raw con prompting como capa intermedia, (3) bot determinista actual sin LLM como fallback seguro",
+        "El sistema detecta si el modelo está disponible y elige el mejor modo automáticamente; el usuario puede forzar el modo determinista aunque tenga el modelo",
+        "RAG integrado con el LLM: cuando el usuario pregunta el porqué (factores, fuentes, papers), el LLM recupera fragmentos de sqlite-vec y los sintetiza citando la fuente",
+        "El RAG indexa documentacion/ completa (riesgo, ML, arquitectura, modelos) y la base de factores, no solo los factores de riesgo actuales",
+        "Skill ClimaSafe publicada en skills.sh: describe las MCP tools, el modelo, los tres modos de servicio, el setup automático y cómo usarlo desde cualquier agente (Flue, Claude Code, opencode)",
+        "Deploy manifest para IA: archivo de instrucciones que un agente lee y ejecuta para montar todo el stack (instalar uv, clonar repo, descargar Qwen, lanzar MCP, lanzar bot) sin Docker ni docker-compose",
+        "make test pasa y el bot determinista sigue funcionando exactamente igual que antes en modo fallback"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-30",
+      "review_rounds": 0,
+      "closed": "2026-07-30"
+    },
+    {
+      "id": "LLM-002",
+      "title": "Fine-tuning de Qwen ejecutado, skill publicada y deploy verificado",
+      "description": "Los tres criterios de LLM-001 que no se pudieron demostrar en su momento, separados para no bloquear lo que ya funciona. (1) El fine-tuning: existen climasafeai/llm/fine_tune.py, el Modelfile y documentacion/llm/guia-fine-tuning-qwen.md, y el dataset ya es real (data/llm/train.jsonl, 135+15 ejemplos con predicciones del pipeline), pero nadie ha ejecutado el entrenamiento: check_ollama() solo ve qwen2.5:1.5b y qwen2.5:7b, no hay ningun modelo climasafe* ni un .gguf ni adaptadores LoRA en models/. Necesita GPU con 8-10GB. (2) La skill: climasafeai/skill/SKILL.md existe pero no se ha verificado que este publicada en el registro de skills.sh. (3) El deploy manifest: DEPLOY_IA.md existe pero nadie lo ha ejecutado de cero en una maquina limpia, que es lo unico que demuestra que sirve. Ojo con el orden: entrenar con el dataset ANTERIOR al 30 de julio no sirve, porque hasta entonces lo generaba un _predecir_fake que solo miraba la edad.",
+      "acceptance_criteria": [
+        "El entrenamiento LoRA se ejecuta y se pega la salida real: epochs, loss final y ruta del adaptador",
+        "El modelo se exporta a GGUF y se sirve en Ollama con el Modelfile, y 'ollama list' muestra el modelo climasafe",
+        "Una conversacion del bot con el modelo fine-tuneado se compara con la misma conversacion con qwen2.5:7b raw, y se pega la salida de las dos",
+        "La skill aparece en el registro de skills.sh y se demuestra con la respuesta del registro, no con el fichero local",
+        "DEPLOY_IA.md se ejecuta de cero en una maquina o contenedor limpio y se pega el log completo",
+        "make test pasa y el bot determinista sigue funcionando igual"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "CHAT-001",
+      "title": "El /chat usa el pipeline: cuestionario conversacional con prediccion real",
+      "description": "Hoy /start y /chat son dos mundos: /start recoge datos con botones y ejecuta predict_ensemble (todos los modelos, clase final, recomendaciones), mientras /chat es solo busqueda documental sobre 27 factores y 509 fragmentos — no ejecuta ningun modelo, no conoce el tiempo y no sabe donde esta el usuario. De ahi que al preguntarle por un paseo conteste '¿sera en condiciones calurosas o frias?' y recite nombres de factores: no puede saberlo. Reproducido: para 'riesgo de un paseo' el RAG devuelve {'tipo':'frio','clave':'vive_solo'} y {'tipo':'frio','clave':'encamado'}, sin coeficientes y del tipo equivocado. La idea es que /chat aplique la misma metodologia que el MCP y la web —ejecutar los modelos, ver cual sale peligroso y dar su conclusion— pero conversando en vez de con botones: que detecte cuando la pregunta es de riesgo, pida en lenguaje natural solo lo que le falte, y llame a predict_ensemble. Es la union de lo que hoy esta separado, y lo que se pidio como 'que el LLM te haga el cuestionario de forma mas humana'.",
+      "acceptance_criteria": [
+        "Una conversacion en /chat que empiece por 'quiero salir a caminar por Aldan esta tarde' acaba en una prediccion real, con la salida de predict_ensemble pegada como evidencia",
+        "El LLM pide en lenguaje natural solo los campos que faltan y no vuelve a preguntar lo que el usuario ya dijo",
+        "Nunca inventa datos que no tiene: si falta la ubicacion la pide, y las coordenadas salen de Nominatim o del boton de Telegram, jamas del modelo",
+        "El calculo del riesgo lo hace SIEMPRE predict_ensemble, no el LLM: se demuestra con un test que falla si el LLM devuelve una clase que no coincide con la del pipeline",
+        "El coste en tokens de una conversacion completa se mide y se pega, y se compara con los ~700 del /start actual",
+        "make test pasa y /start sigue funcionando exactamente igual"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "RAG-002",
+      "title": "El RAG indexa los coeficientes y el DOI, no solo el nombre del factor",
+      "description": "El RAG devuelve el nombre y la categoria de cada factor pero no su coeficiente ni su fuente, asi que el LLM solo puede decir generalidades: 'no aclimatarse puede aumentar el riesgo' en vez de 'los diureticos de asa multiplican el riesgo por 1.3 (Sokas 2023)'. Los datos ya estan en la BD —_factores_implementados devuelve coef, nombre y doi— pero _factor_text no los mete en el texto que se embebe. Se nota especialmente porque el SYSTEM_PROMPT prohibe inventar: sin numeros en el contexto, el modelo no puede dar numeros, y queda como si no supiera.",
+      "acceptance_criteria": [
+        "El texto indexado de cada factor incluye su coeficiente y su DOI cuando existe, y se demuestra con la salida de search_factores",
+        "Una pregunta del tipo '¿cuanto sube el riesgo con diureticos?' se responde con el numero y la fuente, y se pega la respuesta",
+        "Los factores de calor y de frio se distinguen en la respuesta: no se citan factores de frio para una pregunta de calor",
+        "El reindexado no duplica filas: RAG.stats() da el mismo total de factores antes y despues",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-003",
+      "title": "Mensaje de bienvenida del bot: que se entienda que hace /start y que hace /chat",
+      "description": "Ahora mismo el bot no explica sus dos modos, y el usuario no tiene forma de saber que /start es el cuestionario con botones y /chat es hablar con el LLM. El /help existe pero hay que saber que existe. Lo pedido: un mensaje de entrada que diga que hace cada uno, y que se pueda volver a ver.",
+      "acceptance_criteria": [
+        "El primer contacto con el bot (o /help) explica en dos lineas que hace /start y que hace /chat, sin listar comandos que el usuario no necesita",
+        "Deja claro que /chat no calcula riesgo mientras CHAT-001 no este hecha, para no prometer lo que no hay",
+        "Se prueba en Telegram y se pega la conversacion",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-004",
+      "title": "El log del bot filtra el token y deja de escribir cada linea tres veces",
+      "description": "Dos problemas en logs/bot.log. (1) SEGURIDAD: el token de Telegram aparece en claro en cada URL, porque httpx loguea la peticion completa y la Bot API lleva el token en la ruta. Cualquiera que lea el log —que se rota y se queda en disco— puede controlar el bot. (2) Cada linea se escribe tres veces: un 'INFO:httpx:' y dos con el formato propio, porque _setup_logging anade handlers al root y algo mas ya llamo a basicConfig. Con 5 MB por fichero y 3 backups, se gasta el triple de rotacion en ruido.",
+      "acceptance_criteria": [
+        "El token no aparece en logs/bot.log: se demuestra con un grep del token sobre el log despues de una conversacion completa",
+        "Cada linea aparece UNA vez: se demuestra contando lineas repetidas en el log",
+        "Los reinicios del bot no acumulan handlers: arrancar y parar tres veces no multiplica las lineas",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ARNES-001",
+      "title": "make typecheck: existe en el contrato del implementer pero no en el Makefile",
+      "description": ".opencode/agents/implementer.md exige ejecutar make lint, make typecheck, make test e ./init.sh antes de devolver el control, y pegar la salida real. El target typecheck no existe en el Makefile, asi que ese paso se salta siempre y el contrato queda a medias. Hay que decidir: o se anade el target (mypy o ty sobre climasafeai/ y agents/) o se quita de la instruccion. Anadirlo con el codigo actual va a sacar errores preexistentes, asi que conviene arrancar en modo no bloqueante y apretar despues.",
+      "acceptance_criteria": [
+        "O existe el target make typecheck y se pega su salida, o la instruccion desaparece de .opencode/agents/implementer.md y de la copia de .claude/",
+        "Si se anade: queda claro si es bloqueante o informativo, y por que",
+        "Si se anade: make lint y make typecheck no se pisan (ruff no hace type checking)",
+        "init.sh sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BAYES-001",
+      "title": "Modelo bayesiano jerarquico por provincias",
+      "description": "Pedido en la reunion con los tutores del 30/07/2026. Hoy los modelos tabulares y la LSTM tratan cada provincia como una categoria mas, y las provincias con pocos datos comparten los mismos parametros que Madrid o Sevilla. Un modelo jerarquico deja que cada provincia tenga su propia curva pero informada por la nacional (partial pooling): las provincias con pocos episodios se apoyan en el resto en vez de sobreajustar, y salen intervalos de credibilidad en vez de una probabilidad puntual. Encaja con lo que ya hay: climasafeai/models/bayes.py existe y tiene discretizar_grasa y contrafactual, y el ensemble ya compone en odds, que es el terreno natural de un modelo bayesiano. RESEARCH-001 menciona 'Bayesianas' de pasada; esta feature la concreta.",
+      "acceptance_criteria": [
+        "Un modelo jerarquico por provincia entrenado con partial pooling, con la salida del muestreo pegada (divergencias, r_hat, ESS)",
+        "Se compara contra el ensemble actual en las mismas particiones temporales y se pega la tabla: por provincia y agregado",
+        "Se demuestra el beneficio en las provincias con menos datos, que es la razon de ser del modelo: comparativa explicita entre provincias con muchos y pocos episodios",
+        "La salida da intervalo de credibilidad, no solo la clase, y se documenta como se traduce a las tres clases SEGURO/PRECAUCION/PELIGRO",
+        "Queda decidido y escrito si entra en el ensemble, lo sustituye, o se queda como modelo de contraste",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "LLM-003",
+      "title": "Benchmark de modelos locales: Qwen, Gemma y ligeros tipo Kimi",
+      "description": "Pedido en la reunion: probar varios modelos y montar un benchmark de modelos locales, no quedarse con Qwen porque fue el primero. Hoy la eleccion es a dedo: MODELO_LOCAL apunta a qwen2.5:1.5b y el 7B se descubrio comparando dos respuestas a mano — asi se vio que el 1.5B contesta con titulares en negrita, indistinguible de la plantilla, y el 7B da el parte de una linea. Eso no es un benchmark, es una anecdota. Hace falta medir sobre el mismo conjunto de casos: calidad de la redaccion, si respeta el formato pedido, si se inventa numeros que no estan en el resultado del pipeline, latencia y memoria. El data/llm/val.jsonl (15 ejemplos con prediccion real) sirve de conjunto de evaluacion. Incluye el fine-tuning de Gemma ademas del de Qwen, que es lo que se pidio explicitamente.",
+      "acceptance_criteria": [
+        "Un script reproducible evalua N modelos locales sobre data/llm/val.jsonl y saca una tabla comparable, no impresiones",
+        "Las metricas incluyen al menos: se ajusta al formato pedido, no introduce cifras ausentes en el resultado del pipeline, latencia por respuesta y memoria/VRAM",
+        "Se prueban Qwen y Gemma, y al menos un modelo ligero de los que se mencionaron (tipo Kimi), con su version y tamano anotados",
+        "La comparacion incluye el modelo fine-tuneado cuando LLM-002 este hecho, y hasta entonces se dice explicitamente que falta",
+        "Se elige un modelo por defecto POR LOS NUMEROS y se cambia _modelo_por_defecto() en consecuencia, dejando escrito el porque",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ARNES-002",
+      "title": "Harness propio con ADK o DeepAgents: tools limitadas, guardrails y presupuesto de tokens",
+      "description": "Pedido en la reunion: dejar de depender de opencode y montar un harness propio sobre Google ADK (https://adk.dev/) o DeepAgents de LangChain (https://info.langchain.com/deep-agent), que los tutores recomiendan por ser open source. La idea de fondo: el proyecto expone su logica como AGENTE en vez de como API. Tres motivos concretos, los tres ya vividos en este repo: (1) TOKENS — spacebot gastaba ~7.900 por mensaje, 4.700 solo de su propio system prompt, y con 8.000 TPM daba para un mensaje por minuto; un harness propio decide que va en el prompt. (2) TOOLS LIMITADAS — hoy un agente con acceso a bash puede hacer cualquier cosa; con un catalogo cerrado de tools solo puede hacer lo que le dejes. (3) GUARDRAILS — hace falta que 'hackeame el ordenador de X' no llegue a ninguna tool, y hoy no hay nada que lo impida. Sustituye a .opencode/ si sale bien, asi que conviene decidirlo antes de invertir mas en las instrucciones actuales.",
+      "acceptance_criteria": [
+        "Una comparativa escrita de ADK y DeepAgents sobre este caso concreto —tools, guardrails, coste de tokens, encaje con los 26 agentes Python que ya existen— y una eleccion justificada",
+        "El harness ejecuta el ciclo completo de una feature del backlog con un catalogo CERRADO de tools: se pega la lista y se demuestra que una peticion fuera del catalogo no se ejecuta",
+        "Guardrails probados con casos de abuso reales, incluido pedir acceso a maquinas ajenas, y se pega la traza de que fueron rechazados",
+        "Presupuesto de tokens por peticion, medido y con tope configurable, comparado contra los ~7.900 por mensaje de spacebot",
+        "Los 26 agentes Python de agents/ se siguen usando desde el harness nuevo, sin reescribirlos",
+        "Queda escrito que pasa con .opencode/: se mantiene, se migra o se retira",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DEPLOY-001",
+      "title": "Agente de release: versionado, README y despliegue automatizados",
+      "description": "Pedido en la reunion: un agente que despliegue todo y que las versiones se actualicen solas, incluido el README. Hoy hay piezas sueltas —DEPLOY_IA.md, scripts/run_bot.sh, scripts/setup_spacebot.sh, el agente cicd— pero nadie encadena version, changelog, README y despliegue, y la version del proyecto no refleja lo que ha evolucionado. Ojo con la leccion de hoy: DEPLOY_IA.md existe desde hace dias y nadie lo ha ejecutado en limpio, asi que un manifiesto sin una ejecucion real no demuestra nada.",
+      "acceptance_criteria": [
+        "Un solo comando sube la version, actualiza CHANGELOG.md y las partes del README que dependen de la version, y se pega la salida",
+        "La version sale de una unica fuente de verdad: no hay dos sitios que puedan discrepar",
+        "El despliegue se ejecuta de cero en una maquina o contenedor limpio y se pega el log completo, no el manifiesto",
+        "Los commits los sigue haciendo el agente git con Conventional Commits y sin coautoria, y el agente de release no hace push por su cuenta",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DOC-002",
+      "title": "Quitarle densidad a la documentacion y al README",
+      "description": "Pedido en la reunion: quitarle densidad. Interpretado como el README y la documentacion de entrada, que han crecido hasta ser dificiles de leer de una pasada — el README ya lleva las secciones de claves de API y del bot que se anadieron ayer. AVISO: esta idea es la mas ambigua de las que salieron en la reunion; si se referia a otra cosa (densidad de features, de agentes, del prompt del bot), hay que corregir la feature antes de tocar nada. Precedente util del proyecto: SKILL.md paso de 2.672 a 1.114 caracteres quitando lo que ya estaba en otro sitio, y no se perdio nada.",
+      "acceptance_criteria": [
+        "Se confirma con el usuario a que se referia 'quitarle densidad' antes de escribir una linea",
+        "El README se puede leer de una pasada y lo que se quita no se pierde: se mueve a donde corresponda y se enlaza",
+        "No queda informacion duplicada entre README, AGENTS.md, CLAUDE.md y documentacion/: se demuestra con las rutas de lo que se ha consolidado",
+        "init.sh sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-002",
+      "title": "El modelo en el navegador con WebAssembly",
+      "description": "Pedido en la reunion: convertir la pagina web a WebAssembly, hasta el modelo incluido. Hoy la web es un frontend que llama a /api/predict y el calculo vive en el servidor, asi que sin backend no hay prediccion. Con el modelo compilado a WASM la pagina funcionaria sola: sin servidor, sin latencia de red y sin que los datos de salud del usuario salgan de su navegador, que en una herramienta de riesgo cardiovascular no es un detalle menor. Lo que hay que resolver: los modelos son joblib de sklearn/xgboost y .pt de PyTorch, asi que hay que ver que se puede llevar (ONNX Runtime Web, TensorFlow.js, Pyodide) y a que coste de tamano de descarga.",
+      "acceptance_criteria": [
+        "Un estudio previo dice que se puede llevar a WASM y que no, con el tamano de descarga de cada opcion: sin eso no se empieza",
+        "La prediccion individual se ejecuta entera en el navegador, sin llamar al backend, y se demuestra con la pestana de red vacia",
+        "El resultado en el navegador coincide con el del pipeline en servidor para el mismo perfil, con tolerancia declarada, y hay un test que lo compara",
+        "Queda claro que se queda en el servidor y por que (datos meteorologicos, base de factores, perfiles en SQLite)",
+        "La web sigue funcionando con backend para quien no pueda ejecutar WASM",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "HOST-001",
+      "title": "Alojar el LLM en un servicio gratuito para que el bot no dependa del portatil",
+      "description": "Pedido en la reunion: conseguir un servicio gratuito donde alojar el LLM y que Telegram siga funcionando. Hoy el bot solo responde mientras el portatil este encendido con Ollama corriendo: qwen2.5:7b es local y el proceso vive en scripts/run_bot.sh. Contexto de lo aprendido esta semana, para no repetirlo: el free tier de Groq da 8.000 TPM y con eso el bot iba a un mensaje por minuto; Gemini 3.x no sirve para tools con spacebot por el thought_signature, y los Gemini 2.x ya no estan disponibles en esa cuenta; OpenRouter tiene modelos gratis pero pide cuenta y saldo. Asi que 'gratuito' hay que comprobarlo con numeros de cuota, no con la palabra free en la pagina.",
+      "acceptance_criteria": [
+        "Una comparativa de opciones con la cuota REAL de cada una —peticiones y tokens por minuto y por dia— y el coste de superarla, no solo si dice 'free'",
+        "El LLM elegido responde al bot sin que el portatil este encendido, demostrado con una conversacion completa y el portatil apagado o el proceso local parado",
+        "Si el servicio se cae o agota cuota, el bot sigue contestando con la plantilla determinista: se demuestra provocando el fallo",
+        "Las claves no acaban en el log ni en el repo (ver BOT-004)",
+        "Queda documentado como se reproduce el despliegue, y ejecutado al menos una vez de cero",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-003",
+      "title": "La web devuelve 500 si el perfil trae un campo que no esta en la tabla",
+      "description": "Reportado por el usuario el 30/07/2026: la web se rompio. Reproducido contra chat/app.py levantado en local. El sintoma es un 500 en POST /api/predict, y la causa es que el endpoint escribe en SQLite TODO lo que le manda el frontend: chat/app.py:526 llama a _normalize_perfil(raw_perfil) y luego, si body['persistir'] no es False, mete el perfil entero en db.crear_perfil(), que construye el INSERT con las claves del dict. Cualquier clave que no sea columna de la tabla  revienta con sqlite3.OperationalError y sale por el 500, sin decirle al usuario que ha pasado.\n\nTrazas reales:\n\n    POST /api/predict  perfil normal                 -> OK SEGURO\n    POST /api/predict  perfil con 'peso': 86         -> 500\n      sqlite3.OperationalError: table perfiles has no column named peso\n    POST /api/predict  perfil con 'campo_raro': 1    -> 500\n    POST /api/predict  con persistir=false           -> OK (no toca la BD)\n\nO sea que la prediccion funciona; lo que rompe es el guardado.  y  son el caso practico: no son columnas de  (la tabla tiene porcentaje_grasa), y son campos que el MCP y el bot mandaban hasta que se quitaron el 29 y el 30 de julio. Es el mismo fallo que ya se corrigio en crear_perfil_mcp, pero en la capa web.\n\nOjo al diagnosticar: la web arranca bien (GET / y /api/status dan 200), el HTML esta bien formado y los valores nuevos del selector de deporte tambien funcionan; el fallo solo aparece al persistir.",
+      "acceptance_criteria": [
+        "POST /api/predict con un campo desconocido en el perfil NO devuelve 500: o se ignora el campo o se devuelve un error explicativo con el nombre del campo, y se pega la respuesta",
+        "Se decide y se documenta cual de las dos: ignorar en silencio esconde errores del frontend, devolver 400 los saca a la luz",
+        "db.crear_perfil() no acepta claves que no sean columnas: valida contra el esquema antes del INSERT en vez de dejar que reviente sqlite",
+        "Hay tests del endpoint para los tres casos: perfil valido, campo desconocido y persistir=false",
+        "Se comprueba que el frontend no manda peso ni altura, que ya no son columnas ni las lee el modelo",
+        "make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-30",
+      "review_rounds": 0,
+      "closed": "2026-07-30"
+    },
+    {
+      "id": "GIT-001",
+      "title": "Al cerrar una tarea: bump de versión en README y propuesta de commit sin co-autoría",
+      "description": "Pedido por el usuario (sesión Claude Code): cuando una feature del backlog se marca done, el README debe subir un punto de versión y el agente git debe proponer un commit Conventional Commits sin línea de co-autoría; si al usuario le gusta, lo hace. Hoy el agente git y el de documentación no están encadenados al cierre.",
+      "acceptance_criteria": [
+        "Al cerrar una feature, el README sube un punto de versión y se actualiza la sección que dependa de ella",
+        "Al cerrar una feature, el agente git propone un commit Conventional Commits SIN línea de co-autoría",
+        "Si el usuario aprueba la propuesta, el commit se ejecuta tal cual",
+        "Un único comando hace bump+README+propuesta (o queda documentado el flujo)",
+        "init.sh sigue en verde"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-07-31",
+      "review_rounds": 0,
+      "closed": "2026-07-31"
+    },
+    {
+      "id": "BOT-005",
+      "title": "Mejorar las respuestas del bot: mensaje de inicio con datos previos, pregunta de intensidad y parte final descriptivo",
+      "description": "Pedido por el usuario: (1) al hacer /start, si ya hay datos previos, el bot debe decir 'se cargaron tus datos previos' al principio y luego '¿Qué intensidad tendrá la actividad?'; (2) la respuesta final debe ser más descriptiva: 🟡 Nivel de riesgo: PRECAUCIÓN (X%), 🌡️ Temperatura prevista (o la t máxima o la media en las horas seleccionadas): XX °C, ☀️ Índice UV (media): X, y una recomendación adaptada al contexto (no siempre SPF 30+); (3) el modelo de ML debe explicar mejor las cosas con la ubicación: 'Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%). Usa SPF 30+ y protege tu piel cada 2 horas.'",
+      "acceptance_criteria": [
+        "Al hacer /start con datos previos, el bot dice 'se cargaron tus datos previos' y luego pregunta '¿Qué intensidad tendrá la actividad?' (se pega la conversación)",
+        "El parte final incluye nivel de riesgo con su porcentaje (🟡 PRECAUCIÓN (X%)), temperatura prevista y UV medio, no solo la clase",
+        "La recomendación se adapta al contexto (frío/calor), no es siempre SPF 30+",
+        "La explicación del modelo incluye la ubicación del usuario (p.ej. 'Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%)')",
+        "Hay tests de los mensajes nuevos y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "CHAT-002",
+      "title": "El /chat no rechaza preguntas sobre lo que el propio bot recomendó (p.ej. SPF)",
+      "description": "Reportado por el usuario: tras una recomendación que dice 'Usa SPF 30+', preguntar '¿qué es SPF?' en /chat devuelve 'La pregunta no está relacionada con riesgo térmico...'. La pregunta SÍ es del dominio: salió del contexto de la recomendación del bot. El filtro de relevancia del chat es demasiado estricto y no tiene en cuenta el contexto reciente de la conversación. Hay que distinguir: lo que recomienda el bot se puede preguntar; lo que es ajeno al clima/salud no.",
+      "acceptance_criteria": [
+        "Preguntar por SPF (o por cualquier término que aparezca en la recomendación del bot) tras una predicción responde con información útil, no con el rechazo 'no está relacionada' (se pega la conversación)",
+        "El filtro de relevancia usa el contexto reciente de la conversación (la recomendación anterior), no solo la pregunta suelta",
+        "Una pregunta genuinamente ajena (p.ej. recetas de cocina) sigue rechazándose con elegancia",
+        "Hay tests del caso SPF y del caso ajeno, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }

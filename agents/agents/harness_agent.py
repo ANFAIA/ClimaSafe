@@ -15,6 +15,7 @@ forma de saltársela pidiéndoselo amablemente al modelo.
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -355,6 +356,15 @@ class HarnessAgent(BaseAgent):
         """
         Cierra una feature. REHÚSA si ./init.sh no pasa en verde: es la regla
         del arnés, y aquí es código, no una instrucción que se pueda ignorar.
+
+        Al cerrar, encadena el flujo de release ligero de GIT-001: sube un
+        punto de versión patch en pyproject.toml/README.md (delegando en
+        `DocumentationAgent.bump_version`) y deja lista la propuesta de commit
+        Conventional Commits sin línea de co-autoría (delegando en
+        `GitAgent.suggest_commit_message`). El commit NO se ejecuta aquí: lo
+        decide el humano aprobando la propuesta que devuelve `data`. Ninguno
+        de los dos encadenados bloquea el cierre: si fallan, se avisa en
+        `warnings` y la feature queda cerrada igualmente.
         """
         if not id:
             return self._fail("finish", "Falta el id de la feature.",
@@ -413,11 +423,83 @@ class HarnessAgent(BaseAgent):
 
         self._current_file.write_text(IDLE_CURRENT, encoding="utf-8")
 
+        release = self._release_on_close(feat)
+        message = f"{id} cerrada. Histórico actualizado y current.md en idle."
+        if "version_bump" in release["data"]:
+            message += f" README bumped a {release['data']['version_bump']['new_version']}."
+        if "commit_suggestion" in release["data"]:
+            message += " Propuesta de commit lista — revísala en data.commit_suggestion."
+
         return AgentResult(
             success=True, agent=self.name, action="finish",
-            message=f"{id} cerrada. Histórico actualizado y current.md en idle.",
-            data={"id": id, "closed": feat["closed"]},
+            message=message,
+            data={"id": id, "closed": feat["closed"], **release["data"]},
+            warnings=release["warnings"],
         )
+
+    @staticmethod
+    def _next_patch_version(version: str | None) -> str | None:
+        """Sube un punto de patch: '0.1.0' -> '0.1.1'. None si no es semver."""
+        if not version:
+            return None
+        match = re.match(r"^(\d+)\.(\d+)\.(\d+)$", version.strip())
+        if not match:
+            return None
+        major, minor, patch = (int(g) for g in match.groups())
+        return f"{major}.{minor}.{patch + 1}"
+
+    def _release_on_close(self, feat: dict) -> dict:
+        """
+        Flujo de cierre de GIT-001: bump de versión patch (README incluido,
+        vía `DocumentationAgent.bump_version`) y propuesta de commit
+        Conventional Commits sin línea de co-autoría (vía
+        `GitAgent.suggest_commit_message`, con el id de la feature como
+        subject). No ejecuta el commit: eso lo decide el humano.
+
+        Nunca bloquea el cierre: si algo falla (sin versión parseable, sin
+        cambios que resumir, sin repo git) se avisa en `warnings` y se
+        devuelve lo que sí se pudo hacer.
+        """
+        warnings: list[str] = []
+        data: dict[str, Any] = {}
+
+        current = None
+        pyproject = self.ctx.pyproject_file
+        if pyproject.exists():
+            match = re.search(r'^version = "([^"]+)"', pyproject.read_text(encoding="utf-8"), re.MULTILINE)
+            current = match.group(1) if match else None
+        next_version = self._next_patch_version(current)
+        if next_version is None:
+            warnings.append(
+                "No se pudo subir la versión: pyproject.toml no tiene 'version = \"X.Y.Z\"' "
+                "parseable — el README no subió de punto."
+            )
+        else:
+            from agents.agents.documentation_agent import DocumentationAgent
+
+            doc_agent = DocumentationAgent(context=self.ctx)
+            bump = doc_agent.run("bump_version", new_version=next_version)
+            warnings.extend(bump.warnings)
+            if bump.success:
+                data["version_bump"] = {
+                    "new_version": next_version,
+                    "changed_files": bump.data["changed_files"],
+                }
+            else:
+                warnings.append(f"El bump a '{next_version}' no se aplicó: {bump.message}")
+
+        from agents.agents.git_agent import GitAgent
+
+        git_agent = GitAgent(context=self.ctx)
+        suggestion = git_agent.run("suggest_commit_message", hint=f"cierra {feat.get('id', '')}")
+        if suggestion.success:
+            data["commit_suggestion"] = suggestion.data["suggested_message"]
+            data["suggested_changed_files"] = suggestion.data["changed_files"]
+            warnings.extend(suggestion.warnings)
+        else:
+            warnings.append(f"No se generó propuesta de commit: {suggestion.message}")
+
+        return {"warnings": warnings, "data": data}
 
     def block(self, *, id: str = "", reason: str = "") -> AgentResult:
         """Marca una feature como bloqueada, con el motivo."""

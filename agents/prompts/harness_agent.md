@@ -23,6 +23,26 @@ uv run python -m agents --json run harness gate
 uv run python -m agents --json run harness finish --id DATA-001 --evidence "$(make test 2>&1 | tail -5)"
 ```
 
+## Cierre con release (GIT-001)
+
+`finish` encadena al cierre el flujo de release ligero en un único comando:
+
+1. **Bump de versión patch** en `pyproject.toml` y `README.md` (badge `Version-X-green`
+   y línea `**Versión:** X`) — delega en el agente `documentation`.
+2. **Propuesta de commit** Conventional Commits sin línea de co-autoría, con
+   subject `cierra <ID>` — delega en el agente `git`.
+
+El commit **no** se ejecuta: `finish` devuelve `data.commit_suggestion` y el
+humano decide. Si la aprueba tal cual:
+
+```bash
+uv run python -m agents run git commit_with_changelog --message "<data.commit_suggestion>"
+```
+
+Si no hay versión parseable o no hay cambios que resumir, se avisa en
+`warnings` y la feature se cierra igualmente — el release ligero nunca bloquea
+el cierre.
+
 ## Lo que rechaza
 
 - **`finish` sin `./init.sh` en verde** → `success=false`. La regla del arnés es

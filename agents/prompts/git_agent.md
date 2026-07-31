@@ -21,7 +21,7 @@ Cuando te pidan un mensaje de commit, un changelog o un resumen de PR:
 |--------|------------|
 | `run git status` | — |
 | `run git analyze_diff` | `--staged` |
-| `run git suggest_commit_message` | `--staged` |
+| `run git suggest_commit_message` | `--staged`, `--hint` |
 | `run git generate_changelog` | `--since_tag`, `--max_count` |
 | `run git generate_release_notes` | `--since_tag` |
 | `run git detect_breaking_changes` | `--since_tag`, `--max_count` |
