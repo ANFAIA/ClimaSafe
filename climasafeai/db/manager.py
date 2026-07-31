@@ -45,10 +45,34 @@ class DBManager:
         stats = self.rag.stats()
         return {"success": True, "stats": stats}
 
+    def sync_documentos(self) -> int:
+        """Reindexa documentacion/ (solo fragmentos nuevos)."""
+        if self.rag is None:
+            return 0
+        return self.rag.sync_documentos()
+
+    def resync_documentos(self) -> int:
+        """Borra y reindexa toda la documentacion/ desde cero."""
+        if self.rag is None:
+            return 0
+        return self.rag.resync_documentos()
+
     def search_factores(self, query: str, k: int = 5) -> list[dict]:
         if self.rag is None:
             return []
         return self.rag.search_factores(query, k=k)
+
+    def search_documentos(self, query: str, k: int = 5) -> list[dict]:
+        """Búsqueda semántica sobre documentacion/."""
+        if self.rag is None:
+            return []
+        return self.rag.search_documentos(query, k=k)
+
+    def search_all(self, query: str, k: int = 5) -> dict:
+        """Busca en factores y documentos simultáneamente."""
+        if self.rag is None:
+            return {"factores": [], "documentos": []}
+        return self.rag.search_all(query, k=k)
 
     def ask_rag(self, query: str, k: int = 5) -> dict:
         """RAG completo: retrieve + generate."""

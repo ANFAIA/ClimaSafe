@@ -11,6 +11,9 @@ from typing import Any, Iterator
 import sqlite_vec
 
 EMBEDDING_DIM = 384
+DOCS_DIR = "documentacion"
+DOCS_GLOB = "**/*.md"
+DOCS_EXCLUDE = {"llm"}  # subcarpetas que excluir (aún no indexadas)
 _embedder: Any = None
 _llm_client: Any = None
 
@@ -120,7 +123,23 @@ class RAG:
                     texto TEXT NOT NULL
                 )
             """)
+            conn.execute(f"""
+                CREATE VIRTUAL TABLE IF NOT EXISTS docs_vec USING vec0(
+                    embedding float[{EMBEDDING_DIM}] distance_metric=cosine
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS docs_vec_src (
+                    vec_rowid INTEGER PRIMARY KEY,
+                    ruta TEXT NOT NULL,
+                    titulo TEXT NOT NULL,
+                    seccion TEXT,
+                    texto TEXT NOT NULL,
+                    palabras INTEGER NOT NULL DEFAULT 0
+                )
+            """)
         self.sync_factores()
+        self.sync_documentos()
 
     def sync_factores(self) -> int:
         nuevas = 0
@@ -157,6 +176,126 @@ class RAG:
         return self.sync_factores()
 
 
+    # ── Indexado de documentos ──────────────────────────────────────
+
+    def _chunks_desde_md(self, ruta: Path) -> list[dict[str, Any]]:
+        """Divide un .md en fragmentos por secciones (##). Cada fragmento
+        conserva el título del documento y el nombre de la sección."""
+        texto = ruta.read_text(encoding="utf-8")
+        titulo = ""
+        for line in texto.splitlines():
+            if line.startswith("# ") and not line.startswith("## "):
+                titulo = line.lstrip("# ").strip()
+                break
+        secciones: list[dict[str, Any]] = []
+        seccion_actual = "__intro__"
+        parrafos: list[str] = []
+
+        for line in texto.splitlines():
+            if line.startswith("## "):
+                if parrafos:
+                    cuerpo = " ".join(p.strip() for p in parrafos if p.strip())
+                    if len(cuerpo.split()) >= 10:
+                        secciones.append({
+                            "ruta": str(ruta),
+                            "titulo": titulo.split(" — ")[0] if " — " in titulo else titulo or ruta.stem,
+                            "seccion": seccion_actual,
+                            "texto": cuerpo,
+                            "palabras": len(cuerpo.split()),
+                        })
+                    parrafos = []
+                seccion_actual = line.lstrip("## ").strip()
+            else:
+                parrafos.append(line)
+
+        if parrafos:
+            cuerpo = " ".join(p.strip() for p in parrafos if p.strip())
+            if len(cuerpo.split()) >= 10:
+                secciones.append({
+                    "ruta": str(ruta),
+                    "titulo": titulo.split(" — ")[0] if " — " in titulo else titulo or ruta.stem,
+                    "seccion": seccion_actual,
+                    "texto": cuerpo,
+                    "palabras": len(cuerpo.split()),
+                })
+        return secciones
+
+    def _documentos_nuevos(self, project_root: Path) -> list[dict[str, Any]]:
+        """Escanea documentacion/ y devuelve los fragmentos no indexados."""
+        docs_dir = project_root / DOCS_DIR
+        if not docs_dir.is_dir():
+            return []
+        with self._conn() as conn:
+            indexed = {
+                row["ruta"] + "::" + (row["seccion"] or "")
+                for row in conn.execute(
+                    "SELECT DISTINCT ruta, COALESCE(seccion,'') as seccion FROM docs_vec_src"
+                ).fetchall()
+            }
+
+        chunks_nuevos = []
+        for md_file in sorted(docs_dir.rglob(DOCS_GLOB)):
+            # Excluir subcarpetas que no tocan
+            rel = md_file.relative_to(docs_dir)
+            if any(part in DOCS_EXCLUDE for part in rel.parts):
+                continue
+            for chunk in self._chunks_desde_md(md_file):
+                key = chunk["ruta"] + "::" + (chunk["seccion"] or "")
+                if key not in indexed:
+                    chunks_nuevos.append(chunk)
+        return chunks_nuevos
+
+    def sync_documentos(self, project_root: Path | None = None) -> int:
+        """Indexa los fragmentos nuevos de documentacion/ en la tabla vectorial."""
+        if project_root is None:
+            project_root = Path(__file__).resolve().parents[2]  # rag.py → db/ → climasafeai/ → raíz
+        chunks = self._documentos_nuevos(project_root)
+        if not chunks:
+            return 0
+        model = _get_embedder()
+        with self._conn() as conn:
+            for c in chunks:
+                emb = model.encode(c["texto"])
+                emb_bytes = struct.pack(f"{len(emb)}f", *emb)
+                cur = conn.execute(
+                    "INSERT INTO docs_vec (embedding) VALUES (?)", (emb_bytes,)
+                )
+                conn.execute(
+                    "INSERT INTO docs_vec_src (vec_rowid, ruta, titulo, seccion, texto, palabras) VALUES (?, ?, ?, ?, ?, ?)",
+                    (cur.lastrowid, c["ruta"], c["titulo"], c["seccion"], c["texto"], c["palabras"]),
+                )
+        return len(chunks)
+
+    def resync_documentos(self, project_root: Path | None = None) -> int:
+        """Borra y reindexa todos los documentos desde cero."""
+        with self._conn() as conn:
+            conn.execute("DELETE FROM docs_vec")
+            conn.execute("DELETE FROM docs_vec_src")
+        return self.sync_documentos(project_root=project_root)
+
+    # ── Búsquedas ───────────────────────────────────────────────────
+
+    def search_documentos(self, query: str, k: int = 5) -> list[dict]:
+        """Busca fragmentos de documentacion/ por similitud semántica."""
+        emb = _get_embedder().encode(query)
+        emb_bytes = struct.pack(f"{len(emb)}f", *emb)
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT s.ruta, s.titulo, s.seccion, s.texto, s.palabras, v.distance
+                FROM docs_vec v
+                JOIN docs_vec_src s ON v.rowid = s.vec_rowid
+                WHERE v.embedding MATCH ? AND k=?
+                ORDER BY v.distance
+            """, (emb_bytes, k)).fetchall()
+            return [dict(r) for r in rows]
+
+    def search_all(self, query: str, k: int = 5) -> dict:
+        """Busca en factores y documentos, combina resultados."""
+        return {
+            "factores": self.search_factores(query, k=k),
+            "documentos": self.search_documentos(query, k=k),
+        }
+
     def search_factores(self, query: str, k: int = 5) -> list[dict]:
         emb = _get_embedder().encode(query)
         emb_bytes = struct.pack(f"{len(emb)}f", *emb)
@@ -172,16 +311,28 @@ class RAG:
 
     def stats(self) -> dict:
         with self._conn() as conn:
-            total = conn.execute(
+            total_factores_emb = conn.execute(
                 "SELECT COUNT(*) as n FROM factores_vec_src"
             ).fetchone()["n"]
             total_factores = conn.execute(
                 "SELECT COUNT(*) as n FROM factores_riesgo"
             ).fetchone()["n"]
+            total_docs = conn.execute(
+                "SELECT COUNT(*) as n FROM docs_vec_src"
+            ).fetchone()["n"]
+            total_docs_palabras = conn.execute(
+                "SELECT COALESCE(SUM(palabras), 0) as n FROM docs_vec_src"
+            ).fetchone()["n"]
             return {
-                "embedded": total,
-                "total_factores": total_factores,
-                "pending": total_factores - total,
+                "factores": {
+                    "embedded": total_factores_emb,
+                    "total": total_factores,
+                    "pending": total_factores - total_factores_emb,
+                },
+                "documentos": {
+                    "fragmentos": total_docs,
+                    "palabras": total_docs_palabras,
+                },
             }
 
     def ask(self, query: str, k: int = 5) -> dict:

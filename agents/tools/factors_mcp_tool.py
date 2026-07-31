@@ -136,9 +136,33 @@ try:
         return json.dumps(_db().search_factores(query, k=k), indent=2, default=str)
 
     @_mcp.tool()
+    def search_documentos_mcp(query: str, k: int = 5) -> str:
+        """Búsqueda semántica sobre la documentación del proyecto (documentacion/). Devuelve fragmentos de .md con distancia coseno."""
+        return json.dumps(_db().search_documentos(query, k=k), indent=2, default=str)
+
+    @_mcp.tool()
+    def search_all_mcp(query: str, k: int = 5) -> str:
+        """Búsqueda combinada: factores de riesgo + documentación del proyecto."""
+        return json.dumps(_db().search_all(query, k=k), indent=2, default=str)
+
+    @_mcp.tool()
     def ask_rag_mcp(query: str, k: int = 5) -> str:
         """RAG completo: responde una pregunta en lenguaje natural sobre factores de riesgo térmico. Busca factores relevantes y genera respuesta con IA."""
         return json.dumps(_db().ask_rag(query, k=k), indent=2, default=str)
+
+    @_mcp.tool()
+    def ask_qwen_rag_mcp(query: str, k_factores: int = 5, k_docs: int = 5, model: str = "ollama/qwen2.5:1.5b") -> str:
+        """RAG completo con LLM local o API vía LiteLLM. Busca en factores de riesgo y documentación del proyecto, responde citando fuentes. Modelos: ollama/qwen2.5:1.5b (CPU), ollama/qwen2.5:7b (GPU), groq/llama-3.3-70b-versatile (API)."""
+        from climasafeai.llm.rag_qwen import ask_with_rag, LLMConfig
+        config = LLMConfig(model=model)
+        return json.dumps(ask_with_rag(query, k_factores=k_factores, k_docs=k_docs, config=config), indent=2, default=str)
+
+    @_mcp.tool()
+    def qwen_raw_mcp(query: str, model: str = "ollama/qwen2.5:1.5b") -> str:
+        """LLM raw sin RAG: responde preguntas generales usando solo el conocimiento del modelo."""
+        from climasafeai.llm.rag_qwen import ask_raw, LLMConfig
+        config = LLMConfig(model=model)
+        return json.dumps(ask_raw(query, config=config), indent=2, default=str)
 
     _HAS_MCP = True
 except ImportError:
