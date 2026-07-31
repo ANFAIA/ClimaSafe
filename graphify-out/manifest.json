@@ -1,21 +1,16 @@
 {
-  ".claude/settings.local.json": {
-    "mtime": 1783965593.265318,
-    "ast_hash": "c98437fb4ee43f530c0f8605460d8595",
-    "semantic_hash": ""
-  },
   ".vault/.obsidian/app.json": {
-    "mtime": 1784099395.0806177,
+    "mtime": 1784392118.7024624,
     "ast_hash": "99914b932bd37a50b983c5e7c90ae93b",
     "semantic_hash": "99914b932bd37a50b983c5e7c90ae93b"
   },
   ".vault/.obsidian/appearance.json": {
-    "mtime": 1784099395.0806177,
+    "mtime": 1784392118.7024624,
     "ast_hash": "99914b932bd37a50b983c5e7c90ae93b",
     "semantic_hash": "99914b932bd37a50b983c5e7c90ae93b"
   },
   ".vault/.obsidian/core-plugins.json": {
-    "mtime": 1784099410.1523583,
+    "mtime": 1784392119.3344502,
     "ast_hash": "7c877bea49eaeabb100563bd157b9051",
     "semantic_hash": "7c877bea49eaeabb100563bd157b9051"
   },
@@ -25,8 +20,8 @@
     "semantic_hash": ""
   },
   ".vault/.obsidian/workspace.json": {
-    "mtime": 1784099826.62516,
-    "ast_hash": "6d19e67b77d1321d2c99c87b73f5b86d",
+    "mtime": 1784392119.9904377,
+    "ast_hash": "d3a3f881fd814a39b885e5a485652788",
     "semantic_hash": ""
   },
   ".vscode/extensions.json": {
@@ -60,14 +55,14 @@
     "semantic_hash": "1dbfdc3d55179ffe8a4f1ec70ebefb80"
   },
   "agents/agents/cicd_agent.py": {
-    "mtime": 1783253368.0,
-    "ast_hash": "bbd4bf57ae25a8c5821908d445bb771a",
-    "semantic_hash": "bbd4bf57ae25a8c5821908d445bb771a"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "786cd36c17a243f28895c5f0281c9161",
+    "semantic_hash": ""
   },
   "agents/agents/data_agent.py": {
-    "mtime": 1783021234.0,
-    "ast_hash": "797837732be67159698765907c6acc7d",
-    "semantic_hash": "797837732be67159698765907c6acc7d"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "416da4f464a822690f57a9a4c63acbbf",
+    "semantic_hash": ""
   },
   "agents/agents/dependency_agent.py": {
     "mtime": 1783253363.0,
@@ -90,9 +85,9 @@
     "semantic_hash": "076494095ddac18eb574ebbaf5e8ef71"
   },
   "agents/agents/graph_agent.py": {
-    "mtime": 1783021244.0,
-    "ast_hash": "d6c5b06d3cd4b81ca33dd104fa51c104",
-    "semantic_hash": "d6c5b06d3cd4b81ca33dd104fa51c104"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "d1259498fcd4516a9c16f12f5992fa72",
+    "semantic_hash": ""
   },
   "agents/agents/installer_agent.py": {
     "mtime": 1783154786.0,
@@ -100,14 +95,14 @@
     "semantic_hash": "5e8a0010a1463f57ea30d1bcbf61321a"
   },
   "agents/agents/ml_agent.py": {
-    "mtime": 1783021293.0,
-    "ast_hash": "02bf77bee2145682763b1bd6c0640899",
-    "semantic_hash": "02bf77bee2145682763b1bd6c0640899"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "9ccc8f10d799e6369a80cf0795e8723c",
+    "semantic_hash": ""
   },
   "agents/agents/mlflow_agent.py": {
-    "mtime": 1783272234.0,
-    "ast_hash": "7ce24da50db615d80bb620d10d7fbb03",
-    "semantic_hash": "7ce24da50db615d80bb620d10d7fbb03"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "bdb90ac765dc73d88bf4a3a208679355",
+    "semantic_hash": ""
   },
   "agents/agents/notebook_agent.py": {
     "mtime": 1783127329.0,
@@ -115,9 +110,9 @@
     "semantic_hash": "fb6a5e7324ac3f5c47682c6d0ff1c916"
   },
   "agents/agents/review_agent.py": {
-    "mtime": 1783077856.0,
-    "ast_hash": "241347d37cf0588bcb65373e51e9c90c",
-    "semantic_hash": "241347d37cf0588bcb65373e51e9c90c"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "10e7b78a9d237bb0953de5a04b90986f",
+    "semantic_hash": ""
   },
   "agents/agents/secrets_agent.py": {
     "mtime": 1783272241.0,
@@ -125,14 +120,14 @@
     "semantic_hash": "d40dc64a8ed4f49eb576862a9a579c74"
   },
   "agents/agents/test_agent.py": {
-    "mtime": 1783253398.0,
-    "ast_hash": "9703b1cac2c2752a000ac0256e8ee2d9",
-    "semantic_hash": "9703b1cac2c2752a000ac0256e8ee2d9"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "67aad1f1e1ea9a5dce87c4b01894b05b",
+    "semantic_hash": ""
   },
   "agents/cli.py": {
-    "mtime": 1783664772.381258,
-    "ast_hash": "57657a2aabe82294d316a2d8bc30c40e",
-    "semantic_hash": "57657a2aabe82294d316a2d8bc30c40e"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "cbafe5a5992abcebaf0f4e38a58a6ad2",
+    "semantic_hash": ""
   },
   "agents/config.py": {
     "mtime": 1783020887.0,
@@ -150,9 +145,9 @@
     "semantic_hash": "e5bede0064e082debabfc7de61558d7e"
   },
   "agents/core/base_agent.py": {
-    "mtime": 1783664787.7409968,
-    "ast_hash": "a994afe5d650ce635721dc0d6b02891f",
-    "semantic_hash": "a994afe5d650ce635721dc0d6b02891f"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "04d078320ff16402c4d19fa1ef4ccf75",
+    "semantic_hash": ""
   },
   "agents/core/registry.py": {
     "mtime": 1783060292.0,
@@ -384,15 +379,10 @@
     "ast_hash": "6d1ad89aeeda5a2b84e415de27a9b7b8",
     "semantic_hash": "6d1ad89aeeda5a2b84e415de27a9b7b8"
   },
-  "agents/workspace/notebook/manifest.json": {
-    "mtime": 1783412907.6258028,
-    "ast_hash": "f760bc28041cdf1192cdbb4e37553455",
-    "semantic_hash": "f760bc28041cdf1192cdbb4e37553455"
-  },
   "chat/app.py": {
-    "mtime": 1782890610.120284,
-    "ast_hash": "6141bdbb2bf73c59125e937020f9fc40",
-    "semantic_hash": "6141bdbb2bf73c59125e937020f9fc40"
+    "mtime": 1785318799.913518,
+    "ast_hash": "68a25e454865e3c47bda6040e5d096c1",
+    "semantic_hash": ""
   },
   "chat/entrypoint.sh": {
     "mtime": 1782890610.120284,
@@ -410,8 +400,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "climasafeai/data/make_dataset.py": {
-    "mtime": 1784024399.379509,
-    "ast_hash": "c7c4c6a31659f6a4d173aa0ade9aefa5",
+    "mtime": 1784887758.0620596,
+    "ast_hash": "2537d0e75cc3106804dcd76d82d80f71",
     "semantic_hash": ""
   },
   "climasafeai/features/__init__.py": {
@@ -420,8 +410,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "climasafeai/features/build_features.py": {
-    "mtime": 1784024517.554072,
-    "ast_hash": "8ddba3b0db0b185281e6effc95a58f04",
+    "mtime": 1784876513.5449848,
+    "ast_hash": "414d173d8d363c655cc9b33ba54b78a0",
     "semantic_hash": ""
   },
   "climasafeai/features/labels.py": {
@@ -430,7 +420,7 @@
     "semantic_hash": ""
   },
   "climasafeai/features/weather_indices.py": {
-    "mtime": 1783685432.5156224,
+    "mtime": 1784386485.7805037,
     "ast_hash": "4bc1875451d7194eb5908ee3e5d10467",
     "semantic_hash": ""
   },
@@ -440,8 +430,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "climasafeai/models/predict_model.py": {
-    "mtime": 1784098046.9798944,
-    "ast_hash": "bb5795dae19d4793717430dd98e139bb",
+    "mtime": 1785312844.0207288,
+    "ast_hash": "1ff80f8456161853148a91ada6aba176",
     "semantic_hash": ""
   },
   "climasafeai/models/temporal_cv.py": {
@@ -450,7 +440,7 @@
     "semantic_hash": "f4d9faf60ada25ec8f4e618442ae8ec9"
   },
   "climasafeai/models/train_model.py": {
-    "mtime": 1783668827.8601604,
+    "mtime": 1784386419.262711,
     "ast_hash": "8d4a18f56f8d707acc4f167c378baf9b",
     "semantic_hash": ""
   },
@@ -480,8 +470,8 @@
     "semantic_hash": "7374c180fd66fbab7e859ff793585177"
   },
   "main.py": {
-    "mtime": 1784098051.5118127,
-    "ast_hash": "1c6977cd7dd081373196bb6f71e149b0",
+    "mtime": 1784798605.399412,
+    "ast_hash": "45544ce6b05dbff780712c56a14d9431",
     "semantic_hash": ""
   },
   "monitoring/monitor.py": {
@@ -490,9 +480,9 @@
     "semantic_hash": "2f8ee7fb049e87eba370e3ab5c74971e"
   },
   "pyproject.toml": {
-    "mtime": 1783067519.9882264,
-    "ast_hash": "52df3b024b7f89e813d5503319f0b5b8",
-    "semantic_hash": "52df3b024b7f89e813d5503319f0b5b8"
+    "mtime": 1785328416.5819125,
+    "ast_hash": "e006b0a0e6cfbc071a45ceedf9c553ae",
+    "semantic_hash": ""
   },
   "tasks.py": {
     "mtime": 1782890609.8322885,
@@ -505,24 +495,24 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "tests/conftest.py": {
-    "mtime": 1782892538.6893315,
-    "ast_hash": "7013ae55031659aca2b01539458f3f04",
-    "semantic_hash": "7013ae55031659aca2b01539458f3f04"
+    "mtime": 1785312844.0767279,
+    "ast_hash": "164a39d5c7ae9d3dd8657ce40d77745d",
+    "semantic_hash": ""
   },
   "tests/test_api.py": {
-    "mtime": 1782892539.7493143,
-    "ast_hash": "73f08e3949a645eef9acb7c85adab46c",
-    "semantic_hash": "73f08e3949a645eef9acb7c85adab46c"
+    "mtime": 1785137841.3274245,
+    "ast_hash": "525fe4aa1a19f67e15b96950ebf97ada",
+    "semantic_hash": ""
   },
   "tests/test_build_features.py": {
-    "mtime": 1782890610.1562836,
-    "ast_hash": "e4c87ab2268283237776fd8c5c594aee",
-    "semantic_hash": "e4c87ab2268283237776fd8c5c594aee"
+    "mtime": 1785312844.0767279,
+    "ast_hash": "308860be70872d79883c3d8823954fcb",
+    "semantic_hash": ""
   },
   "tests/test_make_dataset.py": {
-    "mtime": 1783515687.3056145,
-    "ast_hash": "ba21e7910e618911fd7e018e706910f1",
-    "semantic_hash": "ba21e7910e618911fd7e018e706910f1"
+    "mtime": 1785312844.0767279,
+    "ast_hash": "946e4c6b377135f47f5e3d36fb27e657",
+    "semantic_hash": ""
   },
   "tests/test_monitoring.py": {
     "mtime": 1782890610.188283,
@@ -545,9 +535,9 @@
     "semantic_hash": "76a157f7b6b9cc3cf236751bdc867fed"
   },
   "tests/test_train_model.py": {
-    "mtime": 1782890610.2002828,
-    "ast_hash": "70222a707e0dd630add63119a1197d79",
-    "semantic_hash": "70222a707e0dd630add63119a1197d79"
+    "mtime": 1785312844.0767279,
+    "ast_hash": "8f87ab9afe3aac46b72a4607e042bd08",
+    "semantic_hash": ""
   },
   "tests/test_tuning.py": {
     "mtime": 1782890610.1682832,
@@ -565,14 +555,9 @@
     "semantic_hash": "94224f2f3b6517f41c89da4e04bf2bc9"
   },
   "agents/agents/audit_agent.py": {
-    "mtime": 1783664749.5456464,
-    "ast_hash": "998c0d7dc94c5ed948dfa8e331d7acda",
-    "semantic_hash": "998c0d7dc94c5ed948dfa8e331d7acda"
-  },
-  "agents/agents/docsearch_agent.py": {
-    "mtime": 1783664749.5456464,
-    "ast_hash": "3e97d7359b7b474af80bccfe7ca5a12e",
-    "semantic_hash": "3e97d7359b7b474af80bccfe7ca5a12e"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "859dd4365d4a6ced984619b35fd2ecb4",
+    "semantic_hash": ""
   },
   "agents/agents/doctor_agent.py": {
     "mtime": 1783664749.5456464,
@@ -585,8 +570,8 @@
     "semantic_hash": "3effcc56a8c2b4894d7bea776ba45428"
   },
   "agents/agents/knowledge_agent.py": {
-    "mtime": 1783666816.9653664,
-    "ast_hash": "53e85dc585ab802c5276c17a5b30c948",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "920b9a4a4d2e522b0244f64cf996f733",
     "semantic_hash": ""
   },
   "agents/agents/make_agent.py": {
@@ -595,29 +580,24 @@
     "semantic_hash": "6b51f6ef6d6294cd491b52bb347f3712"
   },
   "agents/agents/plan_agent.py": {
-    "mtime": 1783664749.5496464,
-    "ast_hash": "40027e3668eacf6561b3094ab969b2cc",
-    "semantic_hash": "40027e3668eacf6561b3094ab969b2cc"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "efc15e3bb8665c38a18f07819dba9026",
+    "semantic_hash": ""
   },
   "agents/agents/refactor_agent.py": {
-    "mtime": 1783664749.5496464,
-    "ast_hash": "a11c2345fc09b017fd18c73508968c14",
-    "semantic_hash": "a11c2345fc09b017fd18c73508968c14"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "a33a46e8b9392f5f0bc4bbde057492e5",
+    "semantic_hash": ""
   },
   "agents/agents/research_agent.py": {
     "mtime": 1783664749.5536463,
     "ast_hash": "2266fb71f20509376263f3253c887f3f",
     "semantic_hash": "2266fb71f20509376263f3253c887f3f"
   },
-  "agents/agents/schedule_agent.py": {
-    "mtime": 1783664749.5536463,
-    "ast_hash": "f349909134f3fd241a9b6c306da34bb0",
-    "semantic_hash": "f349909134f3fd241a9b6c306da34bb0"
-  },
   "agents/agents/supervisor_agent.py": {
-    "mtime": 1783664749.5536463,
-    "ast_hash": "3b97c262f1005390c2a473f59eb95bc7",
-    "semantic_hash": "3b97c262f1005390c2a473f59eb95bc7"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "7520d58923d9e9d4961fd1d3c34a05ce",
+    "semantic_hash": ""
   },
   "agents/audit.py": {
     "mtime": 1783664742.4697669,
@@ -625,9 +605,9 @@
     "semantic_hash": "ce9e420a41eb5aed0da7b68887eb4633"
   },
   "agents/contracts.py": {
-    "mtime": 1783664742.5897648,
-    "ast_hash": "3028aad9495feab556066f8fc6decdd6",
-    "semantic_hash": "3028aad9495feab556066f8fc6decdd6"
+    "mtime": 1785312843.8007326,
+    "ast_hash": "270e62731226c28e6c4f826c7afc29c4",
+    "semantic_hash": ""
   },
   "agents/gstack/__init__.py": {
     "mtime": 1783664743.3177526,
@@ -635,9 +615,9 @@
     "semantic_hash": "c1cc1e8520697ff786dca088076e8fda"
   },
   "agents/gstack/pipelines.py": {
-    "mtime": 1783664743.3177526,
-    "ast_hash": "6cfe7cdcb4310e4b9a08c903ea3a0f10",
-    "semantic_hash": "6cfe7cdcb4310e4b9a08c903ea3a0f10"
+    "mtime": 1784615313.5564158,
+    "ast_hash": "62f583cc4432095c97f0cd64bfffc4c7",
+    "semantic_hash": ""
   },
   "agents/gstack/stack.py": {
     "mtime": 1783664743.3177526,
@@ -690,14 +670,14 @@
     "semantic_hash": "61a3388858bf08df1f0221e8e34a5819"
   },
   "agents/tools/research_tool.py": {
-    "mtime": 1783664754.9455545,
-    "ast_hash": "7563923741f579af31098369852770fd",
-    "semantic_hash": "7563923741f579af31098369852770fd"
+    "mtime": 1784548116.5817392,
+    "ast_hash": "d456ba3c9468873ff039d968a4fb82c3",
+    "semantic_hash": ""
   },
   "agents/tools/schedule_tool.py": {
-    "mtime": 1783664754.9455545,
-    "ast_hash": "5dcdfab91e9ff2ad9b51a71188cefac4",
-    "semantic_hash": "5dcdfab91e9ff2ad9b51a71188cefac4"
+    "mtime": 1785312843.94473,
+    "ast_hash": "ef6aecb3b6acaf79de5d48ec73cda470",
+    "semantic_hash": ""
   },
   "agents/tools/stats_tool.py": {
     "mtime": 1783664754.9455545,
@@ -709,13 +689,8 @@
     "ast_hash": "1a288f4bcab85a4ac175fab68542002f",
     "semantic_hash": "1a288f4bcab85a4ac175fab68542002f"
   },
-  "agents/agents/cache_agent.py": {
-    "mtime": 1783665814.5895505,
-    "ast_hash": "bac15b5d187c89820139a91bf45e164c",
-    "semantic_hash": "bac15b5d187c89820139a91bf45e164c"
-  },
   "climasafeai/data/sequences.py": {
-    "mtime": 1783685432.5196223,
+    "mtime": 1784386485.7485046,
     "ast_hash": "1a88a87909ec6f4fdd2c08d72bc2a63d",
     "semantic_hash": ""
   },
@@ -725,28 +700,18 @@
     "semantic_hash": ""
   },
   "climasafeai/features/personalizacion.py": {
-    "mtime": 1783685634.2638934,
-    "ast_hash": "ca1f1c43b08cd3689252ed2b31fba3f4",
-    "semantic_hash": ""
-  },
-  "climasafeai/models/lstm_hybrid.py": {
-    "mtime": 1784026576.3730228,
-    "ast_hash": "146e98c00ec261ed9bcdb8bef37b42df",
+    "mtime": 1785326446.1794665,
+    "ast_hash": "efb4b822b03f5dd62c70ca4ad66c4bd3",
     "semantic_hash": ""
   },
   "climasafeai/models/lstm_model.py": {
-    "mtime": 1783685432.5196223,
+    "mtime": 1784386485.7805037,
     "ast_hash": "5ee0dd1e375f79f49bfe0e2b70aa8ab3",
     "semantic_hash": ""
   },
-  "climasafeai/models/lstm_province.py": {
-    "mtime": 1784019360.851462,
-    "ast_hash": "c6ff1eac66156f38e6fa3a0ceb2bec56",
-    "semantic_hash": ""
-  },
   "climasafeai/models/lstm_province_hybrid.py": {
-    "mtime": 1784037903.4582021,
-    "ast_hash": "9355b29c3ffcba5b79f407105375452a",
+    "mtime": 1784188188.31752,
+    "ast_hash": "ea5e3a5264c580debffd07d74635871b",
     "semantic_hash": ""
   },
   "experimentos/01_xgb_frio.py": {
@@ -755,13 +720,13 @@
     "semantic_hash": ""
   },
   "experimentos/02_lstm_calibracion_ensemble.py": {
-    "mtime": 1784027829.6159947,
-    "ast_hash": "1cb79e4fa5a5f33a1cf64b244a9ffe32",
+    "mtime": 1784188202.2732503,
+    "ast_hash": "7edf39d19b6a22005e6dab8362ce1fde",
     "semantic_hash": ""
   },
   "experimentos/03_lstm_peso_extra.py": {
-    "mtime": 1784028133.9096246,
-    "ast_hash": "8fad8910357a49288a3d0f9c8de321a7",
+    "mtime": 1784188203.1532333,
+    "ast_hash": "03bf35af62fe302d4554f8a23c795a50",
     "semantic_hash": ""
   },
   "experimentos/04_sintetico.py": {
@@ -775,7 +740,7 @@
     "semantic_hash": ""
   },
   "models/artifacts/provincia_mapping.json": {
-    "mtime": 1784098519.5914714,
+    "mtime": 1784555097.3675032,
     "ast_hash": "8512eb7af433ddb2cda0632394265056",
     "semantic_hash": ""
   },
@@ -785,8 +750,8 @@
     "semantic_hash": ""
   },
   "tests/test_personalizacion.py": {
-    "mtime": 1783685658.3674493,
-    "ast_hash": "7b5583b2b95c8574f483c72e2be88d33",
+    "mtime": 1784801348.1941004,
+    "ast_hash": "0cdfb98d6ae1ea345cef7587ce641a85",
     "semantic_hash": ""
   },
   "tuning/ablacion_27v19.py": {
@@ -810,13 +775,13 @@
     "semantic_hash": ""
   },
   "tuning/features_frio.py": {
-    "mtime": 1783964363.2513766,
+    "mtime": 1784386486.6564775,
     "ast_hash": "89c1d24c823736e49d15bd0c0292c84a",
     "semantic_hash": ""
   },
   ".copier-answers.yml": {
-    "mtime": 1782890609.8322885,
-    "ast_hash": "3d5ea1adcbe36979f3c8cb1b714535c2",
+    "mtime": 1785312843.796733,
+    "ast_hash": "17e682e8b350b037d9c614ecab1759f6",
     "semantic_hash": ""
   },
   ".vault/00_META/IA_index.md": {
@@ -845,18 +810,18 @@
     "semantic_hash": ""
   },
   ".vault/01_PROYECTO/arquitectura.md": {
-    "mtime": 1784026816.649882,
-    "ast_hash": "8dfd122d1dc83c9f463bd61b2ec96f97",
+    "mtime": 1784192719.4065175,
+    "ast_hash": "e928bef7e3478bb89cebed28c4cb7764",
     "semantic_hash": ""
   },
   ".vault/01_PROYECTO/modelos.md": {
-    "mtime": 1784099843.7728624,
-    "ast_hash": "fbe30b33a3ee4a37c79a0b7dbb1db182",
+    "mtime": 1784704025.7886553,
+    "ast_hash": "51e8271a80fbff91635194596fc189b5",
     "semantic_hash": ""
   },
   ".vault/01_PROYECTO/roadmap.md": {
-    "mtime": 1784099849.568762,
-    "ast_hash": "03d1c7ef36d7b8f2c8cb8d2e1e2ffe6a",
+    "mtime": 1784192744.258073,
+    "ast_hash": "f5405309cc6204cf3e7d4a550c70b628",
     "semantic_hash": ""
   },
   ".vault/02_DATOS/features.md": {
@@ -875,8 +840,8 @@
     "semantic_hash": ""
   },
   ".vault/03_MODELOS/LSTM.md": {
-    "mtime": 1784099836.484989,
-    "ast_hash": "4393d410d50aa79889493d06992b0003",
+    "mtime": 1784192738.3501787,
+    "ast_hash": "439879f802ca7d3fb31898a99bec7084",
     "semantic_hash": ""
   },
   ".vault/03_MODELOS/MLflow.md": {
@@ -910,8 +875,8 @@
     "semantic_hash": ""
   },
   ".vault/04_VISUALIZACIONES/grafo_conocimiento.md": {
-    "mtime": 1783583028.7426248,
-    "ast_hash": "617bc60c5f5024086a94783eae98f92a",
+    "mtime": 1784100564.3683226,
+    "ast_hash": "5878ba5abbfc7c684ba8300f6f1caa96",
     "semantic_hash": ""
   },
   ".vault/05_AGENTES/APIAgent.md": {
@@ -1010,18 +975,18 @@
     "semantic_hash": ""
   },
   ".vault/07_REFERENCIAS/papers.md": {
-    "mtime": 1784023131.1421125,
-    "ast_hash": "df9cb3b1adad05341ea3c631266c3b36",
+    "mtime": 1784704026.3326468,
+    "ast_hash": "06b830ba453254f652437a437c593ecb",
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1784026783.1425588,
-    "ast_hash": "ae979eeb51ec6911c7fafbeef9dd0fa1",
+    "mtime": 1785396983.095151,
+    "ast_hash": "a297f7acbbf5942028af418f95062873",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1783685432.5156224,
-    "ast_hash": "767fb3fccec495f74bfd9cb96f12cc28",
+    "mtime": 1785397432.771456,
+    "ast_hash": "3fafc4488a16f59dfcf8cf1cef506805",
     "semantic_hash": ""
   },
   "agents/README.md": {
@@ -1035,93 +1000,88 @@
     "semantic_hash": ""
   },
   "agents/prompts/api_agent.md": {
-    "mtime": 1783253295.0,
-    "ast_hash": "5ceaa35cba679cb93a8005842f8a6774",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "f2b083a5f9a8cd9fd30bd8699c844359",
     "semantic_hash": ""
   },
   "agents/prompts/audit_agent.md": {
-    "mtime": 1783664752.85759,
-    "ast_hash": "8fb2e729099436467ed3230e1e0d6d9c",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "cc596a6cd09d11b9ddbd241b9afb691d",
     "semantic_hash": ""
   },
   "agents/prompts/cicd_agent.md": {
-    "mtime": 1783253295.0,
-    "ast_hash": "4fa88017149e6a2e943aa97c6594f055",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "afd42ef193cd275289cdf72e3d28bb0e",
     "semantic_hash": ""
   },
   "agents/prompts/data_agent.md": {
-    "mtime": 1783060411.0,
-    "ast_hash": "bf0152b014b6fa2e6c8926c15c07e47c",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "289011fbc32521ffdd728a4ad7937ccd",
     "semantic_hash": ""
   },
   "agents/prompts/dependency_agent.md": {
-    "mtime": 1783253295.0,
-    "ast_hash": "e4f3c3deef85d0b5c3105f2e806905ea",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "e0b407dd35de7314a3ba819e692c2626",
     "semantic_hash": ""
   },
   "agents/prompts/docker_agent.md": {
-    "mtime": 1783060411.0,
-    "ast_hash": "b31f6d8a0e5f9fba719b09196bd6b557",
-    "semantic_hash": ""
-  },
-  "agents/prompts/docsearch_agent.md": {
-    "mtime": 1783664752.85759,
-    "ast_hash": "3efd3d91fe1e7afcedff333e821d82ff",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "2a32c6ceeff915959d7ea9652376ddad",
     "semantic_hash": ""
   },
   "agents/prompts/doctor_agent.md": {
-    "mtime": 1783664752.85759,
-    "ast_hash": "335605a6348a2ae5373d994f4f15105a",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "65dfb1b035be98be8e1c346546346d24",
     "semantic_hash": ""
   },
   "agents/prompts/documentation_agent.md": {
-    "mtime": 1783060411.0,
-    "ast_hash": "d8aa7dfa8ec346f0e83211c07c046a9c",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "1a56743889a07a13a6f7c02a60b58fb4",
     "semantic_hash": ""
   },
   "agents/prompts/env_agent.md": {
-    "mtime": 1783664752.85759,
-    "ast_hash": "cd51d1f7d935affc259af3c251692bb5",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "38b478fa4941add13203e91e84e647ff",
     "semantic_hash": ""
   },
   "agents/prompts/git_agent.md": {
-    "mtime": 1783060411.0,
-    "ast_hash": "d8dc2cf65d8e7115e2ac74c7da095077",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "cf749c03ecfa835ce9bbc12203f5d071",
     "semantic_hash": ""
   },
   "agents/prompts/graph_agent.md": {
-    "mtime": 1783060411.0,
-    "ast_hash": "8d925616e48c163a4c03603b5f91333d",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "f08bb41b4e0b98262c21f8ab186aa64a",
     "semantic_hash": ""
   },
   "agents/prompts/installer_agent.md": {
-    "mtime": 1783127708.0,
-    "ast_hash": "66015cab98e14eb36a86032a0997eab1",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "b579c5d8983d760075f319348e4a1305",
     "semantic_hash": ""
   },
   "agents/prompts/knowledge_agent.md": {
-    "mtime": 1783664752.85759,
-    "ast_hash": "0b4ac9b7fe9271f1208f631166fe2d55",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "1efa295a89cf36186984f348a12cc05f",
     "semantic_hash": ""
   },
   "agents/prompts/make_agent.md": {
-    "mtime": 1783664752.86159,
-    "ast_hash": "070a7127c881734a329a0ac1bf293aee",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "2244c03f3d8585b165908138a449070a",
     "semantic_hash": ""
   },
   "agents/prompts/ml_agent.md": {
-    "mtime": 1783060411.0,
-    "ast_hash": "334c2fdfe4f57f929493bfca1f1291a4",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "f81fb8e531d4e75c0b3e66c18e3d8ab7",
     "semantic_hash": ""
   },
   "agents/prompts/mlflow_agent.md": {
-    "mtime": 1783253295.0,
-    "ast_hash": "222d1aef8c5278f7f3b796d8e847aff1",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "7fc8241e9e389f531c45df72f83d5290",
     "semantic_hash": ""
   },
   "agents/prompts/notebook_agent.md": {
-    "mtime": 1783414043.7205925,
-    "ast_hash": "f93654c1cae7cdabd1a424a0ea1867be",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "70aebd980baa44fd1ef82cdc0fd7df7e",
     "semantic_hash": ""
   },
   "agents/prompts/orchestrator.md": {
@@ -1130,38 +1090,33 @@
     "semantic_hash": ""
   },
   "agents/prompts/plan_agent.md": {
-    "mtime": 1783664752.86159,
-    "ast_hash": "a31e8a2d726a5beb880ae486d60c09d6",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "15410bdda6c6c7c6b6f04636d14f8ece",
     "semantic_hash": ""
   },
   "agents/prompts/refactor_agent.md": {
-    "mtime": 1783664752.86159,
-    "ast_hash": "3e9d5c979bc42378f264305e777d1a89",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "574a4b8db4e2b2bcbf7f0b6972911c58",
     "semantic_hash": ""
   },
   "agents/prompts/research_agent.md": {
-    "mtime": 1783664752.86159,
-    "ast_hash": "1ade893139615c0aa4277bc831b3d491",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "3c9006b2491d544ae12900805fc7a1eb",
     "semantic_hash": ""
   },
   "agents/prompts/review_agent.md": {
-    "mtime": 1783060411.0,
-    "ast_hash": "914ca70685f68df5d64974edef1e0e0e",
-    "semantic_hash": ""
-  },
-  "agents/prompts/schedule_agent.md": {
-    "mtime": 1783664752.8655899,
-    "ast_hash": "1b7af9d3801df496a22ceb5d696dd932",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "047b2e60e09bc785ad2a237f89be3875",
     "semantic_hash": ""
   },
   "agents/prompts/supervisor_agent.md": {
-    "mtime": 1783664752.8655899,
-    "ast_hash": "82b3778cb25099562da657709ff241e1",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "f5597ab51d72d05b5102504697454d0a",
     "semantic_hash": ""
   },
   "agents/prompts/test_agent.md": {
-    "mtime": 1783253295.0,
-    "ast_hash": "ba7022825140f5d325b0a27d380b67f4",
+    "mtime": 1785312843.8007326,
+    "ast_hash": "602b79484b588e9164d48f658012d555",
     "semantic_hash": ""
   },
   "agents/workspace/README.md": {
@@ -1175,373 +1130,13 @@
     "semantic_hash": ""
   },
   "documentacion/README.md": {
-    "mtime": 1782908090.8794303,
-    "ast_hash": "ff5cfe4d0aa4e0b8def7cdd62c6e404e",
-    "semantic_hash": ""
-  },
-  "documentacion/ablacion_features_27v19.md": {
-    "mtime": 1783964363.2513766,
-    "ast_hash": "558c3e6d35d3f574a67bbeed83067275",
-    "semantic_hash": ""
-  },
-  "documentacion/agentes_ia.md": {
-    "mtime": 1783580018.2736049,
-    "ast_hash": "5c8d8540f2227ea1799439f234bf4a99",
-    "semantic_hash": ""
-  },
-  "documentacion/calibracion_umbrales.md": {
-    "mtime": 1783964407.214558,
-    "ast_hash": "8ccfbf091c8dd3f14c6985b3a3597e07",
-    "semantic_hash": ""
-  },
-  "documentacion/coeficientes_personalizacion_riesgo.md": {
-    "mtime": 1783685878.0954156,
-    "ast_hash": "6b9035b126f7b300c5a460a7344188e5",
-    "semantic_hash": ""
-  },
-  "documentacion/conclusiones_modelos.md": {
-    "mtime": 1783964477.0972588,
-    "ast_hash": "06e2ba11eb04eb84522f7402625903ba",
-    "semantic_hash": ""
-  },
-  "documentacion/dise\u00f1o_modelo.md": {
-    "mtime": 1783683554.5145772,
-    "ast_hash": "00b4e335039edab9b1927240f2219da9",
-    "semantic_hash": ""
-  },
-  "documentacion/evaluacion_fuentes_externas.md": {
-    "mtime": 1783667037.349797,
-    "ast_hash": "59de3a9526858ce5dd4ad1c789159e86",
-    "semantic_hash": ""
-  },
-  "documentacion/features_frio_retardo.md": {
-    "mtime": 1783964363.2513766,
-    "ast_hash": "0f88b313983a1c6d7a8d36f2e10102c6",
-    "semantic_hash": ""
-  },
-  "documentacion/formulas_ml_resumen.md": {
-    "mtime": 1783685821.5124524,
-    "ast_hash": "899c6155d702b549300582defa671cad",
-    "semantic_hash": ""
-  },
-  "documentacion/formulas_riesgo_deterministico.md": {
-    "mtime": 1782984304.9512324,
-    "ast_hash": "bd4cda0f02423d92e2c6e2ccbc818062",
-    "semantic_hash": ""
-  },
-  "documentacion/label_sin_fuga.md": {
-    "mtime": 1783964413.9664323,
-    "ast_hash": "7bee3f86c298bd64c41894b00b980019",
-    "semantic_hash": ""
-  },
-  "documentacion/lstm_hibrida.md": {
-    "mtime": 1783964407.1265595,
-    "ast_hash": "86918fcf10b317e16accffb402bc6e89",
+    "mtime": 1784713676.945925,
+    "ast_hash": "f68a07f79a39fcd2fab489356b628c0b",
     "semantic_hash": ""
   },
   "documentacion/papers/README.md": {
-    "mtime": 1783686043.796385,
-    "ast_hash": "bf7fc29ccfb0057718f089b67bcd1ab8",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/ilo-2024-safety-health-climate.md": {
-    "mtime": 1783685980.9695332,
-    "ast_hash": "a567f914255d559e1c360c9f9e16505a",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/insst-ntp-322-wbgt.md": {
-    "mtime": 1783686005.5530837,
-    "ast_hash": "0cd00851ef731bb751b7fb2bc585f4bc",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/niosh-2016-106-heat.md": {
-    "mtime": 1783685947.4381464,
-    "ast_hash": "676694c1d0101fc178f0e77668a63b62",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/nws-wind-chill-2001.md": {
-    "mtime": 1783685929.6744714,
-    "ast_hash": "3d0619bec7a878c3cdc7f9b595c531a5",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/plan-nacional-calor-sanidad.md": {
-    "mtime": 1783686020.4168122,
-    "ast_hash": "37afa805f8d2155cc439285a29ee3cad",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/rothfusz-1990-heat-index.md": {
-    "mtime": 1783685918.6866724,
-    "ast_hash": "d8478c3fd7df527ed0facaf70de36213",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/who-heat-health-action-plans.md": {
-    "mtime": 1783685965.0778236,
-    "ast_hash": "9d61f7010ed4830f26508e3adb92a534",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/wong-2024-psychotropics-heat.md": {
-    "mtime": 1783685552.361404,
-    "ast_hash": "fdb8e05ae75ad8d0d7fc72c9df19d2a2",
-    "semantic_hash": ""
-  },
-  "session.md": {
-    "mtime": 1784025444.309024,
-    "ast_hash": "d3b94594e77c3f13f0b8b017f60655b4",
-    "semantic_hash": ""
-  },
-  "documentacion/papers/layton-2020-medications-heat.md": {
-    "mtime": 1783685530.6298056,
-    "ast_hash": "ea2cc510d6b832825fe596f58c8cd1fa",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell035_out0.png": {
-    "mtime": 1783412065.0558858,
-    "ast_hash": "a27ebb170a594d8f696fc41f8ab35096",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell036_out0.png": {
-    "mtime": 1783412558.4534094,
-    "ast_hash": "a27ebb170a594d8f696fc41f8ab35096",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell039_out0.png": {
-    "mtime": 1783412065.0598857,
-    "ast_hash": "d4cd6c7db819b739be37b017b7de324f",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell040_out0.png": {
-    "mtime": 1783412558.4534094,
-    "ast_hash": "d4cd6c7db819b739be37b017b7de324f",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell044_out0.png": {
-    "mtime": 1783412065.0598857,
-    "ast_hash": "324e51053d5a773b50ac97650e41f5f1",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell045_out0.png": {
-    "mtime": 1783412558.4534094,
-    "ast_hash": "324e51053d5a773b50ac97650e41f5f1",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell050_out0.png": {
-    "mtime": 1783412358.6877637,
-    "ast_hash": "a27ebb170a594d8f696fc41f8ab35096",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell051_out0.png": {
-    "mtime": 1783412775.8271072,
-    "ast_hash": "a27ebb170a594d8f696fc41f8ab35096",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell053_out0.png": {
-    "mtime": 1783412065.0598857,
-    "ast_hash": "9b3fe5c42afaf483f83ebfea1b1373c4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell054_out0.png": {
-    "mtime": 1783412558.4534094,
-    "ast_hash": "9b3fe5c42afaf483f83ebfea1b1373c4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell055_out0.png": {
-    "mtime": 1783412358.6917636,
-    "ast_hash": "d4cd6c7db819b739be37b017b7de324f",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell056_out0.png": {
-    "mtime": 1783412775.8271072,
-    "ast_hash": "d4cd6c7db819b739be37b017b7de324f",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell062_out0.png": {
-    "mtime": 1783412358.6917636,
-    "ast_hash": "324e51053d5a773b50ac97650e41f5f1",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell063_out0.png": {
-    "mtime": 1783412775.8271072,
-    "ast_hash": "324e51053d5a773b50ac97650e41f5f1",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell064_out0.png": {
-    "mtime": 1783412065.0598857,
-    "ast_hash": "9c9f5e184450f70b0b411f20be8eb267",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell065_out0.png": {
-    "mtime": 1783412558.4574094,
-    "ast_hash": "9c9f5e184450f70b0b411f20be8eb267",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell066_out0.png": {
-    "mtime": 1783412802.8228352,
-    "ast_hash": "a27ebb170a594d8f696fc41f8ab35096",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell069_out0.png": {
-    "mtime": 1783412065.0598857,
-    "ast_hash": "f1b4f8e09f44ef33f0dfa4eec7d42a25",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell070_out0.png": {
-    "mtime": 1783412558.4574094,
-    "ast_hash": "f1b4f8e09f44ef33f0dfa4eec7d42a25",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell072_out0.png": {
-    "mtime": 1783412802.8268352,
-    "ast_hash": "d4cd6c7db819b739be37b017b7de324f",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell073_out0.png": {
-    "mtime": 1783412065.0638857,
-    "ast_hash": "cbb60d450e281ef1102a46ab1814331e",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell074_out0.png": {
-    "mtime": 1783412358.6917636,
-    "ast_hash": "9b3fe5c42afaf483f83ebfea1b1373c4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell075_out0.png": {
-    "mtime": 1783412775.8271072,
-    "ast_hash": "9b3fe5c42afaf483f83ebfea1b1373c4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell076_out1.png": {
-    "mtime": 1783412065.0638857,
-    "ast_hash": "dc31d6e213a4dd18f20302e53cd89382",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell078_out0.png": {
-    "mtime": 1783412558.4574094,
-    "ast_hash": "41100d1b95cb4b504a7d05ff562a63a4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell080_out1.png": {
-    "mtime": 1783412558.4614093,
-    "ast_hash": "dc31d6e213a4dd18f20302e53cd89382",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell081_out0.png": {
-    "mtime": 1783412905.5018234,
-    "ast_hash": "a27ebb170a594d8f696fc41f8ab35096",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell088_out0.png": {
-    "mtime": 1783412905.5018234,
-    "ast_hash": "d4cd6c7db819b739be37b017b7de324f",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell089_out0.png": {
-    "mtime": 1783412358.6917636,
-    "ast_hash": "9c9f5e184450f70b0b411f20be8eb267",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell090_out0.png": {
-    "mtime": 1783412775.8311071,
-    "ast_hash": "9c9f5e184450f70b0b411f20be8eb267",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell096_out0.png": {
-    "mtime": 1783412802.8268352,
-    "ast_hash": "9b3fe5c42afaf483f83ebfea1b1373c4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell097_out0.png": {
-    "mtime": 1783412775.8311071,
-    "ast_hash": "f1b4f8e09f44ef33f0dfa4eec7d42a25",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell099_out0.png": {
-    "mtime": 1783412905.5018234,
-    "ast_hash": "324e51053d5a773b50ac97650e41f5f1",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell102_out0.png": {
-    "mtime": 1783412358.6957636,
-    "ast_hash": "cbb60d450e281ef1102a46ab1814331e",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell104_out0.png": {
-    "mtime": 1783412775.8311071,
-    "ast_hash": "cbb60d450e281ef1102a46ab1814331e",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell105_out0.png": {
-    "mtime": 1783412358.6957636,
-    "ast_hash": "41100d1b95cb4b504a7d05ff562a63a4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell107_out1.png": {
-    "mtime": 1783412358.6957636,
-    "ast_hash": "dc31d6e213a4dd18f20302e53cd89382",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell108_out0.png": {
-    "mtime": 1783412775.8311071,
-    "ast_hash": "41100d1b95cb4b504a7d05ff562a63a4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell111_out1.png": {
-    "mtime": 1783412775.8311071,
-    "ast_hash": "dc31d6e213a4dd18f20302e53cd89382",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell115_out0.png": {
-    "mtime": 1783412802.8268352,
-    "ast_hash": "9c9f5e184450f70b0b411f20be8eb267",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell117_out0.png": {
-    "mtime": 1783412905.5018234,
-    "ast_hash": "9b3fe5c42afaf483f83ebfea1b1373c4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell124_out0.png": {
-    "mtime": 1783412802.8268352,
-    "ast_hash": "f1b4f8e09f44ef33f0dfa4eec7d42a25",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell133_out0.png": {
-    "mtime": 1783412802.830835,
-    "ast_hash": "cbb60d450e281ef1102a46ab1814331e",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell138_out0.png": {
-    "mtime": 1783412802.830835,
-    "ast_hash": "41100d1b95cb4b504a7d05ff562a63a4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell140_out0.png": {
-    "mtime": 1783412905.5018234,
-    "ast_hash": "9c9f5e184450f70b0b411f20be8eb267",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell142_out1.png": {
-    "mtime": 1783412802.830835,
-    "ast_hash": "dc31d6e213a4dd18f20302e53cd89382",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell151_out0.png": {
-    "mtime": 1783412905.5018234,
-    "ast_hash": "f1b4f8e09f44ef33f0dfa4eec7d42a25",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell162_out0.png": {
-    "mtime": 1783412905.5058234,
-    "ast_hash": "cbb60d450e281ef1102a46ab1814331e",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell168_out0.png": {
-    "mtime": 1783412905.5058234,
-    "ast_hash": "41100d1b95cb4b504a7d05ff562a63a4",
-    "semantic_hash": ""
-  },
-  "agents/workspace/notebook/cell173_out1.png": {
-    "mtime": 1783412905.5058234,
-    "ast_hash": "dc31d6e213a4dd18f20302e53cd89382",
+    "mtime": 1784283524.6840265,
+    "ast_hash": "e0fe108fc3218e7d59d8fdeade3fdd34",
     "semantic_hash": ""
   },
   ".vault/05_AGENTES.md": {
@@ -1552,6 +1147,1166 @@
   ".vault/06_OBSERVACIONES/2026-07-15_optimizacion_lstm.md": {
     "mtime": 1784099825.6251774,
     "ast_hash": "b6c4860b1cbc4d9f48e6d925b1fc5fab",
+    "semantic_hash": ""
+  },
+  ".mcp.json": {
+    "mtime": 1785145391.0160322,
+    "ast_hash": "fc8b41082201cbb522e6c54d08f2d880",
+    "semantic_hash": ""
+  },
+  "agents/agents/doc_agent.py": {
+    "mtime": 1785307018.144227,
+    "ast_hash": "db879f5b542fd106319358c8c9d324bc",
+    "semantic_hash": ""
+  },
+  "agents/agents/harness_agent.py": {
+    "mtime": 1785307717.15898,
+    "ast_hash": "80c7136e698742c5c0fc9961ceb892ba",
+    "semantic_hash": ""
+  },
+  "agents/evals/__init__.py": {
+    "mtime": 1785307277.7165372,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "agents/evals/runner.py": {
+    "mtime": 1785307291.0243607,
+    "ast_hash": "92776931f905844dc28abe12e5487858",
+    "semantic_hash": ""
+  },
+  "agents/paper_scout.py": {
+    "mtime": 1784707494.791166,
+    "ast_hash": "801e8df1eddcd230250458d520d19568",
+    "semantic_hash": ""
+  },
+  "agents/prompts_sync.py": {
+    "mtime": 1785307277.7205372,
+    "ast_hash": "fc503f745a597b07ebd54237db33d517",
+    "semantic_hash": ""
+  },
+  "agents/tools/factors_mcp_tool.py": {
+    "mtime": 1785318792.2896523,
+    "ast_hash": "e3d1637c76d5d84a7655d21917f6b48d",
+    "semantic_hash": ""
+  },
+  "agents/tools/prediction_mcp_tool.py": {
+    "mtime": 1785394165.8858469,
+    "ast_hash": "78974d549bb44bf09f3776c8af21a811",
+    "semantic_hash": ""
+  },
+  "climasafeai/bot/__init__.py": {
+    "mtime": 1785328288.7362468,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "climasafeai/bot/geocoding.py": {
+    "mtime": 1785331688.327562,
+    "ast_hash": "00244a29cf397a1ed0c498599c5ea290",
+    "semantic_hash": ""
+  },
+  "climasafeai/bot/telegram_bot.py": {
+    "mtime": 1785396608.8085916,
+    "ast_hash": "c7626f125a7342c6a752d989c09e51f9",
+    "semantic_hash": ""
+  },
+  "climasafeai/data/grid_risk.py": {
+    "mtime": 1784888526.3294656,
+    "ast_hash": "b2d229b17ff523f1460233ece7c849a9",
+    "semantic_hash": ""
+  },
+  "climasafeai/data/recomendaciones.json": {
+    "mtime": 1784386485.7485046,
+    "ast_hash": "ad1b1051cf48ac3d8828e3dae76cf440",
+    "semantic_hash": ""
+  },
+  "climasafeai/data/weather_fetcher.py": {
+    "mtime": 1784876533.816664,
+    "ast_hash": "4eb37147730a952bd69316a7cf3cc49a",
+    "semantic_hash": ""
+  },
+  "climasafeai/db/__init__.py": {
+    "mtime": 1784629180.980207,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "climasafeai/db/manager.py": {
+    "mtime": 1785318784.9097824,
+    "ast_hash": "f54cf7cad58eab6eab6d47e548fa6e94",
+    "semantic_hash": ""
+  },
+  "climasafeai/db/rag.py": {
+    "mtime": 1785318871.404258,
+    "ast_hash": "0c5b9fe95ef82a353ab3c55c7e64c460",
+    "semantic_hash": ""
+  },
+  "climasafeai/ml/active_learner.py": {
+    "mtime": 1784707646.5825849,
+    "ast_hash": "9a0219ea1992f54515989a3de236cd92",
+    "semantic_hash": ""
+  },
+  "climasafeai/models/bayes.py": {
+    "mtime": 1784798580.5638542,
+    "ast_hash": "d57048fb40a912e0391c672c73628a88",
+    "semantic_hash": ""
+  },
+  "climasafeai/models/calibrate.py": {
+    "mtime": 1784794651.1596963,
+    "ast_hash": "9c654a846f6b41446a9f48a5de941f70",
+    "semantic_hash": ""
+  },
+  "climasafeai/models/conformal.py": {
+    "mtime": 1784794981.7577536,
+    "ast_hash": "988d5ffab1f84cc75228f087513d5f30",
+    "semantic_hash": ""
+  },
+  "climasafeai/models/ensemble.py": {
+    "mtime": 1785318128.8093877,
+    "ast_hash": "4dcbca10b1406032b400f554f3d7f150",
+    "semantic_hash": ""
+  },
+  "climasafeai/models/explicabilidad.py": {
+    "mtime": 1785146295.6087122,
+    "ast_hash": "1ffa9222e948a02e3e5a5401d49e8c89",
+    "semantic_hash": ""
+  },
+  "climasafeai/models/recomendaciones.py": {
+    "mtime": 1784803643.4983685,
+    "ast_hash": "7d8216722feec6ef0528b95ecef63b15",
+    "semantic_hash": ""
+  },
+  "climasafeai/models/volumen.py": {
+    "mtime": 1785138606.0958433,
+    "ast_hash": "a267f8ee1b505827f775dc91d97ee456",
+    "semantic_hash": ""
+  },
+  "data/factores_riesgo.json": {
+    "mtime": 1784630827.2167184,
+    "ast_hash": "c1c2eff162474b4dd87bc5479fc54d3b",
+    "semantic_hash": ""
+  },
+  "data/schema.sql": {
+    "mtime": 1785312844.0767279,
+    "ast_hash": "421cd82eae037a5ce6c97c6d6b571f0c",
+    "semantic_hash": ""
+  },
+  "featureslist.json": {
+    "mtime": 1785331210.200049,
+    "ast_hash": "79f77302c57aba04bb6e19a3044b5f58",
+    "semantic_hash": ""
+  },
+  "init.sh": {
+    "mtime": 1785310748.1353986,
+    "ast_hash": "c4e8818dd0313e9a775aaff96e877337",
+    "semantic_hash": ""
+  },
+  "opencode.json": {
+    "mtime": 1785312844.0767279,
+    "ast_hash": "aa616e2be43bcb37693212723c916b44",
+    "semantic_hash": ""
+  },
+  "scripts/run_bot.sh": {
+    "mtime": 1785331277.1948516,
+    "ast_hash": "15e7d252fe4379fac19bfb9eaef2cf92",
+    "semantic_hash": ""
+  },
+  "tests/manual_analysis.py": {
+    "mtime": 1784634590.1549227,
+    "ast_hash": "0068de76413482ffc9de4d8d37e0b603",
+    "semantic_hash": ""
+  },
+  "tests/test_telegram_bot.py": {
+    "mtime": 1785396063.2771976,
+    "ast_hash": "972a8a05fd634b556b840443e9e43a00",
+    "semantic_hash": ""
+  },
+  "tests/test_volumen.py": {
+    "mtime": 1785138698.4207466,
+    "ast_hash": "26eff58db7ece74f60bca3d7aba7fa50",
+    "semantic_hash": ""
+  },
+  ".github/workflows/paper_scout.yml": {
+    "mtime": 1784625822.2827535,
+    "ast_hash": "f225927d4d22dd90a6a218b6a695b7fd",
+    "semantic_hash": ""
+  },
+  ".opencode/agents/explorer.md": {
+    "mtime": 1785307717.1829796,
+    "ast_hash": "8790f6835eb025288e4560e55de98b79",
+    "semantic_hash": ""
+  },
+  ".opencode/agents/implementer.md": {
+    "mtime": 1785308029.015807,
+    "ast_hash": "6619a512e65eeedbf7703f8c4a9dc931",
+    "semantic_hash": ""
+  },
+  ".opencode/agents/lider.md": {
+    "mtime": 1785308024.9398913,
+    "ast_hash": "5ea655f8ca457ccad84947999d4b1809",
+    "semantic_hash": ""
+  },
+  ".opencode/agents/reviewer.md": {
+    "mtime": 1785307717.1829796,
+    "ast_hash": "9f1105784a6b1d4ca56a4db09af47b93",
+    "semantic_hash": ""
+  },
+  ".opencode/orchestrator.md": {
+    "mtime": 1785312843.8007326,
+    "ast_hash": "60b29c18190f4d6eed7aa6877606530f",
+    "semantic_hash": ""
+  },
+  ".vault/06_OBSERVACIONES/2026-07-16_fusion_ensemble_explicabilidad.md": {
+    "mtime": 1784282693.4673033,
+    "ast_hash": "adfbb6282fbf38e7159e5c2241cd1467",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1785308012.3721538,
+    "ast_hash": "66ea7448a4d81b7de28780450d48767f",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1785308021.4639637,
+    "ast_hash": "8dc9ba646721047b4d893301ebba3e35",
+    "semantic_hash": ""
+  },
+  "agents/prompts/doc_agent.md": {
+    "mtime": 1785308196.0725174,
+    "ast_hash": "27b334c841694c89bce14012f747c4a7",
+    "semantic_hash": ""
+  },
+  "agents/prompts/harness_agent.md": {
+    "mtime": 1785308196.0725174,
+    "ast_hash": "1b39c93bd3f45b567dae45f40972f7d6",
+    "semantic_hash": ""
+  },
+  "agents/prompts/harness_workflow.md": {
+    "mtime": 1785307803.8808823,
+    "ast_hash": "21e9113c237ebaec924d6e70c7763d64",
+    "semantic_hash": ""
+  },
+  "documentacion/arquitectura/README.md": {
+    "mtime": 1784713689.8257227,
+    "ast_hash": "96df78f260e81f7f6c1573ad022df9e3",
+    "semantic_hash": ""
+  },
+  "documentacion/arquitectura/base_datos.md": {
+    "mtime": 1784713723.3531942,
+    "ast_hash": "71d8118fa070b0d3c0691d5bb2db6622",
+    "semantic_hash": ""
+  },
+  "documentacion/arquitectura/decisiones_estratificacion_demografica.md": {
+    "mtime": 1784293350.8653603,
+    "ast_hash": "6c10c9453b8bd1717c41f81047a8a32e",
+    "semantic_hash": ""
+  },
+  "documentacion/arquitectura/dise\u00f1o_modelo.md": {
+    "mtime": 1784709987.4745073,
+    "ast_hash": "fb5538711ff39d1ec67f4d92f9e987c5",
+    "semantic_hash": ""
+  },
+  "documentacion/arquitectura/evaluacion_fuentes_externas.md": {
+    "mtime": 1784282711.1469653,
+    "ast_hash": "59de3a9526858ce5dd4ad1c789159e86",
+    "semantic_hash": ""
+  },
+  "documentacion/arquitectura/pipeline_prediccion.md": {
+    "mtime": 1784806035.4445534,
+    "ast_hash": "30dc869698f0b33184ac4da87a16e237",
+    "semantic_hash": ""
+  },
+  "documentacion/conclusion-base-conocimiento.md": {
+    "mtime": 1784622072.5527654,
+    "ast_hash": "5a8a3be00a6b57db0494f2eaa2717127",
+    "semantic_hash": ""
+  },
+  "documentacion/conformal_prediction.md": {
+    "mtime": 1784554026.7483373,
+    "ast_hash": "acbbb8efa83584cdf8b6b799a0db09e5",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/README.md": {
+    "mtime": 1784713683.2618258,
+    "ast_hash": "31f2732cf3d89eb7ebe336ae871221ed",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/ablacion_features_27v19.md": {
+    "mtime": 1784282711.1509652,
+    "ast_hash": "558c3e6d35d3f574a67bbeed83067275",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/active_learner.md": {
+    "mtime": 1784715956.759333,
+    "ast_hash": "acbe8f77092810d4aadc1cdd8b3b6d1b",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/alternativas_descartadas.md": {
+    "mtime": 1784790075.2614152,
+    "ast_hash": "f91b50af799a2b192af1e74a80760fe5",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/calibracion_umbrales.md": {
+    "mtime": 1784282711.166965,
+    "ast_hash": "8ccfbf091c8dd3f14c6985b3a3597e07",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/conclusiones_modelos.md": {
+    "mtime": 1784282711.174965,
+    "ast_hash": "06e2ba11eb04eb84522f7402625903ba",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/contrafactuales.md": {
+    "mtime": 1784713635.9545655,
+    "ast_hash": "c4115b8b5013cfd12f96312540b8114c",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/features_frio_retardo.md": {
+    "mtime": 1784282711.1829646,
+    "ast_hash": "0f88b313983a1c6d7a8d36f2e10102c6",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/formulas_vs_secuencias.md": {
+    "mtime": 1784282711.2909627,
+    "ast_hash": "899c6155d702b549300582defa671cad",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/label_sin_fuga.md": {
+    "mtime": 1784282711.1909645,
+    "ast_hash": "7bee3f86c298bd64c41894b00b980019",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/lstm_hibrida.md": {
+    "mtime": 1784282711.1949644,
+    "ast_hash": "ca8317f060ed293e4c62ebce77dc221d",
+    "semantic_hash": ""
+  },
+  "documentacion/ml/problemas_conocidos.md": {
+    "mtime": 1784317117.3361957,
+    "ast_hash": "28f1f9c01443037aaed76d2197e638a0",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/README.md": {
+    "mtime": 1784710753.1465645,
+    "ast_hash": "cc334f1b76ecf0d6618e4ef9cc0107bf",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/actuales/README.md": {
+    "mtime": 1784622038.2132645,
+    "ast_hash": "11d74e8c10f0c7ea817bd4f7a6ad0e39",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/actuales/lstm.md": {
+    "mtime": 1784283490.3606424,
+    "ast_hash": "1f3202b416720fe4312afe6ce0652448",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/actuales/randomforest.md": {
+    "mtime": 1784283481.9447935,
+    "ast_hash": "fe7c4c881ed1da372097099a07a0ea6a",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/actuales/xgboost.md": {
+    "mtime": 1784283485.2327344,
+    "ast_hash": "d97763e541a071640f50ec0824cd34fa",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/README.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "972ea548699592b405d76b81bf75d79c",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/mesoscale-predictability-of-an-extreme-warm-season-precipitation-event.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "43977908449cd32cd80c188ac706106e",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/pysteps-an-open-source-python-library-for-probabilistic-precipitation-nowcasting.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "75241637f1c5333a56ee82e3bb86db0f",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/README.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "c313f8f383a1eb8e420ca8d6ea5db904",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/spatiotemporal-graph-neural-network-for-performance-prediction-of-photovoltaic-p.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "98b2de78219777be5243202f4d448993",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/traffic-flow-forecasting-with-spatial-temporal-graph-diffusion-network.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "fd6e557bc5e69cb3285e94bdc0fa1654",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/README.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "2bcf6e17a35b6cfcb61f2ac1281d0e96",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/a-comprehensive-survey-of-deep-learning-for-time-series-forecasting-architectura.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "b231d0f07ec03e3a7e6a1ef1e8b3d458",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/forecasting-of-solar-power-using-gru-temporal-fusion-transformer-model-and-dilat.md": {
+    "mtime": 1784283902.8052783,
+    "ast_hash": "3f3b7de19f125fcfcd4527dc67f6363b",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/README.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "90ca026dbb0b6261bb8a0cbe14293c8f",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/are-transformers-effective-for-time-series-forecasting.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "00ed307d3ee03a9d430a5e1595217db2",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/attributing-and-projecting-heatwaves-is-hard-we-can-do-better.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "2373f1ff5ec980750a466d38cd7bcff0",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/attribution-of-mortality-to-the-urban-heat-island-during-heatwaves-in-the-west-m.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "7010785149bc70de51af43324bb86aa7",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/drivers-of-the-uk-summer-heatwave-of-2018.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "8fbdbbe3b2394eea4f6c22e5d67ac99f",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/fuxi-a-cascade-machine-learning-forecasting-system-for-15-day-global-weather-for.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "9a2c9f51c915a1b535f104221925744d",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/heatwave-attribution-based-on-reliable-operational-weather-forecasts.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "b29f246d0c2974e509adc58cfc197412",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/multivariate-temporal-convolutional-network-a-deep-neural-networks-approach-for.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "450f4ebe5c473d1908b7da2d16464d9f",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/satellite-based-time-series-of-sea-surface-temperature-since-1981-for-climate-ap.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "3cb368726131eba1eead6d42be66129c",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/temporal-convolutional-neural-tcn-network-for-an-effective-weather-forecasting-u.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "5dcc673bcb592561798970a2307432f7",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/the-challenge-of-machine-learning-in-space-weather-nowcasting-and-forecasting.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "51138bc5ac657c2e3769e36db3de9c99",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/the-most-at-risk-regions-in-the-world-for-high-impact-heatwaves.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "6f7a91f533d1aa001f9c8183d7c06081",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/the-unprecedented-pacific-northwest-heatwave-of-june-2021.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "b1c03ece8e1a3420cba13cc6c38997d7",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/README.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "96b15b671808c6a854ca6e6db7100183",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/README.md": {
+    "mtime": 1784546086.5592966,
+    "ast_hash": "1902035f089136032481e35e85a87f24",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/antipsychotics-heat-mortality-sci-reports-2025.md": {
+    "mtime": 1784285815.0500395,
+    "ast_hash": "d2850ae6838e03fa600c50eb93ed7e47",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/benmarhnia-2015-vulnerability-heat-mortality.md": {
+    "mtime": 1784285808.7621694,
+    "ast_hash": "328931d27a7c5892030c725d6311851d",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/ceccarelli-2025-extreme-heat-vulnerability-lazio.md": {
+    "mtime": 1784285835.1536248,
+    "ast_hash": "2c50cfa068e487bddfe6240d02335312",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/cold-an-underrated-risk-factor-for-health.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "1a641fd83f38bb1fa83f1b6249c59fa8",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/curriero-2002-temperature-mortality-us-cities.md": {
+    "mtime": 1784285829.6577382,
+    "ast_hash": "5ab0671e9d83db419562350281041f56",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/excess-winter-mortality-in-europe-a-cross-country-analysis-identifying-key-risk.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "482443e99237716116f64eb8ae7875c6",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/mortality-risk-attributable-to-high-and-low-ambient-temperature-a-multicountry-o.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "17e2bda0a5ea017475f06d91043044a9",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/relation-between-elevated-ambient-temperature-and-mortality-a-review-of-the-epid.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "6ed22bc3709fc81311aa8fe0e6c1dc82",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md": {
+    "mtime": 1784285801.0543287,
+    "ast_hash": "20d1016a68152b57e9e43ae9bfb15e83",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/temperature-and-mortality-in-11-cities-of-the-eastern-united-states.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "f34d8eb78e78bc99f9c305c7dbfc45ce",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/wong-2024-psychotropics-heat.md": {
+    "mtime": 1784283931.856762,
+    "ast_hash": "fdb8e05ae75ad8d0d7fc72c9df19d2a2",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/README.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "1fa576af76ccaf5ae1e106672d1b0253",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/insst-ntp-322-wbgt.md": {
+    "mtime": 1784283943.332558,
+    "ast_hash": "0cd00851ef731bb751b7fb2bc585f4bc",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/nws-wind-chill-2001.md": {
+    "mtime": 1784704029.6125965,
+    "ast_hash": "32261e8fde6fc4dae030c03eedab3c75",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/rothfusz-1990-heat-index.md": {
+    "mtime": 1784704029.6805954,
+    "ast_hash": "b59d3a50e2d74230ac0b04d6c8f85857",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/README.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "54ccbbed5d8c8da9c94014ac84ade24d",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/ilo-2024-safety-health-climate.md": {
+    "mtime": 1784704030.2525866,
+    "ast_hash": "0b29ba57afe4eee5916fb7b43897ccb1",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/niosh-2016-106-heat.md": {
+    "mtime": 1784704034.340524,
+    "ast_hash": "7361619f74246947f6e10f4970c32cca",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/README.md": {
+    "mtime": 1784622052.5250564,
+    "ast_hash": "c34f3e035c9cbc817292c526b3c8ae15",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/assessment-of-extreme-heat-and-hospitalizations-to-inform-early-warning-systems.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "bf30420334df4b8028aac24d5247744e",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/heat-related-mortality-in-europe-during-the-summer-of-2022.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "395cdee171564ae9bb4b3fe24758e6d7",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/heat-watch-warning-systems-save-lives-estimated-costs-and-benefits-for-philadelp.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "49d6e7fb266e092d065b4abb5e75c66c",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/heatwave-early-warning-systems-and-adaptation-advice-to-reduce-human-health-cons.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "ccbe27287752e05d2fb2ec8367fd1a16",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/heatwaves-and-public-health-in-europe.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "af70e6e8127edba4f5cbe16dcc55c126",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/iterative-management-of-heat-early-warning-systems-in-a-changing-climate.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "577e0bbcd59b1d69020c9654455eb00f",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/plan-nacional-calor-sanidad.md": {
+    "mtime": 1784283943.3365579,
+    "ast_hash": "37afa805f8d2155cc439285a29ee3cad",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/the-heat-health-warning-system-in-germany-application-and-warnings-for-2005-to-2.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "370e378164488cf1d6dbe4ef4cd4b746",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/the-imperative-for-climate-action-to-protect-health.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "75e60593abebe0eabe4dbec60f8e98f2",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/who-heat-health-action-plans.md": {
+    "mtime": 1784704028.5006135,
+    "ast_hash": "6644f3282ff3dfc14dfaa5d3cedd7e16",
+    "semantic_hash": ""
+  },
+  "documentacion/proximos_pasos.md": {
+    "mtime": 1785397562.2089026,
+    "ast_hash": "cbc91981d8277b95b7109cff2cb49679",
+    "semantic_hash": ""
+  },
+  "documentacion/riesgo/README.md": {
+    "mtime": 1784704010.7048876,
+    "ast_hash": "c2b4883532678e9e37f9aa547eda8631",
+    "semantic_hash": ""
+  },
+  "documentacion/riesgo/coeficientes_literatura.md": {
+    "mtime": 1784704027.9926214,
+    "ast_hash": "ab1268cab597ad758ce8e3defb9241c7",
+    "semantic_hash": ""
+  },
+  "documentacion/riesgo/formulas_deterministas.md": {
+    "mtime": 1784282711.3429615,
+    "ast_hash": "bd4cda0f02423d92e2c6e2ccbc818062",
+    "semantic_hash": ""
+  },
+  "documentacion/riesgo/personalizacion_individual.md": {
+    "mtime": 1784806067.068002,
+    "ast_hash": "d7b5e91cfa670883bb55c0ae4ff42a2d",
+    "semantic_hash": ""
+  },
+  "progress/README.md": {
+    "mtime": 1785307717.1629798,
+    "ast_hash": "b9cc8780b66c4d002d203ac1f68a0944",
+    "semantic_hash": ""
+  },
+  "progress/current.md": {
+    "mtime": 1785331226.795752,
+    "ast_hash": "a2aab435ec7d23803efb056cdafb6c7e",
+    "semantic_hash": ""
+  },
+  "progress/explorer-BOT-002.md": {
+    "mtime": 1785328581.1789525,
+    "ast_hash": "1324912d6de84ea6f77c0e6897816b0d",
+    "semantic_hash": ""
+  },
+  "progress/history.md": {
+    "mtime": 1785331220.7798595,
+    "ast_hash": "76ea9130ccf95e04d8f8ad57adb9a80a",
+    "semantic_hash": ""
+  },
+  "progress/implementer-BOT-002.md": {
+    "mtime": 1785361134.409977,
+    "ast_hash": "b427dccef628a1335ffb1bc15cdca9be",
+    "semantic_hash": ""
+  },
+  "progress/implementer-ENS-001.md": {
+    "mtime": 1785314769.80916,
+    "ast_hash": "6464b38fd1192550d1b1700424ecc9b3",
+    "semantic_hash": ""
+  },
+  "progress/implementer-RAG-001.md": {
+    "mtime": 1785318967.102572,
+    "ast_hash": "42502050903e2a2f63d19d8344af2729",
+    "semantic_hash": ""
+  },
+  "progress/reviewer-ENS-001.md": {
+    "mtime": 1785315801.046885,
+    "ast_hash": "709530c5b36fc713c4296ae9bb178ed4",
+    "semantic_hash": ""
+  },
+  "documentacion/arquitectura/agentes_ia.md": {
+    "mtime": 1784713705.6094742,
+    "ast_hash": "dad8b2ec0cd23e8cd3abc8b9983023a5",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/a-survey-on-diffusion-models-for-time-series-and-spatio-temporal-data.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "6a6da3155622922e614f1ae78dfd8090",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/approximate-probabilistic-inference-for-time-series-data-a-robust-latent-gaussia.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "0809566e17ee6eba27b190f54682ce3d",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/benchmarking-iot-time-series-ad-with-event-level-augmentations.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "23bf079c50f03a5928220be2170fe041",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/clustering-multivariate-time-series-using-energy-distance.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "0cc39f0f4de450dda5de47c158fbe757",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/gluonts-probabilistic-time-series-models-in-python.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "4a28332433e3b03b2f4f63e450872967",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/lag-llama-towards-foundation-models-for-probabilistic-time-series-forecasting.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "f749f00b367f6f9b8a603d057423e6eb",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/non-parametric-estimation-of-a-multivariate-probability-density.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "ae620559d1edfc2f81ba997742bb9aac",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/on-the-optimal-prediction-of-extreme-events-in-heavy-tailed-time-series-with-app.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "13df8ad92585bddb0c80436a068b9946",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/predict-refine-synthesize-self-guiding-diffusion-models-for-probabilistic-time-s.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "37ab016afe7f7bef3b4cbb5da3b6d305",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/scaling-in-the-timing-of-extreme-events.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "c5a5b4ec7f069726cb10e98b93fd41f7",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/text-generation-with-diffusion-language-models-a-pre-training-approach-with-cont.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "387b8faf298c08d6315e1b5db5e4123c",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/diffusion/the-rise-of-diffusion-models-in-time-series-forecasting.md": {
+    "mtime": 1784283903.84126,
+    "ast_hash": "f4c82863685f9e0176f8e5ac66a4bf51",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/a-multivariate-time-series-graph-neural-network-for-district-heat-load-forecasti.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "f1838e964ba1ad624f839204e13a1a69",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/demand-forecasting-from-spatiotemporal-data-with-graph-networks-and-temporal-gui.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "999b006cbfb1dda4652e1c9bfce5604d",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/dynamic-graph-convolutional-recurrent-network-for-traffic-prediction-benchmark-a.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "2e98904ff020c72e9f6d98711a4cdf9c",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/graph-neural-network-for-traffic-forecasting-the-research-progress.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "f58f2add1c2e2e22ca79ad582c7fcee8",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/leveraging-deterministic-weather-forecasts-for-in-situ-probabilistic-temperature.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "1aaa0bb14031c6b190993d492e47f71e",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/neural-networks-for-post-processing-ensemble-weather-forecasts.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "c953037f3c9edb964bc285b7c7b6183e",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/probabilistic-weather-forecasting-with-hierarchical-graph-neural-networks.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "de4a1c0fc83f7108870e2c0ab988d84d",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/spatio-temporal-graph-neural-networks-for-multi-site-pv-power-forecasting.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "15dabbb7054f81170b91eeee7c96a52e",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/spatio-temporal-wind-speed-forecasting-using-graph-networks-and-novel-transforme.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "89ff72a955f81fb679e60de0e912f9b5",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/gnn/unifying-physics-and-data-driven-modeling-via-novel-causal-spatiotemporal-graph.md": {
+    "mtime": 1784283901.8172958,
+    "ast_hash": "3cff6c0e09104f8e1e62d237601f33d1",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/advancing-financial-forecasting-a-comparative-analysis-of-neural-forecasting-mod.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "8c675f2b942ae4b7bb6fa45b370b03cb",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/analysis-and-forecasting-of-national-marine-litter-based-on-coastal-data-in-sout.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "4074ef748d06effdd6f4a819d4a7dd51",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/long-term-forecasting-with-tide-time-series-dense-encoder.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "fd3cc3ecaf33a4100c799135db577bc4",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/n-beats-moe-n-beats-with-a-mixture-of-experts-layer-for-heterogeneous-time-serie.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "959a7edee90990656dfcbcbaaf748fdf",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/n-beats-neural-basis-expansion-analysis-for-interpretable-time-series-forecastin.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "84e97051ff12d54dcd591cfc79d6fcd5",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/n-hits-neural-hierarchical-interpolation-for-time-series-forecasting.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "95e618a265bdd09f90e290d6a6290647",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/neural-basis-expansion-analysis-with-exogenous-variables-forecasting-electricity.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "2466b0078697adfc51eb2f15891d3779",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/neural-hierarchical-interpolation-time-series-nhits-for-reservoir-level-multi-ho.md": {
+    "mtime": 1784283902.8052783,
+    "ast_hash": "7e7daedcf348d46ed68bd237c7a6495a",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/probabilistic-time-series-forecasting-with-implicit-quantile-networks.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "9af2fdbb45481eae2619dfbab858403f",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/randomized-neural-networks-for-forecasting-time-series-with-multiple-seasonality.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "68296a5cdc02405518096a957d6c143b",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/nbeats/scinet-time-series-modeling-and-forecasting-with-sample-convolution-and-interact.md": {
+    "mtime": 1784283902.8092782,
+    "ast_hash": "aab1f86bed0d8fbc18999332e60d2983",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/a-comparative-assessment-of-deep-learning-models-for-day-ahead-load-forecasting.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "3e1d6c38b6dfab701d8fe5d125f4018d",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/a-review-of-arima-vs-machine-learning-approaches-for-time-series-forecasting-in.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "533cd959504f6d7f5e87ef158e21bea9",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/a-systematic-literature-review-of-forecasting-and-predictive-models-for-cyanobac.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "3aa0bae5b0b56dece46b43692e26792a",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/adaweather-adaptively-mixing-probabilistic-weather-forecasts-with-logarithmic-re.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "03cd42f5943b57163fc70d05b26c7db7",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/an-integrated-probabilistic-model-for-improved-seasonal-forecasting-of-agricultu.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "1f9abdf3bb4fe49e1a72e79da177b012",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/analyzing-uncertainty-quantification-in-statistical-and-deep-learning-models-for.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "19bdb6dc2681fcddf5eb1fa3d37c0e98",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/associations-between-elevated-atmospheric-temperature-and-human-mortality-a-crit.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "b3feb61293acbd3d931b86a17e9f5421",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/deep-learning-based-effective-fine-grained-weather-forecasting-model.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "aaf5cde7f57ec7fa2bdde6147afbc0fc",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/deep-learning-for-anomaly-detection-in-time-series-data-review-analysis-and-guid.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "f159a80aa5f02818577d6f72be2f9949",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/informer-beyond-efficient-transformer-for-long-sequence-time-series-forecasting.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "364606065f83e4c675d14493ac7b79f1",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/itransformer-inverted-transformers-are-effective-for-time-series-forecasting.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "834143a2949c443d5a573f9b82583adf",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/numerical-weather-forecasting-using-convolutional-lstm-with-attention-and-contex.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "2c4f42aa05f925f6c6ddca79463708a8",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/probabilistic-computation-and-uncertainty-quantification-with-emerging-covarianc.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "f019b385e498bf93302574ce3bc4c6d1",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/probabilistic-forecast-of-nonlinear-dynamical-systems-with-uncertainty-quantific.md": {
+    "mtime": 1784283904.849242,
+    "ast_hash": "4f4280501ba33e246433ef064f9cd319",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/probabilistic-hierarchical-forecasting-with-deep-poisson-mixtures.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "4f3cc1348cdb7dc9dbc5b34353645246",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/rigorous-uncertainty-quantification-of-probabilistic-ai-weather-forecasts-with-c.md": {
+    "mtime": 1784283904.845242,
+    "ast_hash": "32532a823c536e0e7e47615ec162540d",
+    "semantic_hash": ""
+  },
+  "documentacion/modelos/transformers/sub-seasonal-forecasting-with-a-large-ensemble-of-deep-learning-weather-predicti.md": {
+    "mtime": 1784283900.7053156,
+    "ast_hash": "843ab40e00fecbff027dd56f177bcc5d",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/adaptation-to-cold-in-arctic-and-tropical-mammals-and-birds-in-relation-to-body.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "4d1a66f8445b1798951829a95546f903",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/adaptations-and-mechanisms-of-human-heat-acclimation-applications-for-competitiv.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "6307ab91a931c08b19adca560d0e246a",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/consensus-recommendations-on-training-and-competing-in-the-heat.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "ad038b2032dd4ea0c034478863230a92",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/effect-of-heat-and-heat-acclimatization-on-cycling-time-trial-performance-and-pa.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "37befbe8e17a3e4587513cfc67211555",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/heat-related-mortality-a-review-and-exploration-of-heterogeneity.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "ff1247b9c7bb9464c344a78071f957b7",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/linking-biogeography-to-physiology-evolutionary-and-acclimatory-adjustments-of-t.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "9df830e86a69ea7678e9d9705d616949",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/on-the-measurement-of-heat-waves.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "c19053f65e674c3e164c5d42f73ad804",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/thermal-adaptation-of-decomposer-communities-in-warming-soils.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "5d1e6b0bac1e5dd16806c7f507ca4358",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/aclimatacion/time-course-of-natural-heat-acclimatization-in-well-trained-cyclists-during-a-2.md": {
+    "mtime": 1784620810.6031122,
+    "ast_hash": "db3e29f75965db1bdbaf0ee17d346f60",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/a-systematic-review-and-meta-analysis-of-cold-exposure-and-cardiovascular-diseas.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "e145634e29e5803ea6a50ed2ec063c6d",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/a-two-stage-approach-to-heat-mortality-risk-assessment-comparing-multiple-exposu.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "e43667ccb54d1e41664d955e24d42407",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/effects-of-air-temperature-on-climate-sensitive-mortality-and-morbidity-outcomes.md": {
+    "mtime": 1784620746.3080475,
+    "ast_hash": "29e931c1d1c13739c4e99f113ff8fc4a",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/hajat-2009-heat-mortality-review.md": {
+    "mtime": 1784285821.6939025,
+    "ast_hash": "b2c1a0e6f0084fc603356cf7af370a10",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/heat-exposure-and-cardiovascular-health-outcomes-a-systematic-review-and-meta-an.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "0fe0e8ac645427a5c6f698fd4a907618",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/heat-related-and-cold-related-deaths-in-england-and-wales-who-is-at-risk.md": {
+    "mtime": 1784283898.3453577,
+    "ast_hash": "d27b101e429575b77c3e7ee497e7f42c",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/intra-urban-vulnerability-to-heat-related-mortality-in-new-york-city-1997-2006.md": {
+    "mtime": 1784620746.3080475,
+    "ast_hash": "7881b41155a297ff37ec15d635c585a9",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/factores-riesgo/layton-2020-medications-heat.md": {
+    "mtime": 1784283931.856762,
+    "ast_hash": "ea2cc510d6b832825fe596f58c8cd1fa",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/an-introduction-to-the-universal-thermal-climate-index-utci.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "6964500dce966771c8b5951b36da3d45",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/comparison-of-utci-to-selected-thermal-indices.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "c87a15a5a2fca78cfcc6533c52639ec6",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/determining-new-threshold-temperatures-for-cooling-and-heating-degree-day-index.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "3d315839f465b03280c41f225ee99175",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/evaluation-of-the-era5-reanalysis-based-universal-thermal-climate-index-on-morta.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "5f9fe1e468f652e42f82deb76809fe09",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/from-physical-surfaces-to-human-centric-heat-stress-lst-and-utci-heat-mapping-re.md": {
+    "mtime": 1784283895.8814013,
+    "ast_hash": "6a5636fef6339d7700285ce00dafa393",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/indicators-to-assess-physiological-heat-strain-part-1-systematic-review.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "54bc89adaee201b3cb64c9a4efd40776",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/influence-of-nao-on-forming-the-utci-index-in-k-odzko.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "89eda064e05c4a46bebc9aefaea40b94",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/spatial-distribution-of-thermal-stresses-in-iran-based-on-pet-and-utci-indices.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "7c67fe37e9193e65a4df30f7903cd496",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/spatiotemporal-characteristics-of-human-thermal-comfort-across-southern-africa-a.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "7040f49fa8f477835825567182c2a41f",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/indices-biometeorologicos/thermal-environment-assessment-reliability-using-temperature-humidity-indices.md": {
+    "mtime": 1784620939.8772316,
+    "ast_hash": "ceba596d8a771a19532e48ca0c65ab8d",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/association-between-heat-stress-and-occupational-injury-among-thai-workers-findi.md": {
+    "mtime": 1784620875.4661684,
+    "ast_hash": "dde2fa864de14f2cb5dfea4add7a7c61",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/evaluation-of-occupational-exposure-limits-for-heat-stress-in-outdoor-workers-un.md": {
+    "mtime": 1784620875.4701684,
+    "ast_hash": "b4676562d28e9090d6a75b93fb22a0e9",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/excessive-occupational-heat-exposure-a-significant-ergonomic-challenge-and-healt.md": {
+    "mtime": 1784620875.4701684,
+    "ast_hash": "d1e633676942b35c8d83565b6c8fd01e",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/health-impacts-of-workplace-heat-exposure-an-epidemiological-review.md": {
+    "mtime": 1784620875.4661684,
+    "ast_hash": "3919a1aa415de1b18eab1914c1049190",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/heat-and-worker-health.md": {
+    "mtime": 1784283894.8094203,
+    "ast_hash": "03100876d27f85405832b5aab936cac4",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/heat-human-performance-and-occupational-health-a-key-issue-for-the-assessment-of.md": {
+    "mtime": 1784620875.4701684,
+    "ast_hash": "16d9866b81ccf91ef54a79bdf5dd47ec",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/heat-stress-and-inadequate-sanitary-facilities-at-workplaces-an-occupational-hea.md": {
+    "mtime": 1784620875.4701684,
+    "ast_hash": "ed91112f66ab44c56ec2bd9185aee069",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/occupational-heat-stress-and-kidney-health-from-farms-to-factories.md": {
+    "mtime": 1784620875.4661684,
+    "ast_hash": "9e341ea353a37e23d1d2ced7f45fa2e8",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/perceived-heat-stress-and-health-effects-on-construction-workers.md": {
+    "mtime": 1784620875.4661684,
+    "ast_hash": "c2152ca3cd28740b41ae8edb9a73006b",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/thermal-comfort-and-the-heat-stress-indices.md": {
+    "mtime": 1784620875.4701684,
+    "ast_hash": "578e11be7a5abc7a916a872e5883d57d",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/workers-health-and-productivity-under-occupational-heat-strain-a-systematic-revi.md": {
+    "mtime": 1784620875.4661684,
+    "ast_hash": "c9318c5892869443cd0835b69bc3cb54",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/ocupacional/workplace-heat-stress-health-and-productivity-an-increasing-challenge-for-low-an.md": {
+    "mtime": 1784620875.4661684,
+    "ast_hash": "accfe53352fbbc96f244e448e9537f9a",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/development-and-implementation-of-south-asia-s-first-heat-health-action-plan-in.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "197bae8311065f611857ff6300ffab97",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/machine-learning-approaches-to-identify-thresholds-in-a-heat-health-warning-syst.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "7a3bed8af7b79784288f66e018df5992",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/modular-deep-learning-based-early-warning-system-for-deadly-heatwave-prediction.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "6422b0d53580d46b924eaeaf1e643bbc",
+    "semantic_hash": ""
+  },
+  "documentacion/papers/planes-accion/overview-of-existing-heat-health-warning-systems-in-europe.md": {
+    "mtime": 1784283896.981382,
+    "ast_hash": "9c7a08376cdb85967e89e4ea8d88b289",
     "semantic_hash": ""
   }
 }
