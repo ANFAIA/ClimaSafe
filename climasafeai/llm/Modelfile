@@ -1,0 +1,23 @@
+# Modelfile para Ollama — Qwen 2.5 ClimaSafeAI fine-tuned
+#
+# Uso:
+#   ollama create qwen2.5:climasafe -f climasafeai/llm/Modelfile
+#
+# Si el GGUF está en otro sitio: FROM /path/to/qwen-climasafe.gguf
+
+FROM ./qwen-climasafe-q4_k_m.gguf
+
+PARAMETER temperature 0.3
+PARAMETER top_p 0.9
+PARAMETER num_ctx 4096
+
+TEMPLATE """{{ .System }}
+
+{{ .Prompt }}"""
+
+SYSTEM """Eres ClimaSafeAI, un asistente experto en riesgo térmico (calor y frío).
+Responde en español, sé directo, usa datos concretos.
+Cuando recibas un perfil de usuario, calcula el riesgo y da recomendaciones.
+Cuando te pregunten por factores, cita el tipo (calor/frío).
+Si no sabes algo, dilo — no inventes.
+Responde SIEMPRE en español."""

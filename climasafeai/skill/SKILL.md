@@ -1,0 +1,203 @@
+---
+name: climasafeai
+description: Predicción de riesgo térmico personalizado (calor/frío) con ensemble conformal, factores científicos, MCP tools, bot Telegram determinista y LLM local (Qwen 2.5 + RAG). El sistema prioriza automáticamente fine-tuned → raw 7B → raw 1.5B → bot sin LLM.
+---
+
+# ClimaSafeAI — Predicción de riesgo térmico
+
+Sistema completo de predicción de riesgo térmico personalizado. Combina un
+ensemble de modelos (XGBoost, LSTM, fórmulas físicas) con 27 factores de
+riesgo científicos, personalización individual y conformal prediction.
+
+**Cobertura:** calor y frío extremo en España peninsular.
+
+---
+
+## Arquitectura
+
+```
+Usuario → Bot Telegram / MCP / API REST
+            ↓
+        [Predictor] → Ensemble (XGBoost + LSTM + Fórmula)
+            ↓
+        Personalización (edad, sexo, IMC, comorbilidades, medicación,
+                         fototipo, situación social, aclimatación, actividad)
+            ↓
+        Safety Overrides (HI ≥ 39°C → EXTREMO, WC ≤ -25°C → EXTREMO)
+            ↓
+        Conformal Prediction (α = 0.1)
+            ↓
+        Respuesta + recomendaciones
+```
+
+Tres modos de conversación (auto‑detección):
+1. **Qwen 2.5 fine‑tuneado** → mejor experiencia (requiere GPU)
+2. **Qwen 2.5 raw + RAG** → responde preguntas de fondo citando fuentes (CPU)
+3. **Bot determinista** → fallback seguro sin LLM
+
+---
+
+## Setup rápido
+
+Requiere: `uv`, Python 3.13+, `make`.
+
+```bash
+git clone <repo>
+cd ClimaSafeAI
+
+# Entorno
+uv sync
+
+# Base de datos de factores + RAG
+uv run python -c "from climasafeai.db.manager import DBManager; DBManager().initialize()"
+
+# Iniciar MCP server (tools para agentes)
+uv run python -m agents.tools.factors_mcp_tool --port 8100
+
+# Bot de Telegram (opcional)
+uv run python -m climasafeai.bot.telegram_bot
+```
+
+### LLM local (Qwen 2.5) — opcional
+
+```bash
+# Instalar Ollama
+curl -L "https://github.com/ollama/ollama/releases/download/v0.32.5/ollama-linux-amd64.tar.zst" \
+  -o ollama.tar.zst
+mkdir -p ~/.local/bin && tar --zstd -xf ollama.tar.zst -C ~/.local/bin/
+ollama serve &
+
+# Descargar modelo
+ollama pull qwen2.5:1.5b       # ~1 GB, CPU
+ollama pull qwen2.5:7b         # ~4.7 GB, GPU (opcional)
+```
+
+### Fine‑tuning (opcional, para mejor calidad)
+
+Ver `documentacion/llm/guia-fine-tuning-qwen.md`. Requiere GPU 8 GB+.
+
+---
+
+## MCP Tools
+
+El proyecto expone herramientas MCP en el puerto 8100 para que cualquier agente
+IA (Claude Code, opencode, Flue, Cline, etc.) las use:
+
+### Factores de riesgo
+
+| Tool | Descripción |
+|------|-------------|
+| `get_factors_mcp` | Lista factores, filtro por tipo (calor/frío) |
+| `suggest_factor_mcp` | Propone nuevo factor científico |
+| `approve_factor_mcp` | Activa factor candidato |
+| `reject_factor_mcp` | Rechaza factor candidato |
+| `update_factor_mcp` | Edita campos de un factor |
+| `pending_factors_mcp` | Factores pendientes de revisión |
+
+### Perfiles y predicción
+
+| Tool | Descripción |
+|------|-------------|
+| `crear_perfil_mcp` | Crea perfil con datos demográficos, clínicos y sociales |
+| `cargar_perfil_mcp` | Carga perfil por alias |
+| `cargar_perfil_por_chat_id_mcp` | Carga perfil vinculado a Telegram |
+| `listar_usuarios_mcp` | Lista todos los perfiles |
+| `vincular_chat_id_mcp` | Vincula chat Telegram a perfil |
+| `predict_risk_mcp` | Predice riesgo cardiovascular para una salida |
+
+### RAG y LLM
+
+| Tool | Descripción |
+|------|-------------|
+| `search_factors_mcp` | Búsqueda semántica sobre factores |
+| `search_documentos_mcp` | Búsqueda sobre documentación del proyecto |
+| `search_all_mcp` | Búsqueda combinada (factores + docs) |
+| `ask_rag_mcp` | RAG con Gemini (requiere API key) |
+| `ask_qwen_rag_mcp` | RAG con Qwen 2.5 local + citas de fuentes |
+| `qwen_raw_mcp` | Qwen raw sin RAG |
+
+### Automatización
+
+| Tool | Descripción |
+|------|-------------|
+| `check_acclimatization_mcp` | Detecta perfiles listos para aclimatar |
+| `auto_acclimatize_mcp` | Aclimata perfiles automáticamente |
+
+---
+
+## Uso desde cualquier agente IA
+
+### Configurar el MCP server
+
+En `opencode.json` o `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "climasafeai": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "agents.tools.factors_mcp_tool"],
+      "env": {
+        "CLIMASAFE_DB_PATH": "/ruta/a/data/climasafe.db"
+      }
+    }
+  }
+}
+```
+
+### Ejemplo de consulta
+
+```
+Usuario: ¿Qué riesgo tengo para una hora de padel a las 14h en Sevilla?
+Agente: (usa predict_risk_mcp con lat=37.38, lon=-5.99, duracion=1h,
+        hora_inicio=14, nivel_actividad=intensa)
+        → Riesgo MUY ALTO. HI=41°C, factor cardiovascular ×2.3.
+          Recomendaciones: evitar horas centrales, hidratación cada 15 min.
+```
+
+---
+
+## Modelo de datos
+
+### Factores de riesgo (27 implementados)
+
+Cada factor tiene: tipo (calor/frío), categoría, clave, nombre, coeficiente,
+DOI de la fuente, calidad (alta/media/baja), población de referencia.
+
+Ejemplos: `edad>65`, `obesidad`, `diabetes`, `antipsicoticos`,
+`vive_solo`, `fototipo_II`, `falta_sueno`, `humedad`, `contaminacion`.
+
+### Perfil de usuario
+
+Campos: alias, edad, sexo, grasa%, aclimatado, comorbilidades, medicación,
+nivel_actividad, fototipo, situación social, chat_id Telegram.
+
+---
+
+## Thresholds de seguridad
+
+| Condición | Acción |
+|-----------|--------|
+| HI ≥ 39°C | Safety override → EXTREMO |
+| HI ≥ 41°C | Safety override → EXTREMO + recomendación letal |
+| WC ≤ -25°C | Safety override → EXTREMO |
+| IMC > 40 | Cap ×2.5 en calor |
+| Factor_total > 5 | Cap en 5 |
+| Índice personalizado > 1 | Satura en 1 |
+
+---
+
+## Tests
+
+```bash
+uv run pytest tests/ -q
+```
+
+---
+
+## Referencias
+
+- Documentación completa en `documentacion/`
+- Factores científicos con DOI en SQLite (`data/climasafe.db`)
+- Guía de fine‑tuning: `documentacion/llm/guia-fine-tuning-qwen.md`
+- Roadmap: `documentacion/proximos_pasos.md`
