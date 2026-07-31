@@ -11,8 +11,17 @@ mlflow = pytest.importorskip("mlflow", reason="mlflow es un extra opcional (use_
 
 @pytest.fixture
 def mlflow_context(tmp_path, monkeypatch):
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tmp_path}/mlflow.db")
-    return SharedContext(root=tmp_path, config=ProjectConfig(project_slug="mi_paquete"))
+    # La variable de entorno no basta: mlflow guarda el tracking URI en el proceso
+    # la primera vez que alguien lo usa, así que si otro test de la suite ya ha
+    # tocado mlflow, estos dos se van al mlflow.db del repo en vez de al temporal.
+    # Con la BD real de por medio, `test_list_runs_no_experiment_yet` encuentra
+    # experimentos y falla — pero pasa en solitario, que es lo que despista.
+    uri = f"sqlite:///{tmp_path}/mlflow.db"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", uri)
+    anterior = mlflow.get_tracking_uri()
+    mlflow.set_tracking_uri(uri)
+    yield SharedContext(root=tmp_path, config=ProjectConfig(project_slug="mi_paquete"))
+    mlflow.set_tracking_uri(anterior)
 
 
 def _log_run(run_name: str, metric_value: float):
