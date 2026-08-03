@@ -49,6 +49,10 @@ make test
 ./init.sh
 ```
 
+`make typecheck` es **informativo**: nunca falla, aunque el proyecto arrastre
+diagnósticos. Léelo y arregla los que tocan tu cambio; los preexistentes no son
+tuyos. Los otros tres sí bloquean.
+
 Si algo falla, arréglalo. Si no puedes, dilo — un `needs-info` honesto vale más
 que un `ok` que el reviewer va a tumbar.
 

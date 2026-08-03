@@ -1,6 +1,6 @@
 .PHONY: setup install-deps \
         data features train predict \
-        test smoke lint format lock \
+        test smoke lint format typecheck lock \
         lab notebook tb \
         docs \
         profile \
@@ -65,6 +65,7 @@ help:
 	@echo "    make smoke          test de humo — verifica que el pipeline arranca"
 	@echo "    make lint           ruff check (solo lectura, sin modificar)"
 	@echo "    make format         ruff format (aplica cambios en sitio)"
+	@echo "    make typecheck      chequeo de tipos con ty (informativo, no bloquea)"
 	@echo ""
 	@echo "  Jupyter"
 	@echo "    make lab            JupyterLab  (puerto 8888)"
@@ -347,6 +348,21 @@ lint:
 
 format:
 	$(UVRUN) ruff format $(MODULE)/ tests/
+
+# ARNES-001 — `.opencode/agents/implementer.md` lleva desde el principio
+# pidiendo `make typecheck` antes de devolver el control, y el target no
+# existia: todas las features cerradas hasta ahora se lo saltaron.
+#
+# Es INFORMATIVO a proposito (`|| true`). Hoy salen 213 diagnosticos, y una
+# parte son falsos positivos del checker con el scope de funciones largas
+# (p. ej. `lat` en chat/app.py:1135 esta definida en la linea 837 de la misma
+# funcion). Hacerlo bloqueante rompe la puerta de golpe por deuda preexistente
+# y por ruido, que no es lo que se estaba pidiendo.
+#
+# `uvx` en vez de una dependencia nueva: no toca pyproject.toml.
+typecheck:
+	@echo "▶  Chequeo de tipos (informativo — no bloquea la puerta)"
+	@uvx ty check $(MODULE)/ chat/ agents/ || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Jupyter

@@ -264,8 +264,11 @@
         "El coste en tokens de una conversacion completa se mide y se pega, y se compara con los ~700 del /start actual",
         "make test pasa y /start sigue funcionando exactamente igual"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-07-31",
+      "review_rounds": 0,
+      "blocked_reason": "Se borra el chat conversacional: CHAT-003 lo fusiona en /start"
     },
     {
       "id": "RAG-002",
@@ -291,8 +294,11 @@
         "Se prueba en Telegram y se pega la conversacion",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-07-31",
+      "review_rounds": 0,
+      "blocked_reason": "Criterios 1, 2 y 4 CUMPLIDOS y aprobados por el reviewer (init.sh en verde: 334 passed, 0:09:18; antes 329, los 5 nuevos son de esta feature). Falta SOLO el criterio 3, que lo ejecuta el humano: probarlo en Telegram con el bot real y pegar la conversacion. Codigo listo y sin commitear en climasafeai/bot/telegram_bot.py y tests/test_telegram_bot.py. Se reabre con 'harness start --id BOT-003' cuando el humano pegue la conversacion."
     },
     {
       "id": "BOT-004",
@@ -304,8 +310,11 @@
         "Los reinicios del bot no acumulan handlers: arrancar y parar tres veces no multiplica las lineas",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-03",
+      "review_rounds": 0,
+      "closed": "2026-08-03"
     },
     {
       "id": "ARNES-001",
@@ -363,8 +372,9 @@
         "Queda escrito que pasa con .opencode/: se mantiene, se migra o se retira",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "blocked_reason": "Absorbida: se parte en seis features que no se pisan entre si. Sus 7 criterios van a: (1) comparativa ADK/DeepAgents -> ARNES-009. (2) catalogo CERRADO de tools -> ARNES-006 crit.4. (3) guardrails con casos de abuso reales -> ARNES-005 crit.3, que ademas concreta el fichero de red-team con el ataque de borrar /lib. (4) presupuesto de tokens: medirlo -> ARNES-004, el tope configurable y la comparacion con los 7.900 de spacebot -> ARNES-010. (5) reutilizar los 26 agentes sin reescribirlos -> ARNES-006 crit.6. (6) que pasa con .opencode/ -> ARNES-008 crit.5. (7) make test -> en todas. Motivo del corte: ARNES-002 mezclaba un estudio, una implementacion completa y una evaluacion en una sola feature sin dependencias, asi que harness next la ofrecia como si fuera abordable de una sentada. Ahora la cadena BOT-006 -> ARNES-005 -> ARNES-006 -> ARNES-007 -> ARNES-008 impide construir el bucle antes que sus guardarrailes. No se pierde ningun criterio."
     },
     {
       "id": "DEPLOY-001",
@@ -485,8 +495,9 @@
         "Una pregunta genuinamente ajena (p.ej. recetas de cocina) sigue rechazándose con elegancia",
         "Hay tests del caso SPF y del caso ajeno, y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "blocked_reason": "Absorbido por CHAT-003: el chat abierto tras el parte con RAG resuelve el caso SPF"
     },
     {
       "id": "BOT-006",
@@ -518,6 +529,501 @@
       "started": "2026-07-31",
       "review_rounds": 0,
       "closed": "2026-07-31"
+    },
+    {
+      "id": "BOT-007",
+      "title": "/perfil para editar datos personales + rutinas tipo crontab con avisos diarios del riesgo",
+      "description": "/perfil para editar datos personales + rutinas tipo crontab con avisos diarios del riesgo",
+      "acceptance_criteria": [
+        "Comando /perfil muestra el perfil guardado del chat con sus datos actuales",
+        "Comando /perfil permite editar al menos: edad, sexo, % grasa, fototipo, aclimatado, comorbilidades, medicacion y situacion social, y guarda los cambios en la BD",
+        "Comando /rutinas lista las rutinas semanales del chat (dias, hora inicio-fin, actividad)",
+        "Comando /rutinas permite añadir y borrar rutinas",
+        "se guardan en SQLite con chat_id",
+        "Las rutinas permiten definir horarios tipo 'L-V trabajo 8-16' y 'L-V entreno 18-20'",
+        "El bot tiene una hora configurable de aviso diario (comando /avisos HH:MM)",
+        "Cada dia a esa hora el bot calcula el riesgo para cada ventana de rutina del dia con predict_ensemble y envia el pronostico adaptado a la actividad",
+        "Si no hay perfil o ubicacion guardada el aviso avisa de que falta configurar y no calcula",
+        "make test pasa",
+        "no se commitea nada"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-01",
+      "review_rounds": 0,
+      "blocked_reason": "Implementado, pendiente de reviewer. Se amplia con BOT-008 (web+MCP) y se revisa junto",
+      "closed": "2026-08-01"
+    },
+    {
+      "id": "BOT-008",
+      "title": "Rutinas semanales en web y MCP (precargables con perfil) + deporte cambia el resultado + LLM pide datos faltantes",
+      "description": "Rutinas semanales en web y MCP (precargables con perfil) + deporte cambia el resultado + LLM pide datos faltantes",
+      "acceptance_criteria": [
+        "El MCP expone tools para crear/listar/borrar rutinas y configurar hora de aviso por chat_id o perfil",
+        "El MCP expone una tool que dado un perfil y sus rutinas calcula el riesgo por cada ventana del dia con predict_ensemble",
+        "La web (chat/app.py + index.html) permite ver/crear/borrar rutinas de un perfil y precargarlas al cargar el perfil",
+        "La web calcula y muestra el riesgo por ventana segun las rutinas del perfil para hoy",
+        "El deporte cambia el resultado de la prediccion: si el perfil lleva deporte, la intensidad se deriva del MET del Compendium (nivel_actividad_de_deporte) igual que en el bot, en MCP y web",
+        "El LLM de chat, si faltan datos requeridos, los pide explicitamente y no da nada por hecho: no inventa edad, ubicacion, duracion ni hora",
+        "make test pasa",
+        "no se commitea nada"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-01",
+      "review_rounds": 0,
+      "closed": "2026-08-01"
+    },
+    {
+      "id": "CHAT-003",
+      "title": "Fusionar /chat en /start: botones + respuesta LLM + chat abierto de preguntas",
+      "description": "Fusionar /chat en /start: botones + respuesta LLM + chat abierto de preguntas",
+      "acceptance_criteria": [
+        "El comando /chat desaparece del bot y de la BIENVENIDA: no existe recogida conversacional, /start con botones es el unico camino",
+        "Al terminar /start (Estado.DONE), si el modelo NO es determinista: la respuesta la redacta el LLM (ask_con_perfil) y tras el parte el chat queda abierto para preguntas libres con RAG sobre el parte entregado",
+        "Si el modelo es determinista: respuesta con plantilla y cierre normal, exactamente como antes (sin chat abierto)",
+        "El texto que cierra el parte con LLM invita a preguntar dudas (p.ej. SPF) y a volver a /start para otra salida",
+        "Un /start nuevo sobreescribe el parte anterior y reabre el chat de preguntas con el nuevo contexto",
+        "Hacer /salir o el equivalente cierra el chat de preguntas y vuelve a /start",
+        "preguntar por SPF (o cualquier termino del parte) tras una prediccion responde con informacion util, no con rechazo 'no esta relacionada'",
+        "make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-01",
+      "review_rounds": 0,
+      "closed": "2026-08-01"
+    },
+    {
+      "id": "BUG-001",
+      "title": "El bot cronada si un dato meteorológico llega NaN: se propaga hasta personalizar_riesgo",
+      "description": "El bot cronada si un dato meteorológico llega NaN: se propaga hasta personalizar_riesgo",
+      "acceptance_criteria": [
+        "Un t2m_c, rh o wind_speed NaN (dato corrupto del fetch) NO crondea el /start: predict_ensemble devuelve una clase de riesgo válida con evidencia"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-03",
+      "review_rounds": 0,
+      "closed": "2026-08-03"
+    },
+    {
+      "id": "WEB-004",
+      "title": "XSS almacenado: la lista de rutinas pinta el nombre del usuario sin escapar",
+      "description": "XSS almacenado: la lista de rutinas pinta el nombre del usuario sin escapar",
+      "acceptance_criteria": [
+        "Una rutina llamada '<img src=x onerror=alert(1)>' se muestra como texto literal y no ejecuta nada",
+        "El render de rutinas y del pronostico del dia escapa nombre, deporte, ocupacion y el mensaje de error",
+        "Test de regresion que falla si algun campo de rutina vuelve a concatenarse crudo en innerHTML",
+        "La suite pasa en verde"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "review_rounds": 1,
+      "closed": "2026-08-03"
+    },
+    {
+      "id": "MCP-001",
+      "title": "borrar_rutina_mcp no comprueba propiedad: enumerar ids borra rutinas ajenas",
+      "description": "borrar_rutina_mcp no comprueba propiedad: enumerar ids borra rutinas ajenas",
+      "acceptance_criteria": [
+        "borrar_rutina_mcp acepta el mismo trio alias|perfil_id|chat_id que las demas tools de rutinas y resuelve con _resolver_chat",
+        "Borrar un rutina_id que no pertenece al chat resuelto devuelve error y no borra la fila",
+        "Llamar sin identificador devuelve error claro y no borra nada",
+        "Tests de los tres casos (propia, ajena, sin identificador) en tests/test_prediction_mcp_rutinas.py"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "review_rounds": 1,
+      "closed": "2026-08-03"
+    },
+    {
+      "id": "BOT-009",
+      "title": "Explicar el % de riesgo y pedir fecha de nacimiento en vez de la edad",
+      "description": "Explicar el % de riesgo y pedir fecha de nacimiento en vez de la edad",
+      "acceptance_criteria": [
+        "El parte (plantilla y LLM) explica qué significa el porcentaje de riesgo en lenguaje llano, p.ej. '21% de probabilidad de riesgo térmico durante la actividad', no un número suelto"
+      ],
+      "status": "blocked",
+      "depends_on": [],
+      "blocked_reason": "Creada con criterios incompletos; sustituida por BOT-010 con los dos cambios (explicar % y fecha de nacimiento)"
+    },
+    {
+      "id": "BOT-010",
+      "title": "Explicar el % de riesgo en el parte y pedir fecha de nacimiento en vez de la edad",
+      "description": "Explicar el % de riesgo en el parte y pedir fecha de nacimiento en vez de la edad",
+      "acceptance_criteria": [
+        "El parte (plantilla determinista y redacción del LLM) explica qué significa el porcentaje de riesgo en lenguaje llano, p.ej. '21% de probabilidad de riesgo térmico durante la actividad', no un número suelto",
+        "En el /start el formulario pide fecha de nacimiento (día/mes/año) en vez de '¿Cuántos años tienes?', calcula la edad y la guarda en el perfil",
+        "La edición de perfil (/perfil → Edad) también pide fecha de nacimiento y recalcula la edad",
+        "La fecha se valida (no futura, rango plausible 1900-hoy) y un formato malo da un mensaje claro, no un crash",
+        "Hay tests del cálculo de edad desde fecha de nacimiento y de la validación, y make test pasa"
+      ],
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-03",
+      "review_rounds": 0,
+      "blocked_reason": "Feedback del usuario al probar: la explicación del % es un tocho genérico y la recomendación no se adapta al contexto frío/calor según el modelo dominante. Se fusiona con el feedback en BOT-011 (el trabajo ya está en el árbol sin commitear)."
+    },
+    {
+      "id": "WEB-005",
+      "title": "La API web devuelve HTTP 200 con un error en el cuerpo",
+      "description": "La API web devuelve HTTP 200 con un error en el cuerpo",
+      "acceptance_criteria": [
+        "Perfil inexistente devuelve 404 y body invalido devuelve 400 en los endpoints de perfil, rutinas, avisos y pronostico",
+        "El cuerpo del error sigue siendo {error: ...} y no {detail: ...}, para no romper el if (d.error) del frontend",
+        "Tests de los codigos de estado en tests/test_web_rutinas.py",
+        "La suite pasa en verde"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-03"
+    },
+    {
+      "id": "WEB-006",
+      "title": "Borrar un perfil dejaba sus rutinas y su aviso huerfanos",
+      "description": "Borrar un perfil dejaba sus rutinas y su aviso huerfanos",
+      "acceptance_criteria": [
+        "DELETE /api/perfil/{id} de un perfil web borra tambien sus rutinas y su hora de aviso",
+        "Un perfil vinculado a Telegram conserva sus rutinas (son del chat, que sigue vivo) y pierde solo el aviso, y queda documentado por que",
+        "Borrar un perfil inexistente devuelve 404",
+        "Tests de los tres casos y la suite en verde"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "review_rounds": 1,
+      "closed": "2026-08-03"
+    },
+    {
+      "id": "BUG-002",
+      "title": "Riesgo colectivo por etiqueta esta roto: referencia variables que no existen (F821)",
+      "description": "Riesgo colectivo por etiqueta esta roto: referencia variables que no existen (F821)",
+      "acceptance_criteria": [
+        "GET/POST /api/riesgo-colectivo con tipo=etiqueta deja de devolver un error por cada persona: se pega la respuesta real con las clases de riesgo calculadas",
+        "predict_group_risk de prediction_mcp_tool.py deja de referenciar la variable 'c' que nunca se define, o se borra si es codigo muerto y se dice cual de las dos",
+        "ruff check y make typecheck no reportan ningun F821 ni unresolved-reference en chat/app.py ni en agents/tools/prediction_mcp_tool.py",
+        "Hay un test que llama a la rama de etiqueta con un perfil real y comprueba que NO hay clave 'error' en ningun resultado",
+        "La suite pasa en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-011",
+      "title": "Parte claro y personalizado: explicar el %, adaptar la recomendación al frío/calor dominante y pedir fecha de nacimiento",
+      "description": "Parte claro y personalizado: explicar el %, adaptar la recomendación al frío/calor dominante y pedir fecha de nacimiento",
+      "acceptance_criteria": [
+        "El parte (plantilla determinista y redacción del LLM) explica qué significa el porcentaje de riesgo en lenguaje llano, p.ej. '21% de probabilidad de riesgo térmico durante la actividad', no un número suelto",
+        "En el /start el formulario pide fecha de nacimiento (día/mes/año) en vez de '¿Cuántos años tienes?', calcula la edad y la guarda en el perfil",
+        "La edición de perfil (/perfil → Edad) también pide fecha de nacimiento y recalcula la edad",
+        "La fecha se valida (no futura, rango plausible 1900-hoy) y un formato malo da un mensaje claro, no un crash",
+        "La recomendación del parte se adapta al contexto según el modelo dominante: si la probabilidad del canal frío está por debajo de un umbral NO aparecen recomendaciones de frío, y si la del canal calor está por debajo NO aparecen de calor",
+        "la recomendación va acorde al canal (calor/frío) con mayor probabilidad o riesgo, y se demuestra con un caso de frío y uno de calor",
+        "La respuesta del chat abierto que explica conceptos del parte (p.ej. '¿qué es la probabilidad personalizada?') es concisa y personalizada con los datos reales de esa predicción (probabilidad, factores, ubicación), no un texto genérico",
+        "Hay tests del cálculo de edad desde fecha de nacimiento, de la validación, de la recomendación por canal dominante y del texto del parte, y make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-03",
+      "review_rounds": 0,
+      "closed": "2026-08-03"
+    },
+    {
+      "id": "LLM-004",
+      "title": "Dataset de fine-tuning: el input no llevaba el tiempo, asi que la tarea era imposible de aprender",
+      "description": "Dataset de fine-tuning: el input no llevaba el tiempo, asi que la tarea era imposible de aprender",
+      "acceptance_criteria": [
+        "El input de cada ejemplo incluye el parte de la ventana de actividad (temperatura media y maxima, humedad, viento, UV) con el que se calculo la respuesta",
+        "val.jsonl tiene 100+ ejemplos, sin solape con train.jsonl y sin duplicados, y se pega el conteo",
+        "El reparto por clase de val esta equilibrado entre SEGURO, PRECAUCION y PELIGRO",
+        "Se documenta que train.jsonl se regenero con el formato nuevo y donde estan los ficheros previos"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "review_rounds": 1,
+      "closed": "2026-08-04"
+    },
+    {
+      "id": "RAG-003",
+      "title": "El indice del RAG mezcla literatura del dominio con papers de forecasting y notas internas",
+      "description": "El indice del RAG mezcla literatura del dominio con papers de forecasting y notas internas",
+      "acceptance_criteria": [
+        "Los fragmentos de metodologia ML (N-BEATS, Informer, GNN de trafico, forecasting fotovoltaico, financiero...) y las notas internas del proyecto dejan de poder recuperarse en una pregunta de usuario: se separan por coleccion o se filtran por tipo, y se pega el conteo antes/despues",
+        "Una pregunta de usuario tipo 'tengo diabetes, cuanto me sube el riesgo con 38 grados' deja de devolver fragmentos de arquitectura del modelo",
+        "se pegan los resultados de antes y de despues",
+        "Hay umbral de distancia: si nada supera el umbral no se inyecta contexto irrelevante y se cae a ask_raw, y se demuestra con la pregunta de SPF que hoy devuelve factores de frio",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "RAG-004",
+      "title": "Set de evaluacion del RAG: recall y precision en vez de impresiones",
+      "description": "Set de evaluacion del RAG: recall y precision en vez de impresiones",
+      "acceptance_criteria": [
+        "Existe un conjunto de 30+ preguntas etiquetadas (pregunta -> documento o factor que DEBERIA recuperarse), guardado en el repo y versionado",
+        "Un script reproducible calcula recall@k y precision sobre ese conjunto y saca una tabla, no un juicio",
+        "Se mide el estado ACTUAL y se pega la linea base: es el numero contra el que se comparan RAG-002, RAG-003 y RAG-006",
+        "Las preguntas cubren los tres casos que ya se sabe que fallan hoy: SPF con fototipo (devuelve factores de frio), diabetes con temperatura (devuelve arquitectura del modelo) y farmacos (este si acierta)",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "RAG-005",
+      "title": "El RAG no reindexa cuando cambia el texto: solo mira la clave, no el contenido",
+      "description": "El RAG no reindexa cuando cambia el texto: solo mira la clave, no el contenido",
+      "acceptance_criteria": [
+        "Editar el cuerpo de una seccion de documentacion/ sin cambiar su titulo provoca que se reindexe",
+        "se demuestra editando un fichero y pegando el conteo antes y despues",
+        "Lo mismo para factores_riesgo: cambiar el nombre o el coeficiente de un factor ya indexado lo vuelve a embeber",
+        "Se guarda un hash del contenido por fragmento y la deteccion de cambios usa ese hash, no la clave ruta::seccion",
+        "RAG.stats() no duplica filas al reindexar",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "RAG-006",
+      "title": "Afinar el retrieval: solapamiento en los chunks y comparar modelos de embeddings",
+      "description": "Afinar el retrieval: solapamiento en los chunks y comparar modelos de embeddings",
+      "acceptance_criteria": [
+        "Los fragmentos de documentacion se generan con solapamiento, para que una pregunta que cae entre dos secciones recupere las dos",
+        "se pega el conteo de fragmentos antes y despues",
+        "El esquema admite mas de un modelo de embeddings a la vez (una tabla o columna por modelo con sus propias dimensiones), para poder comparar sin perder el indice anterior",
+        "Se comparan al menos dos modelos de embeddings sobre el set de RAG-004 y se elige uno POR LOS NUMEROS, dejando escrito el porque",
+        "Cada cambio (solapamiento, modelo) se mide contra la linea base de RAG-004: si no mejora el recall, se revierte y se dice",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "RAG-004"
+      ]
+    },
+    {
+      "id": "ARNES-003",
+      "title": "Modo debug: ver el payload exacto que se le manda al LLM",
+      "description": "Modo debug: ver el payload exacto que se le manda al LLM",
+      "acceptance_criteria": [
+        "Un flag o comando muestra el system prompt completo, los mensajes y el contexto RAG tal como salen hacia el modelo, sin resumir",
+        "Se ve cuantos tokens ocupa cada parte (system prompt, contexto recuperado, historial), para saber que se esta comiendo la ventana",
+        "Se demuestra reproduciendo un caso conocido: la pregunta de SPF, donde debe verse que se le estan inyectando factores de frio como contexto",
+        "No se activa por defecto ni cambia el comportamiento del bot cuando esta apagado",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ARNES-004",
+      "title": "Contador de tokens y coste por peticion",
+      "description": "Contador de tokens y coste por peticion",
+      "acceptance_criteria": [
+        "Cada llamada al LLM registra tokens de entrada, de salida y coste estimado, leidos del usage que ya devuelve LiteLLM",
+        "Hay un acumulado por sesion consultable, y se pega la salida real de una conversacion",
+        "El coste se calcula con una tabla de precios por modelo que vive en un solo sitio y es facil de actualizar",
+        "Para modelos locales (Ollama) el coste es cero pero los tokens y la latencia se siguen midiendo: es el dato que justifica elegir local",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ARNES-005",
+      "title": "Gateway de permisos antes de ejecutar cualquier tool que elija el LLM",
+      "description": "Gateway de permisos antes de ejecutar cualquier tool que elija el LLM",
+      "acceptance_criteria": [
+        "Ninguna tool se ejecuta sin pasar por una unica funcion de aprobacion: se pega la traza de una peticion aprobada y de una rechazada",
+        "Catalogo CERRADO de tools por agente: se pega la lista y se demuestra que una peticion fuera del catalogo no se ejecuta",
+        "Fichero de red-team con 10+ ataques escritos, incluido pedirle por Telegram que borre /lib o /bin, cada uno con la traza del rechazo",
+        "process_tool.run_command gana lista blanca de binarios y confinamiento del cwd al repo: hoy tiene shell=False y timeout pero acepta cualquier argv y cualquier directorio",
+        "make test pasa"
+      ],
+      "status": "blocked",
+      "depends_on": [
+        "BOT-006"
+      ],
+      "blocked_reason": "Absorbida y ampliada: la vision de seguridad del usuario (frontera LLM->Policy->Tool) supera el alcance del gateway simple. Sus 5 criterios se amplian y pasan a ARNES-011."
+    },
+    {
+      "id": "ARNES-006",
+      "title": "Bucle de agente propio en Python sobre LiteLLM, con catalogo cerrado de tools",
+      "description": "Bucle de agente propio en Python sobre LiteLLM, con catalogo cerrado de tools",
+      "acceptance_criteria": [
+        "El bucle REPL y el bucle interno estan implementados y separados: leer entrada, evaluar con llamadas al modelo y ejecucion de tools hasta que el modelo diga que ha terminado, imprimir, repetir. Se pega una traza real con al menos dos tools encadenadas",
+        "NO se reescribe la capa de proveedor: se usa LiteLLM, que ya abstrae Ollama, Groq y OpenAI. El capitulo 03 del tutorial se da por cubierto y queda escrito por que",
+        "Las tools se auto-registran (dejar un fichero y aparece) y cada una declara su descripcion y su esquema de entrada. Se demuestra anadiendo una tool nueva sin tocar el bucle",
+        "El catalogo de tools es CERRADO y por agente: se pega la lista y se demuestra que una peticion fuera del catalogo no se ejecuta",
+        "Toda ejecucion de tool pasa por el gateway de ARNES-005. Ninguna ruta lo esquiva, y se demuestra con un intento de bypass",
+        "Se reutilizan los 26 agentes Python de agents/ como tools, sin reescribirlos",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "ARNES-003",
+        "ARNES-004",
+        "ARNES-005"
+      ]
+    },
+    {
+      "id": "ARNES-007",
+      "title": "Subagentes y compactacion sobre el bucle propio",
+      "description": "Subagentes y compactacion sobre el bucle propio",
+      "acceptance_criteria": [
+        "El bucle puede instanciar subagentes: una tool de delegacion que arranca otro bucle interno con su propio system prompt y su propio catalogo de tools. Se pega la traza de una delegacion real",
+        "Queda escrito y justificado si el subagente hereda el historial del padre o arranca con contexto vacio: es la decision que mas cambia el comportamiento y el coste",
+        "Los subagentes se definen en markdown, no hardcodeados, reutilizando los que ya viven en .opencode/agents/",
+        "Hay al menos dos estrategias de compactacion intercambiables (ventana deslizante y resumen con el propio modelo) y una que no hace nada, elegibles sin tocar el bucle",
+        "La compactacion nunca parte un bloque de tool_use por la mitad, y hay un test que lo prueba",
+        "El coste en tokens de la compactacion por resumen se mide y se pega: resumir tambien cuesta",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "ARNES-006"
+      ]
+    },
+    {
+      "id": "ARNES-008",
+      "title": "Evaluar el arnes propio: el bucle agentico contra el flujo determinista",
+      "description": "Evaluar el arnes propio: el bucle agentico contra el flujo determinista",
+      "acceptance_criteria": [
+        "Se ejecuta la MISMA feature del backlog por las dos vias, el bucle agentico nuevo y el flujo determinista de los 26 agentes, y se pegan las dos trazas completas",
+        "Se comparan con numeros: tokens gastados, tiempo de reloj, vueltas de revisor necesarias y si la puerta acabo en verde",
+        "Se ejecuta tres veces por via para medir la varianza: el argumento de que el flujo determinista es reproducible se demuestra o se cae",
+        "Queda escrito cual gana y para que: si el bucle agentico no mejora nada, eso TAMBIEN es un resultado y se defiende como tal",
+        "Queda escrito que pasa con .opencode/ y con ARNES-002: se mantiene, se migra o se retira",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "ARNES-007"
+      ]
+    },
+    {
+      "id": "ARNES-009",
+      "title": "Comparativa escrita de arneses: ADK, DeepAgents o hacerlo a mano",
+      "description": "Comparativa escrita de arneses: ADK, DeepAgents o hacerlo a mano",
+      "acceptance_criteria": [
+        "Comparativa escrita de ADK y DeepAgents sobre ESTE caso concreto: tools, guardrails, coste de tokens y encaje con los 26 agentes Python que ya existen",
+        "Se evalua tambien la tercera opcion, construirlo a mano sobre LiteLLM siguiendo byoharness.dev, y se dice que aporta cada framework por encima de eso",
+        "Hay una eleccion justificada y por escrito, y esa eleccion es la que implementa ARNES-006",
+        "Es un entregable de analisis, sin codigo: se cierra con el documento, no con la puerta en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ARNES-010",
+      "title": "Tope de presupuesto de tokens por peticion",
+      "description": "Tope de presupuesto de tokens por peticion",
+      "acceptance_criteria": [
+        "Hay un tope configurable de tokens por peticion y al superarlo la peticion se corta con un error claro, no en silencio",
+        "Se pega la traza de una peticion cortada por presupuesto",
+        "El gasto medido se compara contra los ~7.900 tokens por mensaje de spacebot, que es la referencia que motivo esta feature",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "ARNES-004"
+      ]
+    },
+    {
+      "id": "MCP-APPS-001",
+      "title": "Estudio y MVP de MCP Apps: que predict_risk_mcp devuelva una UI interactiva reutilizando la web",
+      "description": "Pedido por el usuario el 03/08/2026 (propuesta de un amigo). Estudio previo y MVP, sin migrar todo. Idea: que las tools MCP no devuelvan solo JSON sino tambien una UI (html en recurso ui://) que el host compatible (Claude Desktop, ChatGPT, Goose, VS Code Copilot) renderice en el chat. Reutilizar la UI web existente (chat/static/index.html: 1 fichero con JS/CSS inline, Leaflet+Chart.js, funciones mostrarFinal/mostrarGraficaRiesgo/pintarMapaResultados) en vez de duplicarla. Requisito del usuario: no rehacer la web, no duplicar UI, arquitectura mantenible.",
+      "acceptance_criteria": [
+        "El estudio responde: qué es MCP Apps, qué clientes lo soportan hoy, cómo se declara (tool _meta.ui.resourceUri + recurso ui:// text/html",
+        "profile=mcp-app + JSON-RPC por postMessage), y si el SDK oficial de MCP Apps existe para Python o hay que servirlo a mano",
+        "Una sola tool (predict_risk_mcp) sirve una vista HTML que el host renderiza en el chat mostrando el parte y la grafica de riesgo, reutilizando la logica JS de index.html (funciones extraidas a un modulo compartido o importadas por referencia), y se demuestra en un cliente compatible",
+        "La web actual sigue funcionando sin cambios y no hay UI duplicada: el HTML del MCP App comparte el mismo codigo de visualizacion, se demuestra con las rutas",
+        "Se documenta la decision de arquitectura (modelos/API/MCP/UI/cliente) y si la migracion del resto de tools merece la pena",
+        "make test pasa y el servidor MCP actual sigue sirviendo JSON para clientes sin soporte de apps (degradacion: host sin UI recibe texto)",
+        "no se toca la web ni se migran las otras 10 tools mas alla del estudio"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ARNES-011",
+      "title": "Security/Policy Layer entre el LLM y las tools: frontera determinista de permisos, sandbox, secretos y auditoria",
+      "description": "Evolucion de ARNES-005 (absorbida). El LLM propone acciones, el harness decide que se puede ejecutar. Todo lo critico vive en codigo determinista, no en la buena voluntad del modelo. Cubre: permisos por agente, validacion de argumentos, restriccion de filesystem, lista blanca de comandos, control de red, proteccion de secretos, human-in-the-loop, rate/resource limits, auditoria y defensa contra prompt injection (datos no confiables nunca modifican politicas ni elevan privilegios).",
+      "acceptance_criteria": [
+        "Existe UNA unica funcion de aprobacion por la que pasa toda tool call, y ninguna tool se ejecuta sin pasar por ella: se pega la traza de una peticion aprobada y de una rechazada",
+        "Catalogo CERRADO de tools por agente: se pega la lista y se demuestra que una peticion fuera del catalogo no se ejecuta",
+        "Validacion de argumentos por tool: esquema de tipos y rangos por parametro, y una llamada con argumentos invalidos se rechaza con traza",
+        "Restriccion de filesystem por agente: lista de directorios de lectura y de escritura, y una ruta fuera de ellas se bloquea con traza",
+        "Control de red: lista blanca de dominios o servicios, y una peticion a un dominio fuera se bloquea con traza",
+        "Proteccion de secretos: ninguna tool call ni su salida pueden exponer tokens, claves o variables sensibles del .env, se pega la traza del bloqueo",
+        "Human-in-the-loop: acciones destructivas o irreversibles exigen confirmacion y una sin confirmar se bloquea con traza",
+        "Rate/resource limits: tope de tiempo, memoria, CPU y numero de llamadas por peticion, configurable y medido en la traza",
+        "Auditoria: cada intento registra que quiso hacer el agente, que se permitio, que se bloqueo y que termino ejecutandose",
+        "Prompt injection: fichero de red-team con 10+ ataques (instrucciones hostiles en RAG/web/PDF/MCP, rm -rf, lectura de credenciales, exfiltracion a una API) y la traza del rechazo de cada uno",
+        "queda demostrado que los datos que consume el agente se tratan como contenido NO confiable: no pueden modificar politicas ni elevar privilegios, y la defensa no depende de pedirle cuidado al LLM",
+        "sandboxing: process_tool.run_command gana lista blanca de binarios y confinamiento del cwd al repo (hoy tiene shell=False y timeout pero acepta cualquier argv y cualquier directorio)",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BUG-003",
+      "title": "El test del parte con % captura messages[0] pero SYSTEM_PARTE (LLM-003) lo antepuso: los datos quedaron en messages[1]",
+      "description": "El test del parte con % captura messages[0] pero SYSTEM_PARTE (LLM-003) lo antepuso: los datos quedaron en messages[1]",
+      "acceptance_criteria": [
+        "test_parte_porcentaje_prompt_llm_instruye_explicar captura el mensaje con role=user (o el que lleve los datos del parte) en vez de asumir messages[0], y sigue validando que el prompt lleva la explicacion del 21% y 'mayor cuanto mas se acerque a 100%'",
+        "el cambio no altera el comportamiento de ask_con_perfil ni de SYSTEM_PARTE: solo corrige lo que el test mira",
+        "la suite completa pasa en verde",
+        "no se toca rag_qwen.py ni telegram_bot.py salvo que el propio test lo necesite"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-03",
+      "review_rounds": 0,
+      "closed": "2026-08-04"
+    },
+    {
+      "id": "BOT-012",
+      "title": "El parte del bot no dice las horas peligrosas ni el horario recomendado",
+      "description": "El parte del bot no dice las horas peligrosas ni el horario recomendado",
+      "acceptance_criteria": [
+        "Tras la prediccion el bot indica la franja de mayor riesgo del dia y una franja recomendada para hacer la actividad, y se pega la conversacion real",
+        "Se reutilizan riesgo_horario_acumulado, pico_riesgo_actividad y recomendar_horario de climasafeai/features/personalizacion.py, que ya usan la web y el MCP: no se reimplementa el calculo",
+        "Si no hay perfil horario disponible el bot lo dice en vez de callarse o inventar una franja",
+        "Hay tests del caso con perfil horario y del caso sin el, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-013",
+      "title": "El bot no dice la confianza del modelo y el porcentaje no explica la clase",
+      "description": "El bot no dice la confianza del modelo y el porcentaje no explica la clase",
+      "acceptance_criteria": [
+        "El parte muestra la confianza conformal que el ensemble YA calcula (conformal_confianza: alta, media o baja) en lenguaje llano, y se pega la conversacion",
+        "Queda explicado en el parte que el porcentaje y la clase son dos cosas distintas: la clase sale de umbrales por provincia (apply_class_thresholds) y el porcentaje es prob_personalizada del canal de calor. Hoy se muestran juntos como si uno explicara al otro",
+        "Se comprueba y se documenta si puede salir un PELIGRO con un porcentaje bajo, pegando un caso real o demostrando que no puede pasar",
+        "Si la confianza es baja el parte lo advierte en vez de dar el numero con la misma seguridad",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-014",
+      "title": "El chat tras el parte manda los dos canales y los factores sin peso",
+      "description": "El chat tras el parte manda los dos canales y los factores sin peso",
+      "acceptance_criteria": [
+        "El contexto del chat solo incluye el canal dominante: en un parte de calor deja de aparecer 'Probabilidad personalizada (frio): 3%'. Se reutiliza _canal_dominante de climasafeai/models/recomendaciones.py, que ya existe",
+        "Los factores se mandan ordenados por su coeficiente y CON el coeficiente, para que el modelo pueda decir cual pesa mas. Hoy solo se manda la lista de nombres y no puede saberlo",
+        "Al preguntar por los factores de riesgo, la respuesta nombra el que mas pesa y su valor. Se pega la conversacion real",
+        "Hay test de que un resultado con dominancia de calor no mete datos de frio en el contexto, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }
