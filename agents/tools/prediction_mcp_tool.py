@@ -244,6 +244,25 @@ def _parse_date(fecha: str | None) -> date_type | None:
         return None
 
 
+def _aplicar_deporte_a_perfil(perfil: dict) -> dict:
+    """Si el perfil lleva deporte, la intensidad se deriva del MET del Compendium.
+
+    ``nivel_actividad_de_deporte`` devuelve el nivel (reposo..muy_intensa) del
+    MET publicado del deporte; ese nivel manda sobre cualquier nivel_actividad
+    por defecto, igual que hace el bot en ``_perfil_prediccion_desde_rutina``.
+    Si el deporte no está en la tabla se deja el nivel que ya traía el perfil.
+    """
+    deporte = perfil.get("deporte")
+    if not deporte:
+        return perfil
+    from climasafeai.features.personalizacion import nivel_actividad_de_deporte
+
+    nivel = nivel_actividad_de_deporte(deporte)
+    if nivel:
+        perfil["nivel_actividad"] = nivel
+    return perfil
+
+
 def predict_risk(
     lat: float, lon: float, provincia: str = "Madrid",
     edad: int = 40, sexo: str = "hombre",
@@ -299,6 +318,8 @@ def predict_risk(
         perfil["comorbilidades"] = set(comorbilidades)
     if medicacion:
         perfil["farmacos"] = set(medicacion)
+
+    _aplicar_deporte_a_perfil(perfil)
 
     result = _try_prediction(lat, lon, provincia, perfil, target_date)
 
@@ -364,6 +385,8 @@ def predict_zone_risk(
     from climasafeai.data.grid_risk import riesgo_zona_grid
 
     target_date = _parse_date(fecha)
+    if perfil:
+        _aplicar_deporte_a_perfil(perfil)
     return riesgo_zona_grid(
         lat=lat, lon=lon, radio_km=radio_km,
         perfil_id=perfil_id, target_date=target_date,
@@ -418,6 +441,7 @@ def predict_group_risk(
                 if aclimatado in ("si", "no"):
                     perfil["aclimatado"] = aclimatado == "si"
 
+                _aplicar_deporte_a_perfil(perfil)
                 pred = _try_prediction(lat, lon, provincia, perfil, target_date)
                 pred["_alias"] = p.get("alias", f"ID {p['id']}")
                 pred["_perfil_id"] = p["id"]
@@ -494,6 +518,7 @@ def predict_group_risk(
             perfil_rango["ocupacion"] = ocupacion
         if deporte:
             perfil_rango["deporte"] = deporte
+        _aplicar_deporte_a_perfil(perfil_rango)
         try:
             pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil_rango, target_date=target_date)
         except Exception:
@@ -640,6 +665,152 @@ def _sanitize(result: dict) -> None:
             mod_res.pop("_X", None)
     if "error" in result.get("modelos", {}).get("LSTM", {}):
         del result["modelos"]["LSTM"]["error"]
+
+
+# ── Rutinas semanales: resolución de perfil/chat y perfil de predicción ─────
+
+
+def _resolver_chat(
+    alias: str | None = None,
+    perfil_id: int | None = None,
+    chat_id: str | None = None,
+) -> tuple[str | None, dict | None]:
+    """Resuelve el chat_id sobre el que viven las rutinas.
+
+    Acepta el chat_id directamente o un perfil (alias/perfil_id) con chat de
+    Telegram vinculado. Devuelve (chat_id, error); error no es None si falla.
+    """
+    from climasafeai.db.manager import DBManager
+
+    db = DBManager()
+    if chat_id:
+        return str(chat_id), None
+
+    if alias or perfil_id is not None:
+        if perfil_id is not None:
+            perfil = db.obtener_perfil(int(perfil_id))
+        else:
+            match = db.buscar_por_alias(alias)
+            if not match:
+                return None, {"error": f"No se encontró perfil con alias '{alias}'"}
+            perfil = db.obtener_perfil(match["id"])
+        if not perfil:
+            return None, {"error": "Perfil no encontrado"}
+        chat = perfil.get("telegram_chat_id")
+        if not chat:
+            return None, {
+                "error": "El perfil no tiene un chat de Telegram vinculado: indica "
+                "chat_id o vincula el perfil a un chat antes de usar rutinas"
+            }
+        return str(chat), None
+
+    return None, {"error": "Indica uno de: chat_id, alias o perfil_id"}
+
+
+def _resolver_perfil(
+    alias: str | None = None,
+    perfil_id: int | None = None,
+    chat_id: str | None = None,
+) -> tuple[dict | None, dict | None]:
+    """Resuelve el perfil completo por alias, perfil_id o chat_id."""
+    from climasafeai.db.manager import DBManager
+
+    db = DBManager()
+    pid: int | None = None
+    if perfil_id is not None:
+        pid = int(perfil_id)
+    elif alias:
+        match = db.buscar_por_alias(alias)
+        if not match:
+            return None, {"error": f"No se encontró perfil con alias '{alias}'"}
+        pid = match["id"]
+    elif chat_id:
+        match = db.buscar_por_telegram(str(chat_id))
+        if not match:
+            return None, {"error": f"No hay perfil vinculado al chat '{chat_id}'"}
+        pid = match["id"]
+    else:
+        return None, {"error": "Indica uno de: alias, perfil_id o chat_id"}
+
+    perfil = db.obtener_perfil(pid) if pid is not None else None
+    if not perfil:
+        return None, {"error": "Perfil no encontrado"}
+    return perfil, None
+
+
+def _validar_hora_aviso(hora: str) -> str | None:
+    """Valida 'HH:MM' y lo normaliza a 'HH:MM' con dos dígitos, o None."""
+    import re
+
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", hora.strip())
+    if not m:
+        return None
+    hh, mm = int(m.group(1)), int(m.group(2))
+    if hh > 23 or mm > 59:
+        return None
+    return f"{hh:02d}:{mm:02d}"
+
+
+def _fmt_hora(h: float) -> str:
+    """8.0 → '8:00', 18.5 → '18:30'."""
+    hh = int(h)
+    mm = int(round((h - hh) * 60))
+    return f"{hh}:{mm:02d}"
+
+
+def _validar_dias(dias: str) -> list[int] | None:
+    """Valida '1,2,3,4,5' (1=lunes ... 7=domingo). Devuelve lista o None."""
+    try:
+        nums = [int(d) for d in dias.split(",") if d.strip()]
+    except (ValueError, TypeError):
+        return None
+    if not nums or any(n < 1 or n > 7 for n in nums):
+        return None
+    return sorted(set(nums))
+
+
+def _perfil_prediccion_desde_rutina(perfil: dict, rutina: dict) -> dict:
+    """Perfil para predict_ensemble: datos del perfil + ventana de la rutina.
+
+    La ventana a evaluar la define la rutina (hora_inicio + duración), no el
+    perfil; igual que hace el bot en ``_perfil_prediccion_desde_rutina``. Si la
+    rutina lleva deporte, la intensidad se deriva del MET del Compendium.
+    """
+    p: dict[str, Any] = {
+        "sexo": perfil.get("sexo", "hombre"),
+        "edad": perfil.get("edad"),
+        "aclimatado": perfil.get("aclimatado", False),
+        "nivel_actividad": "ligera",
+        "duracion_actividad_h": rutina["hora_fin"] - rutina["hora_inicio"],
+        "hora_inicio": rutina["hora_inicio"],
+        "comorbilidades": set(perfil.get("comorbilidades") or []),
+        "farmacos": set(perfil.get("farmacos") or []),
+    }
+    if perfil.get("porcentaje_grasa") is not None:
+        p["porcentaje_grasa"] = perfil["porcentaje_grasa"]
+    if perfil.get("fototipo") is not None:
+        p["fototipo"] = perfil["fototipo"]
+    if perfil.get("situacion_social"):
+        p["situacion_social"] = set(perfil["situacion_social"])
+    if rutina.get("ocupacion"):
+        p["ocupacion"] = rutina["ocupacion"]
+    if rutina.get("deporte"):
+        p["deporte"] = rutina["deporte"]
+    return _aplicar_deporte_a_perfil(p)
+
+
+def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[float]:
+    """Temperaturas previstas en las horas en las que el usuario estará fuera."""
+    inicio = perfil_usuario.get("hora_inicio")
+    duracion = perfil_usuario.get("duracion_actividad_h")
+    if inicio is not None and duracion is not None:
+        en_ventana = [
+            h["temp"] for h in perfil_horario
+            if inicio <= h["hora"] < inicio + duracion and h.get("temp") is not None
+        ]
+        if en_ventana:
+            return en_ventana
+    return [h["temp"] for h in perfil_horario if h.get("temp") is not None]
 
 
 # ── MCP Server ───────────────────────────────────────────────────────
@@ -795,6 +966,210 @@ vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
             datos["telegram_chat_id"] = chat_id
         pid = db.crear_perfil(datos)
         return json.dumps({"success": True, "id": pid, "alias": alias, "mensaje": f"Perfil '{alias}' creado correctamente"}, indent=2, ensure_ascii=False)
+
+    @_mcp.tool()
+    def listar_rutinas_mcp(
+        alias: Optional[str] = None,
+        perfil_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
+    ) -> str:
+        """Lista las rutinas semanales de un perfil, por alias, perfil_id o chat_id.
+
+Cada rutina trae: id, nombre, dias (1-7, 1=lunes), hora_inicio, hora_fin y
+opcionalmente ocupacion o deporte."""
+        chat, err = _resolver_chat(alias, perfil_id, chat_id)
+        if err:
+            return json.dumps(err, ensure_ascii=False)
+        from climasafeai.db.manager import DBManager
+
+        rutinas = DBManager().listar_rutinas(chat)
+        for r in rutinas:
+            r.pop("chat_id", None)
+        if not rutinas:
+            return json.dumps({"rutinas": [], "mensaje": "Este perfil/chat no tiene rutinas todavía"}, ensure_ascii=False)
+        return json.dumps(rutinas, indent=2, ensure_ascii=False, default=str)
+
+    @_mcp.tool()
+    def crear_rutina_mcp(
+        nombre: str,
+        dias: str,
+        hora_inicio: float,
+        hora_fin: float,
+        alias: Optional[str] = None,
+        perfil_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
+        ocupacion: Optional[str] = None,
+        deporte: Optional[str] = None,
+    ) -> str:
+        """Crea una rutina semanal para un perfil/chat y devuelve su id.
+
+`dias` es una cadena con los días 1-7 separados por coma (1=lunes, 7=domingo),
+p. ej. "1,2,3,4,5". `hora_inicio` y `hora_fin` en formato 24h (8.5 = 8:30).
+`deporte` solo si la rutina es un deporte conocido (correr, senderismo, futbol,
+ciclismo, tenis...): su intensidad se deriva del MET del Compendium."""
+        chat, err = _resolver_chat(alias, perfil_id, chat_id)
+        if err:
+            return json.dumps(err, ensure_ascii=False)
+        nums = _validar_dias(dias)
+        if nums is None:
+            return json.dumps({"success": False, "error": f"dias inválido '{dias}': usa números 1-7 separados por coma (1=lunes)"}, ensure_ascii=False)
+        if not (0 <= hora_inicio < 24 and 0 < hora_fin <= 24 and hora_fin > hora_inicio):
+            return json.dumps({"success": False, "error": f"ventana inválida {hora_inicio}-{hora_fin}: hora_fin debe ser mayor que hora_inicio y ambas entre 0 y 24"}, ensure_ascii=False)
+        from climasafeai.db.manager import DBManager
+
+        rid = DBManager().crear_rutina(
+            chat, nombre.strip(), ",".join(str(n) for n in nums),
+            float(hora_inicio), float(hora_fin),
+            ocupacion=ocupacion, deporte=deporte,
+        )
+        return json.dumps(
+            {"success": True, "id": rid, "nombre": nombre.strip(), "dias": ",".join(str(n) for n in nums),
+             "hora_inicio": hora_inicio, "hora_fin": hora_fin,
+             "mensaje": f"Rutina '{nombre.strip()}' creada (id {rid})"},
+            indent=2, ensure_ascii=False,
+        )
+
+    @_mcp.tool()
+    def borrar_rutina_mcp(
+        rutina_id: int,
+        alias: Optional[str] = None,
+        perfil_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
+    ) -> str:
+        """Borra una rutina propia por su id (los ids salen en listar_rutinas_mcp).
+
+Hay que identificar al dueño con alias, perfil_id o chat_id: solo se borran
+rutinas de ese perfil/chat."""
+        chat, err = _resolver_chat(alias, perfil_id, chat_id)
+        if err:
+            return json.dumps(err, ensure_ascii=False)
+        from climasafeai.db.manager import DBManager
+
+        db = DBManager()
+        rid = int(rutina_id)
+        if not any(r["id"] == rid for r in db.listar_rutinas(chat)):
+            return json.dumps(
+                {"success": False, "error": f"No existe la rutina {rid} en este perfil/chat"},
+                ensure_ascii=False,
+            )
+        db.eliminar_rutina(rid)
+        return json.dumps({"success": True, "id": rid, "mensaje": "Rutina eliminada"}, ensure_ascii=False)
+
+    @_mcp.tool()
+    def configurar_hora_aviso_mcp(
+        hora: Optional[str] = None,
+        alias: Optional[str] = None,
+        perfil_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
+    ) -> str:
+        """Configura o consulta la hora de aviso diario de un perfil/chat.
+
+`hora` en formato HH:MM (p. ej. "08:00") configura el aviso; "off" lo desactiva;
+si se omite, solo consulta la hora actual."""
+        chat, err = _resolver_chat(alias, perfil_id, chat_id)
+        if err:
+            return json.dumps(err, ensure_ascii=False)
+        from climasafeai.db.manager import DBManager
+
+        db = DBManager()
+        if hora is not None and hora.strip().lower() != "off":
+            norm = _validar_hora_aviso(hora)
+            if norm is None:
+                return json.dumps({"success": False, "error": f"Hora inválida '{hora}': usa HH:MM entre 00:00 y 23:59, u 'off' para desactivar"}, ensure_ascii=False)
+            db.guardar_hora_aviso(chat, norm)
+            return json.dumps({"success": True, "chat_id": chat, "hora": norm, "mensaje": f"Aviso diario configurado a las {norm}"}, ensure_ascii=False)
+        if hora is not None and hora.strip().lower() == "off":
+            db.guardar_hora_aviso(chat, None)
+            return json.dumps({"success": True, "chat_id": chat, "hora": None, "mensaje": "Aviso diario desactivado"}, ensure_ascii=False)
+        actual = db.obtener_hora_aviso(chat)
+        return json.dumps(
+            {"chat_id": chat, "hora": actual,
+             "mensaje": f"Aviso diario configurado a las {actual}" if actual else "No hay hora de aviso configurada"},
+            ensure_ascii=False,
+        )
+
+    @_mcp.tool()
+    def riesgo_rutinas_dia_mcp(
+        alias: Optional[str] = None,
+        perfil_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
+        weekday: Optional[int] = None,
+        fecha: Optional[str] = None,
+    ) -> str:
+        """Calcula el riesgo de cada rutina de un perfil para un día de la semana.
+
+`weekday` usa 1=lunes ... 7=domingo; si se omite usa el día actual. Para cada
+rutina del día calcula con predict_ensemble el riesgo de su ventana
+(hora_inicio-hora_fin) y devuelve clase, probabilidad, temperatura media y
+recomendación por ventana."""
+        perfil, err = _resolver_perfil(alias, perfil_id, chat_id)
+        if err:
+            return json.dumps(err, ensure_ascii=False)
+        if perfil.get("lat") is None or perfil.get("lon") is None:
+            return json.dumps(
+                {"error": "El perfil no tiene ubicación (lat/lon): configura lat, lon y provincia en el perfil antes de calcular el riesgo por rutinas"},
+                ensure_ascii=False,
+            )
+        chat = perfil.get("telegram_chat_id")
+        if not chat:
+            return json.dumps({"error": "El perfil no tiene un chat de Telegram vinculado: no hay rutinas asociadas"}, ensure_ascii=False)
+        if weekday is not None and int(weekday) not in range(1, 8):
+            return json.dumps({"error": f"weekday inválido {weekday}: usa 1=lunes ... 7=domingo"}, ensure_ascii=False)
+        wd = int(weekday) if weekday is not None else date_type.today().isoweekday()
+        target_date = _parse_date(fecha)
+
+        from climasafeai.db.manager import DBManager
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+
+        rutinas = DBManager().rutinas_por_dia(chat, wd)
+        ventanas = []
+        for r in rutinas:
+            perfil_pred = _perfil_prediccion_desde_rutina(perfil, r)
+            try:
+                pred = _try_prediction(
+                    lat=perfil["lat"], lon=perfil["lon"],
+                    provincia=perfil.get("provincia") or "Madrid",
+                    perfil=perfil_pred, target_date=target_date,
+                )
+            except Exception as exc:
+                ventanas.append({
+                    "id": r["id"], "nombre": r["nombre"],
+                    "ventana": f"{_fmt_hora(r['hora_inicio'])}-{_fmt_hora(r['hora_fin'])}",
+                    "error": str(exc),
+                })
+                continue
+            temps = _temps_en_ventana(pred.get("weather", {}).get("perfil_horario") or [], perfil_pred)
+            ventanas.append({
+                "id": r["id"],
+                "nombre": r["nombre"],
+                "dias": r["dias"],
+                "hora_inicio": r["hora_inicio"],
+                "hora_fin": r["hora_fin"],
+                "ventana": f"{_fmt_hora(r['hora_inicio'])}-{_fmt_hora(r['hora_fin'])}",
+                "deporte": r.get("deporte"),
+                "ocupacion": r.get("ocupacion"),
+                "nivel_actividad": perfil_pred.get("nivel_actividad"),
+                "clase_final": pred.get("clase_final"),
+                "clase_final_label": pred.get("clase_final_label"),
+                "prob_calor": pred.get("perfil", {}).get("calor", {}).get("prob_personalizada"),
+                "prob_frio": pred.get("perfil", {}).get("frio", {}).get("prob_personalizada"),
+                "temp_media_ventana_c": round(sum(temps) / len(temps), 1) if temps else None,
+                "recomendacion": recomendacion_resumen(pred),
+            })
+
+        return json.dumps(
+            {
+                "alias": perfil.get("alias"),
+                "perfil_id": perfil["id"],
+                "chat_id": chat,
+                "weekday": wd,
+                "fecha": target_date.isoformat() if target_date else "hoy",
+                "provincia": perfil.get("provincia") or "Madrid",
+                "num_rutinas": len(ventanas),
+                "ventanas": ventanas,
+            },
+            indent=2, ensure_ascii=False, default=str,
+        )
 
     _HAS_MCP = True
 except ImportError:
