@@ -226,10 +226,19 @@ class TestAskConPerfil:
         )
         assert texto == mock_chat.return_value
 
-        prompt = mock_chat.call_args[0][0][0]["content"]
+        mensajes = mock_chat.call_args[0][0]
+
+        # El system prompt fija el idioma: qwen3:1.7b redactaba el parte de
+        # Pontevedra en portugués cuando esta llamada iba sin system.
+        assert mensajes[0]["role"] == "system"
+        assert "español" in mensajes[0]["content"].lower()
+        assert "portugués" in mensajes[0]["content"].lower()
+
+        prompt = mensajes[-1]["content"]
         assert "Ubicación: Moaña, Pontevedra" in prompt
         assert "Índice UV: 7" in prompt
         assert "Recomendación contextual:" in prompt
         assert "SPF 30+" in prompt
-        # El ejemplo del prompt usa el formato "ubicación — Riesgo CLASE (XX%)"
-        assert "Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%)" in prompt
+        # El ejemplo del prompt explica el % en lenguaje llano (BOT-010)
+        assert "20% de probabilidad de riesgo térmico durante la actividad" in prompt
+        assert "mayor cuanto más se acerque a 100%" in prompt

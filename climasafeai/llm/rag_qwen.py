@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Strings LiteLLM: "proveedor/nombre_modelo"
 MODELO_LOCAL_CPU = "ollama/qwen2.5:1.5b"
+MODELO_LOCAL_QWEN3 = "ollama/qwen3:1.7b"
 MODELO_LOCAL_GPU = "ollama/qwen2.5:7b"
 MODELO_FINE_TUNED = "ollama/qwen2.5:climasafe"
 MODELO_API_DEFECTO = "groq/llama-3.3-70b-versatile"
@@ -52,9 +53,21 @@ class LLMConfig:
 
     @classmethod
     def mejor_disponible(cls) -> "LLMConfig":
-        """Detecta el mejor modelo Ollama disponible."""
+        """Detecta el mejor modelo Ollama disponible.
+
+        El orden no es por tamaño, es por lo que midió el benchmark de LLM-003
+        sobre los 100 ejemplos de data/llm/val.jsonl:
+
+            modelo             clase  formato  inventa cifras  error del índice
+            qwen3:1.7b          32%     100%        14%              0.385
+            qwen2.5:1.5b        25%     100%       100%              8.417
+
+        qwen2.5:1.5b se inventa alguna cifra en TODAS las respuestas y da
+        índices fuera del rango 0-1. En un asistente de salud eso no es "peor",
+        es inservible, así que qwen3:1.7b va por delante pese a pesar lo mismo.
+        """
         modelos = _modelos_ollama()
-        for candidate in [MODELO_FINE_TUNED, MODELO_LOCAL_GPU, MODELO_LOCAL_CPU]:
+        for candidate in [MODELO_FINE_TUNED, MODELO_LOCAL_GPU, MODELO_LOCAL_QWEN3, MODELO_LOCAL_CPU]:
             # fine-tuned: "ollama/qwen2.5:climasafe" → Ollama lo ve como "qwen2.5:climasafe"
             nombre_corto = candidate.split("/", 1)[1] if "/" in candidate else candidate
             if nombre_corto in modelos:
@@ -81,6 +94,17 @@ def _chat_litellm(
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         )
+        # El coste de una conversación solo se puede comparar si queda escrito:
+        # `usage` viene del proveedor, no es una estimación nuestra.
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            logger.info(
+                "tokens %s: %s prompt + %s completion = %s",
+                config.model,
+                getattr(usage, "prompt_tokens", "?"),
+                getattr(usage, "completion_tokens", "?"),
+                getattr(usage, "total_tokens", "?"),
+            )
         return resp.choices[0].message.content.strip()
     except Exception as exc:
         logger.error("Error en LiteLLM (%s): %s", config.model, exc)
@@ -129,6 +153,21 @@ estás seguro de un dato, dilo.
 
 Responde en español, directo y conciso."""
 
+# `ask_con_perfil` iba sin system prompt: solo el mensaje de usuario. Con
+# qwen2.5 colaba, pero qwen3:1.7b redactaba el parte de Pontevedra en portugués
+# —"Mantenha-se hidratado, use protector solar SPF 30+ e evite exposição
+# prolongada"— porque el topónimo gallego y el español comparten espacio con el
+# portugués en un modelo pequeño y multilingüe. La instrucción de idioma tiene
+# que ser explícita y estar en el system, no confiada al contexto.
+SYSTEM_PARTE = """\
+Eres ClimaSafeAI, un sistema de predicción de riesgo térmico personalizado.
+
+Responde SIEMPRE en español de España. Nunca en portugués, gallego, catalán,
+inglés ni ninguna otra lengua, aunque el topónimo del usuario te suene a otro
+idioma. Si dudas, español.
+
+No inventes cifras: usa solo las que te den. Sin rodeos y sin emojis."""
+
 CONTEXT_TEMPLATE = """\
 === FACTORES DE RIESGO RELEVANTES ===
 {factores_ctx}
@@ -168,8 +207,12 @@ def _format_docs(results: list[dict]) -> str:
         seccion = r.get("seccion", "?")
         texto = r.get("texto", "")
         dist = r.get("distance", "?")
+        # `__intro__` es el centinela que el chunker le pone al texto anterior al
+        # primer `##` (ver RAG._chunks_desde_md), no una sección real. Colándose
+        # aquí, el modelo lo citaba tal cual: "Fuente: __intro__".
+        etiqueta = titulo if seccion in ("__intro__", "?", "", None) else f"{titulo} / {seccion}"
         lines.append(
-            f"{i}. [{titulo} / {seccion}]: {texto[:400]} (distancia: {dist:.3f})"
+            f"{i}. [{etiqueta}]: {texto[:400]} (distancia: {dist:.3f})"
         )
     return "\n".join(lines)
 
@@ -179,6 +222,7 @@ def ask_with_rag(
     k_factores: int = 5,
     k_docs: int = 5,
     config: LLMConfig | None = None,
+    contexto: str | None = None,
 ) -> dict[str, Any]:
     """RAG completo: busca en factores + documentación y responde con cualquier LLM.
 
@@ -187,6 +231,9 @@ def ask_with_rag(
         k_factores: Cuántos factores de riesgo recuperar.
         k_docs: Cuántos fragmentos de documentación recuperar.
         config: Configuración del modelo (LiteLLM string: ollama/groq/openai/…).
+        contexto: Texto que se añade al prompt pero NO a la búsqueda semántica.
+            Lo usa el chat para las dudas posteriores a una predicción: el parte
+            que se acaba de dar es contexto, no términos de búsqueda.
 
     Returns:
         dict con answer, sources_factores, sources_docs, model, error.
@@ -206,13 +253,15 @@ def ask_with_rag(
 
     has_context = bool(factores) or bool(docs)
     if not has_context:
-        return ask_raw(question, config=config)
+        return ask_raw(question, config=config, contexto=contexto)
 
     user_prompt = CONTEXT_TEMPLATE.format(
         factores_ctx=factores_ctx,
         docs_ctx=docs_ctx,
         question=question,
     )
+    if contexto:
+        user_prompt = f"=== SITUACIÓN DEL USUARIO ===\n{contexto}\n\n{user_prompt}"
 
     # 3. Consultar LLM (LiteLLM unifica todos los proveedores)
     messages = [
@@ -233,12 +282,14 @@ def ask_with_rag(
 def ask_raw(
     question: str,
     config: LLMConfig | None = None,
+    contexto: str | None = None,
 ) -> dict[str, Any]:
     """LLM raw sin RAG — sin contexto aumentado.
 
     Args:
         question: Pregunta del usuario.
         config: Configuración del modelo.
+        contexto: Situación del usuario que se antepone a la pregunta.
 
     Returns:
         dict con answer, model, error.
@@ -248,7 +299,7 @@ def ask_raw(
 
     messages = [
         {"role": "system", "content": SYSTEM_RAW},
-        {"role": "user", "content": question},
+        {"role": "user", "content": f"{contexto}\n\n{question}" if contexto else question},
     ]
     answer = _chat_litellm(messages, config)
 
@@ -303,12 +354,17 @@ Factores de riesgo: {', '.join(f['nombre'] for f in factores) if factores else '
 Recomendación contextual: {resumen}
 
 Escribe un parte médico de una línea con la ubicación, la clase, la probabilidad
-y la recomendación principal adaptada al contexto: si hace frío recomienda
-abrigo, y solo menciona protección solar si el índice UV lo justifica.
+explicada en lenguaje llano y la recomendación principal adaptada al contexto:
+si hace frío recomienda abrigo, y solo menciona protección solar si el índice
+UV lo justifica.
+La probabilidad se explica como porcentaje de riesgo térmico durante la
+actividad, p. ej. "21% de probabilidad de riesgo térmico durante la actividad
+(mayor cuanto más se acerque a 100%)".
 Sin rodeos, sin emojis.
-Ejemplo: "{ubicacion} — Riesgo {clase} ({prob:.0%}). {resumen}"
+Ejemplo: "{ubicacion} — Riesgo {clase}: {prob:.0%} de probabilidad de riesgo térmico durante la actividad (mayor cuanto más se acerque a 100%). {resumen}"
 """
     messages = [
+        {"role": "system", "content": SYSTEM_PARTE},
         {"role": "user", "content": prompt},
     ]
     try:

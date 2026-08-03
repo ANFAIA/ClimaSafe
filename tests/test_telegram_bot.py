@@ -2,17 +2,36 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from climasafeai.bot.telegram_bot import (
     Estado,
     FIELD_LABELS,
     _conversaciones,
+    _edad_desde_fecha_nacimiento,
+    _parsear_fecha_nacimiento,
     procesar_mensaje,
     procesar_callback,
     _siguiente,
     _format_template,
 )
+
+
+class _HoyFijo(date):
+    """Fija 'hoy' en 2026-08-03 para que la edad calculada sea determinista."""
+
+    @classmethod
+    def today(cls):
+        return cls(2026, 8, 3)
+
+
+class _FakeDBSinPerfil:
+    """DB sin perfiles guardados: el bot no debe tocar el SQLite real en tests."""
+
+    def buscar_por_telegram(self, chat_id: str):
+        return None
 
 
 def _conv_limpia(chat_id: int = 1):
@@ -33,8 +52,8 @@ class TestOrdenCampos:
     def test_estados_en_orden(self):
         """Verifica que todos los estados están en FIELD_LABELS y en orden."""
         order = list(Estado)
-        # IDLE, DONE y CHAT no tienen campo (CHAT es modo chat libre, no formulario)
-        no_campo = {Estado.IDLE, Estado.DONE, Estado.CHAT}
+        # IDLE y DONE no tienen campo (DONE es el cierre del formulario)
+        no_campo = {Estado.IDLE, Estado.DONE}
         etiquetados = [e for e in order if e not in no_campo]
         for est in etiquetados:
             assert est in FIELD_LABELS, f"Falta FIELD_LABELS para {est}"
@@ -53,30 +72,6 @@ class TestOrdenCampos:
 
 
 class TestValidacionNumerica:
-    @pytest.mark.asyncio
-    async def test_edad_valida(self):
-        _conv_limpia()
-        _conversaciones[1]["estado"] = Estado.EDAD
-        r = await procesar_mensaje(1, "25")
-        assert r is None, f"Esperado None, got {r}"
-        assert _conversaciones[1]["data"]["edad"] == 25
-
-    @pytest.mark.asyncio
-    async def test_edad_fuera_rango(self):
-        _conv_limpia()
-        _conversaciones[1]["estado"] = Estado.EDAD
-        r = await procesar_mensaje(1, "150")
-        assert r is not None
-        assert "120" in r
-
-    @pytest.mark.asyncio
-    async def test_edad_invalida(self):
-        _conv_limpia()
-        _conversaciones[1]["estado"] = Estado.EDAD
-        r = await procesar_mensaje(1, "abc")
-        assert r is not None
-        assert "inválido" in r or "número" in r
-
     @pytest.mark.asyncio
     async def test_duracion_valida(self):
         _conv_limpia()
@@ -419,6 +414,86 @@ class TestRecomendacionContexto:
         assert "evita la actividad física" in rec
 
 
+class TestRecomendacionCanalDominante:
+    """BOT-011: la recomendación sigue al canal dominante y no mezcla canales.
+
+    El canal que manda es el de mayor `prob_personalizada` (o el único que
+    supera el umbral). El canal que queda por debajo de 0.15 NO aporta
+    recomendaciones, aunque el clima físico apunte a él.
+    """
+
+    @staticmethod
+    def _resultado(prob_calor=0.0, prob_frio=0.0, t=20, uv=None, wc=10, hi=25, clase=1):
+        return {
+            "clase_final": clase,
+            "perfil": {
+                "calor": {"prob_personalizada": prob_calor, "factores": ["no_aclimatado"]},
+                "frio": {"prob_personalizada": prob_frio, "factores": ["edad"]},
+            },
+            "weather": {
+                "current": {"t2m_c": t},
+                "uv_index": uv,
+                "provincia": "Pontevedra",
+            },
+            "modelos": {
+                "Formula": {
+                    "frio": {"wind_chill_c": wc},
+                    "calor": {"heat_index_c": hi},
+                },
+            },
+        }
+
+    def test_recomendacion_canal_dominante_calor_no_mezcla_frio(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+
+        # O Casal, Pontevedra: PRECAUCIÓN 21%, 35.3 °C, UV 7.6 → manda calor
+        rec = recomendacion_resumen(self._resultado(
+            prob_calor=0.21, prob_frio=0.02, t=35.3, uv=7.6, wc=5, hi=38, clase=1,
+        ))
+        assert "evita la exposición prolongada entre las horas de mayor calor" in rec
+        assert "SPF 30+" in rec
+        assert "abrígate" not in rec  # el canal frío no manda: nada de abrigo
+
+    def test_recomendacion_canal_dominante_frio_no_mezcla_calor(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+
+        # WC muy negativo, prob_frio alta → manda frío
+        rec = recomendacion_resumen(self._resultado(
+            prob_calor=0.03, prob_frio=0.45, t=2, uv=1, wc=-18, hi=4, clase=1,
+        ))
+        assert "abrígate" in rec
+        assert "evita la exposición prolongada" not in rec  # nada de calor
+        assert "SPF" not in rec
+
+    def test_recomendacion_canal_bajo_umbral_no_aporta_aunque_el_clima_apunte(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+
+        # prob_frio=0.10 < 0.15: aunque haga frío físico (wc=-3, t=5), el canal
+        # frío no aporta recomendaciones; tampoco el calor (prob 0.05)
+        rec = recomendacion_resumen(self._resultado(
+            prob_calor=0.05, prob_frio=0.10, t=5, uv=2, wc=-3, hi=8, clase=0,
+        ))
+        assert "abrígate" not in rec
+        assert "evita la exposición prolongada" not in rec
+        assert "hidratado" in rec
+
+    def test_recomendacion_canal_dominante_ambos_activos_gana_el_mayor(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+
+        rec = recomendacion_resumen(self._resultado(
+            prob_calor=0.30, prob_frio=0.55, t=12, uv=3, wc=-5, hi=18, clase=1,
+        ))
+        assert "abrígate" in rec
+        assert "evita la exposición prolongada" not in rec
+
+    def test_recomendacion_sin_canales_degrada_a_clima_fisico(self):
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+
+        # Sin `perfil` (dict mínimo): se mantiene la lógica previa por clima físico
+        rec = recomendacion_resumen(TestRecomendacionContexto._resultado(t=5, uv=1, wc=-2, hi=5))
+        assert "abrígate" in rec
+
+
 class TestFlujoCompleto:
     @pytest.mark.asyncio
     async def test_flujo_simulado(self, monkeypatch):
@@ -427,14 +502,16 @@ class TestFlujoCompleto:
         monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
             "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
         })
+        monkeypatch.setattr(mod, "date", _HoyFijo)
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.SEXO
 
         await procesar_callback(1, "hombre")
         assert _conversaciones[1]["estado"] == Estado.EDAD
 
-        await procesar_mensaje(1, "57")
-        assert _conversaciones[1]["data"]["edad"] == 57
+        await procesar_mensaje(1, "15/03/1990")
+        assert _conversaciones[1]["data"]["edad"] == 36
+        assert _conversaciones[1]["data"]["fecha_nacimiento"] == "15/03/1990"
         assert _conversaciones[1]["estado"] == Estado.GRASA
 
         await procesar_mensaje(1, "saltar")
@@ -630,6 +707,81 @@ class TestDeporteMET:
         assert _conversaciones[1]["data"]["nivel_actividad"] == "ligera"
 
 
+class TestBienvenida:
+    """BOT-003 + CHAT-003: el primer contacto y /help explican /start, sin /chat."""
+
+    @staticmethod
+    def _sin_comandos_de_depuracion(texto: str) -> None:
+        for cmd in ("/model", "/qwen", "/api", "/determinista"):
+            assert cmd not in texto, f"{cmd} no lo necesita el usuario final"
+
+    @pytest.mark.asyncio
+    async def test_help_explica_start_como_unico_camino(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r = await procesar_mensaje(1, "/help")
+
+        assert "/start" in r and "/chat" not in r, r
+        assert "Cuestionario" in r, r
+        self._sin_comandos_de_depuracion(r)
+
+    @pytest.mark.asyncio
+    async def test_help_invita_a_preguntar_dudas_tras_el_parte(self, monkeypatch):
+        """CHAT-003: tras el parte se pueden preguntar dudas (p. ej. SPF)."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r = await procesar_mensaje(1, "/help")
+
+        assert "/chat" not in r, r
+        assert "pregunt" in r.lower(), r
+        assert "SPF" in r, r
+
+    @pytest.mark.asyncio
+    async def test_primer_contacto_sin_comando_muestra_la_bienvenida(self, monkeypatch):
+        """Antes contestaba 'Envía /start para comenzar.' y nada más."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+
+        r = await procesar_mensaje(1, "hola")
+
+        assert r == mod.BIENVENIDA, r
+
+    @pytest.mark.asyncio
+    async def test_start_sin_perfil_manda_bienvenida_y_luego_la_primera_pregunta(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        class _FakeDB:
+            def buscar_por_telegram(self, chat_id: str):
+                return None
+
+        enviados: list[str] = []
+
+        async def _fake_tg(method: str, **kwargs):
+            if method == "sendMessage":
+                enviados.append(kwargs["text"])
+            return {"ok": True, "result": {}}
+
+        monkeypatch.setattr(mod, "_db", _FakeDB())
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+
+        assert len(enviados) == 2, enviados
+        assert enviados[0] == mod.BIENVENIDA, enviados[0]
+        assert "¿Cuál es tu sexo?" in enviados[1], enviados
+
+    def test_bienvenida_no_menciona_el_chat(self):
+        """Criterio 1: /chat desaparece de la bienvenida y del bot."""
+        import climasafeai.bot.telegram_bot as mod
+        assert "/chat" not in mod.BIENVENIDA
+        assert "/start" in mod.BIENVENIDA
+
+
 class TestLogging:
     """BOT-004: el token no puede acabar en el log, y las lineas no se duplican."""
 
@@ -665,22 +817,527 @@ class TestLogging:
             for h in previos:
                 raiz.addHandler(h)
 
+    def test_todos_los_handlers_llevan_el_filtro_del_token(self, tmp_path, monkeypatch):
+        """El _OcultarToken va en el fichero y en la consola (si existe): no puede
+        haber una ruta de escritura con el token en claro."""
+        import logging
+        from climasafeai.bot.telegram_bot import _OcultarToken
+        raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
+        try:
+            setup()
+            assert raiz.handlers, "debe haber al menos el handler de fichero"
+            for h in raiz.handlers:
+                assert any(isinstance(f, _OcultarToken) for f in h.filters), \
+                    f"{type(h).__name__} no filtra el token"
+        finally:
+            for h in list(raiz.handlers):
+                raiz.removeHandler(h)
+            for h in previos:
+                raiz.addHandler(h)
+
+    def test_consola_solo_si_stdout_es_un_terminal(self, tmp_path, monkeypatch):
+        """Produccion redirige stdout al fichero (no tty): sin console handler.
+        En un terminal real (tty): consola + fichero, y ambos filtran el token."""
+        import logging
+        import sys
+        from climasafeai.bot.telegram_bot import _OcultarToken, _setup_logging
+        raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
+        try:
+            class _FakeOut:
+                def __init__(self, tty):
+                    self._tty = tty
+                def isatty(self):
+                    return self._tty
+                def write(self, _m):
+                    pass
+                def flush(self):
+                    pass
+
+            # RotatingFileHandler hereda de StreamHandler: la consola es el que
+            # escribe a un stream que NO es un fichero
+            def es_consola(h):
+                return isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+
+            # stdout redirigido a fichero (run_bot.sh): solo el handler de fichero
+            monkeypatch.setattr(sys, "stdout", _FakeOut(tty=False))
+            _setup_logging()
+            assert len(raiz.handlers) == 1, "sin consola queda solo el fichero"
+            assert not es_consola(raiz.handlers[0]), \
+                "stdout redirigido a fichero: el console handler duplicaria las lineas"
+            assert any(isinstance(f, _OcultarToken) for f in raiz.handlers[0].filters)
+
+            # terminal real: consola + fichero, y ambos filtran el token
+            for h in list(raiz.handlers):
+                raiz.removeHandler(h)
+            monkeypatch.setattr(sys, "stdout", _FakeOut(tty=True))
+            _setup_logging()
+            consolas = [h for h in raiz.handlers if es_consola(h)]
+            assert len(consolas) == 1, "con un terminal real la consola debe estar"
+            for h in raiz.handlers:
+                assert any(isinstance(f, _OcultarToken) for f in h.filters), \
+                    f"{type(h).__name__} no filtra el token"
+        finally:
+            for h in list(raiz.handlers):
+                raiz.removeHandler(h)
+            for h in previos:
+                raiz.addHandler(h)
+
     def test_varios_arranques_no_duplican_las_lineas(self, tmp_path, monkeypatch):
         """run_bot.sh reinicia en bucle: cada arranque anadia otro par de handlers."""
         import logging
         raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
         try:
             setup()
+            n_handlers = len(raiz.handlers)
             setup()
             setup()
-            assert len(raiz.handlers) == 2, "un arranque no puede anadir handlers de mas"
+            assert len(raiz.handlers) == n_handlers, "un arranque no puede anadir handlers de mas"
             logging.getLogger("prueba").info("una sola vez")
             for h in raiz.handlers:
                 h.flush()
-            lineas = [l for l in (tmp_path / "logs" / "bot.log").read_text().splitlines() if l.strip()]
+            lineas = [ln for ln in (tmp_path / "logs" / "bot.log").read_text().splitlines() if ln.strip()]
             assert len(lineas) == 1, f"la linea se ha escrito {len(lineas)} veces"
         finally:
             for h in list(raiz.handlers):
                 raiz.removeHandler(h)
             for h in previos:
                 raiz.addHandler(h)
+
+
+# ── CHAT-003: tras /start con LLM, chat abierto de preguntas ───────────────
+
+_ALDAN = {"lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra"}
+
+_RESULTADO_PELIGRO = {
+    "clase_final": 2,
+    "clase_final_label": "PELIGRO",
+    "perfil": {"calor": {"prob_personalizada": 0.72, "factores": []}},
+    "perfil_usuario": {"hora_inicio": 17, "duracion_actividad_h": 2},
+    "weather": {
+        "provincia": "Pontevedra",
+        "current": {"t2m_c": 36.0, "rh": 50},
+        "uv_index": 7,
+        "perfil_horario": [{"hora": 17, "HI": 39.0, "temp": 36.0},
+                           {"hora": 18, "HI": 38.0, "temp": 35.0}],
+    },
+    "modelos": {"Formula": {"frio": {"wind_chill_c": 30}, "calor": {"heat_index_c": 39}}},
+    "recomendaciones": ["Evita la actividad"],
+}
+
+_RESPONSE_LLM = "Aldán — Riesgo PELIGRO (72%). Evita la actividad."
+
+
+class TestChatAbiertoTrasStart:
+    """CHAT-003: al terminar /start con LLM el chat queda abierto para dudas.
+
+    La recogida conversacional desaparece: /start con botones es el único
+    camino. Al llegar a DONE, si el modelo NO es determinista el parte lo
+    redacta `ask_con_perfil` y el chat queda abierto para preguntas libres con
+    RAG sobre el parte; si es determinista, plantilla y cierre como antes.
+    """
+
+    @staticmethod
+    def _data_completa():
+        return {
+            "sexo": "hombre", "edad": 57, "porcentaje_grasa": 20.5,
+            "fototipo": "3", "aclimatado": False, "nivel_actividad": "moderada",
+            "entrenado": True, "duracion_h": 2, "hora_inicio": 17,
+            "comorbilidades": {"cardiovascular"}, "farmacos": {"diureticos_asa"},
+            "estado_previo": {"fiesta"}, "situacion_social": {"vive_solo"},
+            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "lugar": "Aldán",
+        }
+
+    @staticmethod
+    def _capturar_enviados(monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+        enviados: list[str] = []
+
+        async def _fake_enviar(_cid, texto, kb=None, reply_markup=None):
+            enviados.append(texto)
+
+        monkeypatch.setattr(mod, "enviar_mensaje", _fake_enviar)
+        return mod, enviados
+
+    def test_cierre_invita_a_preguntar_y_a_volver_a_start(self):
+        """Criterio 4: el cierre del parte invita a dudas (SPF) y a /start."""
+        import climasafeai.bot.telegram_bot as mod
+        assert "SPF" in mod.CHAT_CIERRE
+        assert "/start" in mod.CHAT_CIERRE
+        assert "duda" in mod.CHAT_CIERRE.lower()
+
+    @pytest.mark.asyncio
+    async def test_con_llm_el_parte_abre_el_chat_y_guarda_el_contexto(self, monkeypatch):
+        """Criterio 2: con LLM, la respuesta la redacta ask_con_perfil y el
+        chat queda abierto para preguntas."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        monkeypatch.setattr(
+            mod, "ask_con_perfil",
+            lambda _p, _r, _c=None, _l=None: _RESPONSE_LLM,
+        )
+        _, enviados = self._capturar_enviados(monkeypatch)
+        _conversaciones[1] = {
+            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "data": self._data_completa(),
+        }
+
+        await mod._finalizar_parte(1)
+
+        assert enviados == [f"{_RESPONSE_LLM}\n\n{mod.CHAT_CIERRE}"]
+        assert _conversaciones[1]["data"]["_prediccion_hecha"] is True
+        assert _conversaciones[1]["ultima_prediccion"] == _RESPONSE_LLM
+        assert _conversaciones[1]["estado"] == Estado.DONE  # sigue abierta
+
+    @pytest.mark.asyncio
+    async def test_determinista_responde_con_plantilla_y_cierra(self, monkeypatch):
+        """Criterio 3: sin LLM, plantilla y cierre normal, sin chat abierto."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        _, enviados = self._capturar_enviados(monkeypatch)
+        _conversaciones[1] = {
+            "estado": Estado.DONE, "modelo": mod.MODELO_DETERMINISTA,
+            "data": self._data_completa(),
+        }
+
+        await mod._finalizar_parte(1)
+
+        assert 1 not in _conversaciones          # cerrada
+        assert len(enviados) == 1
+        assert "PELIGRO" in enviados[0]
+        assert mod.CHAT_CIERRE not in enviados[0]
+
+    @pytest.mark.asyncio
+    async def test_pregunta_tras_el_parte_va_al_rag_con_el_parte_de_contexto(self, monkeypatch):
+        """Criterio 7: preguntar por SPF responde con info útil, no rechazo."""
+        import climasafeai.bot.telegram_bot as mod
+        recibido: dict = {}
+
+        def _fake_rag(q, k1, k2, c, ctx=None):
+            recibido["pregunta"] = q
+            recibido["contexto"] = ctx
+            return {"answer": "El SPF es el factor de protección solar."}
+
+        monkeypatch.setattr(mod, "ask_with_rag", _fake_rag)
+        _conversaciones[1] = {
+            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "ultima_prediccion": _RESPONSE_LLM,
+            "data": {"_prediccion_hecha": True},
+        }
+
+        r = await procesar_mensaje(1, "¿qué es SPF?")
+
+        assert r == "El SPF es el factor de protección solar."
+        assert recibido["pregunta"] == "¿qué es SPF?"
+        assert "PELIGRO" in recibido["contexto"]
+        assert recibido["contexto"].startswith("Parte que le acabas de dar")
+
+    @pytest.mark.parametrize("comando", ["salir", "exit", "/salir"])
+    @pytest.mark.asyncio
+    async def test_salir_cierra_el_chat_y_vuelve_al_inicio(self, monkeypatch, comando):
+        """Criterio 6: /salir (o equivalente) cierra el chat de preguntas."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "ask_with_rag", lambda *a, **k: {"answer": "x"})
+        _conversaciones[1] = {
+            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "ultima_prediccion": _RESPONSE_LLM,
+            "data": {"_prediccion_hecha": True},
+        }
+
+        r = await procesar_mensaje(1, comando)
+
+        assert "Saliendo" in r and "/start" in r, r
+        assert _conversaciones[1]["estado"] == Estado.IDLE
+        assert not _conversaciones[1]["data"].get("_prediccion_hecha")
+        # De vuelta al inicio: un mensaje suelto muestra la bienvenida
+        r2 = await procesar_mensaje(1, "hola")
+        assert r2 == mod.BIENVENIDA
+
+    @pytest.mark.asyncio
+    async def test_start_nuevo_sobreescribe_el_parte_anterior(self, monkeypatch):
+        """Criterio 5: /start nuevo resetea el parte y arranca el formulario."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "_db", _FakeDBSinPerfil())
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+        _conversaciones[1] = {
+            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "ultima_prediccion": _RESPONSE_LLM,
+            "ultimo_resultado": _RESULTADO_PELIGRO,
+            "data": {"_prediccion_hecha": True, "lat": 42.29, "lon": -8.81},
+        }
+
+        r = await procesar_mensaje(1, "/start")
+
+        assert r == mod.BIENVENIDA
+        assert _conversaciones[1]["estado"] == Estado.SEXO
+        assert "ultima_prediccion" not in _conversaciones[1]
+        assert "ultimo_resultado" not in _conversaciones[1]
+        assert "_prediccion_hecha" not in _conversaciones[1]["data"]
+
+    @pytest.mark.asyncio
+    async def test_flujo_completo_con_llm_abre_el_chat_y_responde_spf(self, monkeypatch):
+        """De punta a punta: /start con LLM → parte + chat abierto → SPF."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        monkeypatch.setattr(
+            mod, "ask_con_perfil",
+            lambda _p, _r, _c=None, _l=None: _RESPONSE_LLM,
+        )
+        monkeypatch.setattr(
+            mod, "ask_with_rag",
+            lambda q, k1, k2, c, ctx=None: {"answer": "Usa SPF 30+ y renueva cada 2 horas."},
+        )
+        enviados: list[str] = []
+
+        async def _fake_tg(method: str, **kwargs):
+            if method == "sendMessage":
+                enviados.append(kwargs["text"])
+            return {"ok": True, "result": {}}
+
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+        _conversaciones[1] = {
+            "estado": Estado.GUARDAR_PERFIL, "modelo": "ollama/qwen2.5:7b",
+            "data": self._data_completa(),
+        }
+
+        # El usuario pulsa "No" a guardar perfil → DONE → parte con LLM + chat abierto
+        await mod.procesar_update({"callback_query": {
+            "id": "q1", "data": "guardar_no",
+            "message": {"chat": {"id": 1}, "message_id": 1},
+        }})
+
+        assert len(enviados) == 1, enviados
+        assert _RESPONSE_LLM in enviados[0]
+        assert mod.CHAT_CIERRE in enviados[0]
+        assert _conversaciones[1]["estado"] == Estado.DONE
+        assert _conversaciones[1]["data"]["_prediccion_hecha"]
+
+        # Pregunta libre con RAG sobre el parte
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "¿qué es SPF?"}})
+        assert len(enviados) == 2, enviados
+        assert "SPF 30+" in enviados[1]
+        assert _conversaciones[1]["estado"] == Estado.DONE  # sigue abierta
+
+
+class TestEnviarMensajeMarkdown:
+    """Un asterisco suelto del LLM tumbaba el mensaje entero con un 400."""
+
+    @pytest.mark.asyncio
+    async def test_si_telegram_rechaza_el_formato_se_reenvia_en_plano(self, monkeypatch):
+        import httpx
+        import climasafeai.bot.telegram_bot as mod
+
+        intentos: list[dict] = []
+
+        async def _fake_tg(method: str, **kwargs):
+            intentos.append(kwargs)
+            if "parse_mode" in kwargs:
+                raise httpx.HTTPStatusError(
+                    "bad entities", request=httpx.Request("POST", "http://x"),
+                    response=httpx.Response(400),
+                )
+            return {"ok": True}
+
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+
+        await mod.enviar_mensaje(1, "hidratación *importante_ y suelto")
+
+        assert len(intentos) == 2
+        assert "parse_mode" not in intentos[1]
+        assert intentos[1]["text"] == "hidratación *importante_ y suelto"
+
+
+# ── BOT-010: fecha de nacimiento en vez de edad ────────────────────────────
+
+
+class TestFechaNacimiento:
+    """Edad desde fecha de nacimiento y validación de la fecha (BOT-010)."""
+
+    HOY = date(2026, 8, 3)
+
+    def test_fecha_nacimiento_edad_cumpleanos_pasado(self):
+        """Nacido el 15/03/1990: a 03/08/2026 ya cumplió los 36."""
+        assert _edad_desde_fecha_nacimiento(date(1990, 3, 15), self.HOY) == 36
+
+    def test_fecha_nacimiento_edad_cumpleanos_futuro(self):
+        """Nacido el 15/11/1990: aún no ha cumplido los 36, tiene 35."""
+        assert _edad_desde_fecha_nacimiento(date(1990, 11, 15), self.HOY) == 35
+
+    def test_fecha_nacimiento_29_de_febrero(self):
+        """El 29/02 solo cuenta en bisiestos: el 28/02 aún no ha cumplido."""
+        assert _edad_desde_fecha_nacimiento(date(2000, 2, 29), date(2027, 2, 28)) == 26
+        assert _edad_desde_fecha_nacimiento(date(2000, 2, 29), date(2027, 3, 1)) == 27
+
+    def test_fecha_nacimiento_solo_anio_es_1_enero(self):
+        ok, edad = _parsear_fecha_nacimiento("1965", self.HOY)
+        assert ok is True
+        assert edad == _edad_desde_fecha_nacimiento(date(1965, 1, 1), self.HOY)
+
+    def test_fecha_nacimiento_acepta_guiones(self):
+        ok, edad = _parsear_fecha_nacimiento("15-03-1990", self.HOY)
+        assert ok is True and edad == 36
+
+    def test_fecha_nacimiento_mes_o_dia_de_un_digito(self):
+        ok, edad = _parsear_fecha_nacimiento("15/3/1990", self.HOY)
+        assert ok is True and edad == 36
+
+    def test_fecha_nacimiento_futura_error(self):
+        ok, msg = _parsear_fecha_nacimiento("15/03/2030", self.HOY)
+        assert ok is False and "futuro" in msg
+
+    def test_fecha_nacimiento_anterior_a_1900_error(self):
+        ok, msg = _parsear_fecha_nacimiento("01/01/1899", self.HOY)
+        assert ok is False and "1900" in msg
+
+    def test_fecha_nacimiento_anio_mayor_que_hoy_error(self):
+        ok, msg = _parsear_fecha_nacimiento("2030", self.HOY)
+        assert ok is False and "futuro" in msg
+
+    def test_fecha_nacimiento_formato_malo_error_claro(self):
+        """Formato malo o fecha imposible: mensaje claro, nunca excepción."""
+        for mal in ("abc", "15/03", "31/02/1990", "15/13/1990", "15-03-1990-junk", ""):
+            ok, msg = _parsear_fecha_nacimiento(mal, self.HOY)
+            assert ok is False, f"{mal!r} no debería validar"
+            assert "DD/MM/AAAA" in msg, f"{mal!r} → {msg}"
+
+    @pytest.mark.asyncio
+    async def test_fecha_nacimiento_flujo_guarda_edad_calculada(self, monkeypatch):
+        """El formulario guarda data['edad'] como entero desde la fecha."""
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "date", _HoyFijo)
+        _conv_limpia()
+        _conversaciones[1]["estado"] = Estado.EDAD
+        r = await procesar_mensaje(1, "15/03/1990")
+        assert r is None
+        assert _conversaciones[1]["data"]["edad"] == 36
+        assert _conversaciones[1]["data"]["fecha_nacimiento"] == "15/03/1990"
+        assert _conversaciones[1]["estado"] == Estado.GRASA
+
+    @pytest.mark.asyncio
+    async def test_fecha_nacimiento_flujo_formato_malo_no_avanza(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "date", _HoyFijo)
+        _conv_limpia()
+        _conversaciones[1]["estado"] = Estado.EDAD
+        r = await procesar_mensaje(1, "abc")
+        assert r is not None and "DD/MM/AAAA" in r
+        assert "edad" not in _conversaciones[1]["data"]
+        assert _conversaciones[1]["estado"] == Estado.EDAD
+
+    @pytest.mark.asyncio
+    async def test_fecha_nacimiento_flujo_fecha_futura_no_avanza(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+        monkeypatch.setattr(mod, "date", _HoyFijo)
+        _conv_limpia()
+        _conversaciones[1]["estado"] = Estado.EDAD
+        r = await procesar_mensaje(1, "15/03/2030")
+        assert r is not None and "futuro" in r
+        assert "edad" not in _conversaciones[1]["data"]
+        assert _conversaciones[1]["estado"] == Estado.EDAD
+
+
+class TestPartePorcentaje:
+    """BOT-010: el parte explica el % de riesgo en lenguaje llano."""
+
+    def _resultado(self, prob=0.21, clase="PRECAUCIÓN"):
+        return {
+            "clase_final": 1,
+            "clase_final_label": clase,
+            "perfil": {"calor": {"prob_personalizada": prob}},
+            "perfil_usuario": {"hora_inicio": 8, "duracion_actividad_h": 2},
+            "weather": {
+                "provincia": "Pontevedra",
+                "current": {"t2m_c": 30.0, "rh": 60},
+                "uv_index": 6,
+                "perfil_horario": [{"hora": 8, "HI": 25.0, "temp": 20.0}],
+            },
+            "modelos": {
+                "Formula": {"frio": {"wind_chill_c": 25.0}, "calor": {"heat_index_c": 36.0}},
+            },
+            "recomendaciones": ["Mantente hidratado"],
+        }
+
+    def test_parte_porcentaje_plantilla_explica_el_porcentaje(self):
+        texto = _format_template(self._resultado(prob=0.21), "Moaña, Pontevedra")
+        assert "21% de probabilidad de riesgo térmico durante la actividad" in texto
+        assert "mayor cuanto más se acerque a 100%" in texto
+
+    def test_parte_porcentaje_prompt_llm_instruye_explicar(self, monkeypatch):
+        import climasafeai.llm.rag_qwen as rag
+
+        capturado: dict = {}
+
+        def _fake_chat(messages, config):
+            # LLM-003 antepone SYSTEM_PARTE como messages[0]; los datos del
+            # parte van en el mensaje con role=user.
+            user_msgs = [m for m in messages if m["role"] == "user"]
+            capturado["prompt"] = user_msgs[0]["content"]
+            return ("Moaña — Riesgo PRECAUCIÓN: 21% de probabilidad de riesgo térmico "
+                    "durante la actividad (mayor cuanto más se acerque a 100%). "
+                    "Mantente hidratado.")
+
+        monkeypatch.setattr(rag, "_chat_litellm", _fake_chat)
+        texto = rag.ask_con_perfil(
+            {"hora_inicio": 8},
+            self._resultado(prob=0.21),
+            config=rag.LLMConfig(),
+            lugar="Moaña, Pontevedra",
+        )
+
+        assert "21% de probabilidad de riesgo térmico durante la actividad" in capturado["prompt"]
+        assert "mayor cuanto más se acerque a 100%" in capturado["prompt"]
+        assert "21% de probabilidad de riesgo térmico" in texto
+
+
+class TestChatParteConcisa:
+    """BOT-011: el chat abierto explica el parte con datos reales, en 2-3 frases.
+
+    La respuesta no puede ser un texto genérico: el contexto que recibe el LLM
+    lleva la probabilidad, los factores y la ubicación de ESA predicción.
+    """
+
+    @staticmethod
+    def _conv():
+        result = TestRecomendacionCanalDominante._resultado(
+            prob_calor=0.21, prob_frio=0.02, t=35.3, uv=7.6, wc=5, hi=38, clase=1,
+        )
+        return {
+            "modelo": "ollama/qwen2.5:7b",
+            "estado": Estado.DONE,
+            "ultima_prediccion": "O Casal, Pontevedra — Riesgo PRECAUCIÓN (21%).",
+            "ultimo_resultado": result,
+            "data": {"_prediccion_hecha": True},
+        }
+
+    def test_chat_parte_concisa_contexto_lleva_datos_reales(self):
+        from climasafeai.bot.telegram_bot import _contexto_parte_conversacion
+
+        ctx = _contexto_parte_conversacion(self._conv())
+
+        assert ctx.startswith("Parte que le acabas de dar al usuario")
+        assert "O Casal" in ctx                      # el parte entregado
+        assert "21%" in ctx                          # probabilidad real
+        assert "Pontevedra" in ctx                   # ubicación real
+        assert "no_aclimatado" in ctx                # factor real de esa predicción
+        assert "2-3 frases" in ctx                   # instrucción de concisión
+        assert "sin textos genéricos" in ctx
+
+    @pytest.mark.asyncio
+    async def test_chat_parte_concisa_flujo_pasa_el_contexto_al_rag(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+        recibido: dict = {}
+
+        def _fake_rag(q, k1, k2, c, ctx=None):
+            recibido["pregunta"] = q
+            recibido["contexto"] = ctx
+            return {"answer": "Tu riesgo de calor es del 21% por no estar aclimatado."}
+
+        monkeypatch.setattr(mod, "ask_with_rag", _fake_rag)
+        _conversaciones[1] = self._conv()
+
+        r = await procesar_mensaje(1, "¿qué es la probabilidad personalizada?")
+
+        assert r == "Tu riesgo de calor es del 21% por no estar aclimatado."
+        assert recibido["pregunta"] == "¿qué es la probabilidad personalizada?"
+        assert "21%" in recibido["contexto"]
+        assert "Pontevedra" in recibido["contexto"]
+        assert "2-3 frases" in recibido["contexto"]

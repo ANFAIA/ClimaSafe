@@ -249,11 +249,56 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
     return unicos
 
 
-def recomendacion_resumen(resultado: dict) -> str:
-    """Recomendación de una línea adaptada al contexto (frío/calor/UV).
+# P(riesgo) por debajo de la cual un canal (calor/frío) se considera
+# irrelevante para la recomendación y no aporta consejos (BOT-011). Es más
+# laxo que el t1 de clase (0.25): por debajo de 15% el canal no manda.
+UMBRAL_CANAL_IRRELEVANTE = 0.15
 
-    No es SPF 30+ siempre: si hace frío se recomienda abrigo, si hay calor
-    evitar las horas centrales, y la protección solar solo aparece cuando el
+
+def _canal_dominante(resultado: dict) -> str | None:
+    """Canal que manda en la recomendación según la probabilidad personalizada.
+
+    Devuelve 'calor', 'frio', 'ninguno' (ambos por debajo del umbral) o None
+    si el resultado no trae la información de canales (dicts mínimos de test) —
+    en ese caso quien llama degrada a la lógica por clima físico.
+    """
+    perfil = resultado.get("perfil") or {}
+    prob_calor = (perfil.get("calor") or {}).get("prob_personalizada")
+    prob_frio = (perfil.get("frio") or {}).get("prob_personalizada")
+    if prob_calor is None or prob_frio is None:
+        return None
+    activo_calor = prob_calor >= UMBRAL_CANAL_IRRELEVANTE
+    activo_frio = prob_frio >= UMBRAL_CANAL_IRRELEVANTE
+    if not activo_calor and not activo_frio:
+        return "ninguno"
+    if activo_calor and not activo_frio:
+        return "calor"
+    if activo_frio and not activo_calor:
+        return "frio"
+    return "calor" if prob_calor >= prob_frio else "frio"
+
+
+def _recomendacion_uv(uv, texto_canal: str | None = None) -> list[str]:
+    """Partes de la recomendación según el índice UV; texto_canal se añade al final."""
+    partes = ["Mantente hidratado"]
+    if uv is not None and uv >= 8:
+        partes.append("utiliza protector solar SPF 50+ (renueva cada 2 horas)")
+    elif uv is not None and uv >= 6:
+        partes.append("utiliza protector solar SPF 30+")
+    elif uv is not None and uv >= 3:
+        partes.append("lleva protección solar básica")
+    if texto_canal:
+        partes.append(texto_canal)
+    return partes
+
+
+def recomendacion_resumen(resultado: dict) -> str:
+    """Recomendación de una línea adaptada al canal dominante (frío/calor/UV).
+
+    El canal que manda es el de mayor probabilidad personalizada (BOT-011); si
+    un canal queda por debajo de `UMBRAL_CANAL_IRRELEVANTE` no aporta consejos,
+    así que un día de calor no recomienda abrigo ni un día de frío recomienda
+    evitar las horas de más calor. La protección solar solo aparece cuando el
     índice UV lo justifica. Es el texto que cierra el parte final del bot.
     """
     w = resultado.get("weather", {})
@@ -271,28 +316,30 @@ def recomendacion_resumen(resultado: dict) -> str:
         return ("Riesgo alto: evita la actividad física al aire libre y "
                 "permanece en un lugar fresco. Mantente hidratado.")
 
-    frio = (wc is not None and wc <= 0) or (t is not None and t <= 10)
-    calor = (hi is not None and hi >= 32) or (t is not None and t >= 30)
+    canal = _canal_dominante(resultado)
+    if canal is None:
+        # Sin probabilidades de canal: se decide por el clima físico (dicts
+        # mínimos / consumidores que no pasan `perfil`).
+        frio = (wc is not None and wc <= 0) or (t is not None and t <= 10)
+        calor = (hi is not None and hi >= 32) or (t is not None and t >= 30)
+        if frio:
+            canal = "frio"
+        elif calor:
+            canal = "calor"
+        else:
+            canal = "ninguno"
 
-    if frio:
+    if canal == "frio":
         frase = ("Mantente hidratado y abrígate con varias capas; "
                  "protege las extremidades del viento.")
         if uv is not None and uv >= 6:
             frase += " El índice UV sigue alto: usa protección solar."
         return frase
 
-    partes = ["Mantente hidratado"]
-    if uv is not None and uv >= 8:
-        partes.append("utiliza protector solar SPF 50+ (renueva cada 2 horas)")
-    elif uv is not None and uv >= 6:
-        partes.append("utiliza protector solar SPF 30+")
-    elif uv is not None and uv >= 3:
-        partes.append("lleva protección solar básica")
-    if calor:
-        partes.append("evita la exposición prolongada entre las horas de mayor calor")
-    else:
-        partes.append("busca sombra si el sol aprieta")
+    if canal == "calor":
+        partes = _recomendacion_uv(uv, "evita la exposición prolongada entre las horas de mayor calor")
+        return ", ".join(partes[:-1]) + f" y {partes[-1]}."
 
-    if len(partes) == 1:
-        return partes[0] + "."
+    # canal == "ninguno": clima suave, sin consejos de canal
+    partes = _recomendacion_uv(uv, "busca sombra si el sol aprieta")
     return ", ".join(partes[:-1]) + f" y {partes[-1]}."
