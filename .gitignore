@@ -160,5 +160,15 @@ mlflow.db-journal
 
 # --- Data artifacts ---
 data/processed/*.pt
+data/**/*.bak
 
 notebooks/0-5-*.ipynb
+
+# --- Estado vivo del arnés ---
+# El backlog (featureslist.json) sí se versiona: es lo que da sentido al
+# historial. El estado de la feature en curso y los informes de cada subagente
+# no — son memoria de trabajo, los reescribe `harness` en cada paso y con dos
+# asistentes trabajando en paralelo solo generan conflictos. El README sí, que
+# es el que documenta el formato.
+progress/*
+!progress/README.md
