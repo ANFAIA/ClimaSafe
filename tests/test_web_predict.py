@@ -71,14 +71,23 @@ def test_arrays_no_cuentan_como_columnas(db):
 
 
 def test_endpoint_perfil_tambien_valida(db, monkeypatch):
-    """WEB-004: /api/perfil tenia el mismo 500 mudo que /api/predict."""
+    """WEB-003: /api/perfil tenia el mismo 500 mudo que /api/predict.
+
+    Desde WEB-005 el campo desconocido sale como HTTPException 400 en vez de un
+    dict con 'error' y HTTP 200. Este test llama a la corutina directamente, sin
+    TestClient, así que ve la excepción en crudo; el cuerpo que recibe el cliente
+    lo cubre tests/test_web_rutinas.py.
+    """
     import chat.app as web
     monkeypatch.setattr(web, "_db", db)
     import asyncio
 
+    from fastapi import HTTPException
+
     ok = asyncio.run(web.api_save_perfil({"alias": "z", "edad": 30}))
     assert "perfil_id" in ok and "error" not in ok
 
-    malo = asyncio.run(web.api_save_perfil({"alias": "y", "peso": 80}))
-    assert "error" in malo and "peso" in malo["error"]
-    assert "perfil_id" not in malo
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(web.api_save_perfil({"alias": "y", "peso": 80}))
+    assert exc.value.status_code == 400
+    assert "peso" in exc.value.detail

@@ -20,11 +20,13 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from climasafeai.db.manager import CampoDesconocidoError, DBManager
+from climasafeai.features.personalizacion import nivel_actividad_de_deporte
 
 logger = logging.getLogger(__name__)
 
@@ -384,6 +386,17 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+
+# WEB-005: los fallos salían con HTTP 200 y un {"error": ...} en el cuerpo, así
+# que cualquier cliente que mirase el código creía que había ido bien. Ahora se
+# lanza HTTPException con el código correcto, pero el cuerpo sigue siendo
+# {"error": ...} y no el {"detail": ...} de FastAPI: el frontend hace
+# `if (d.error)` en una veintena de sitios y no hay motivo para romperlo.
+@app.exception_handler(StarletteHTTPException)
+async def _error_como_error(request, exc: StarletteHTTPException):
+    return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
+
+
 # Modelos se cargan bajo demanda (al conectar WebSocket), no al arrancar
 
 
@@ -442,6 +455,93 @@ def _normalize_perfil(perfil: dict) -> dict:
         p["situacion_social"] = {s for s in social if s}
 
     return p
+
+
+def _aplicar_deporte_a_nivel(perfil: dict) -> None:
+    """Si el perfil lleva deporte, el MET del Compendium fija la intensidad.
+
+    Igual que el bot (BOT-007): el MET del deporte manda sobre el
+    nivel_actividad que traiga el perfil por defecto. Si el deporte no está en
+    la tabla de MET, se respeta el nivel_actividad que traiga.
+    """
+    dep = perfil.get("deporte")
+    if not dep:
+        return
+    nivel = nivel_actividad_de_deporte(dep)
+    if nivel:
+        perfil["nivel_actividad"] = nivel
+
+
+def _chat_id_de_perfil(perfil_id: int) -> str | None:
+    """chat_id con el que el perfil guarda rutinas y avisos.
+
+    Si el perfil está vinculado a un chat de Telegram comparte sus rutinas con
+    el bot; si no (perfil web puro) se usa un espacio sintético por perfil.
+    Devuelve None si el perfil no existe.
+    """
+    p = _db.obtener_perfil(perfil_id)
+    if p is None:
+        return None
+    return p.get("telegram_chat_id") or f"web_{perfil_id}"
+
+
+def _perfil_prediccion_desde_rutina(perfil: dict, rutina: dict) -> dict:
+    """Perfil para predict_ensemble con la ventana de la rutina.
+
+    Igual que el aviso diario del bot: la ventana a evaluar la define la rutina
+    (hora_inicio + duración); el resto de factores vienen del perfil guardado.
+    """
+    p = {
+        "sexo": perfil.get("sexo", "hombre"),
+        "edad": perfil.get("edad"),
+        "aclimatado": perfil.get("aclimatado", False),
+        "nivel_actividad": "ligera",
+        "duracion_actividad_h": rutina["hora_fin"] - rutina["hora_inicio"],
+        "hora_inicio": rutina["hora_inicio"],
+        "comorbilidades": set(perfil.get("comorbilidades") or []),
+        "farmacos": set(perfil.get("farmacos") or []),
+    }
+    if perfil.get("porcentaje_grasa") is not None:
+        p["porcentaje_grasa"] = perfil["porcentaje_grasa"]
+    if perfil.get("fototipo") is not None:
+        p["fototipo"] = perfil["fototipo"]
+    if perfil.get("situacion_social"):
+        p["situacion_social"] = set(perfil["situacion_social"])
+    if rutina.get("ocupacion"):
+        p["ocupacion"] = rutina["ocupacion"]
+    if rutina.get("deporte"):
+        p["deporte"] = rutina["deporte"]
+        _aplicar_deporte_a_nivel(p)
+    return p
+
+
+def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[float]:
+    """Temperaturas previstas en las horas de la ventana de la rutina."""
+    inicio = perfil_usuario.get("hora_inicio")
+    duracion = perfil_usuario.get("duracion_actividad_h")
+    if inicio is not None and duracion is not None:
+        en_ventana = [
+            h["temp"] for h in perfil_horario
+            if inicio <= h["hora"] < inicio + duracion and h.get("temp") is not None
+        ]
+        if en_ventana:
+            return en_ventana
+    return [h["temp"] for h in perfil_horario if h.get("temp") is not None]
+
+
+def _validar_hora_aviso(texto: str) -> str | None:
+    """Valida 'HH:MM' y devuelve la hora normalizada 'HH:MM'; None si no vale."""
+    t = texto.strip()
+    if ":" not in t:
+        return None
+    hh, mm = t.split(":", 1)
+    try:
+        h, m = int(hh), int(mm)
+    except ValueError:
+        return None
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        return None
+    return f"{h:02d}:{m:02d}"
 
 
 def _get_weather_summary(result: dict) -> dict:
@@ -534,6 +634,8 @@ async def api_predict(body: dict, date: str | None = None):
     raw_perfil = body.get("perfil") or {}
     perfil_id = raw_perfil.get("perfil_id")
     perfil = _normalize_perfil(raw_perfil)
+    # El MET del deporte fija la intensidad antes de predecir (igual que el bot)
+    _aplicar_deporte_a_nivel(perfil)
 
     target_date = None
     if date:
@@ -847,6 +949,8 @@ def _calcular_riesgo_colectivo(body: dict) -> dict:
                 perfil["deporte"] = body["deporte"]
             if aclimatado:
                 perfil["aclimatado"] = aclimatado == "si"
+            # El MET del deporte fija la intensidad antes de predecir (igual que el bot)
+            _aplicar_deporte_a_nivel(perfil)
 
             try:
                 pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj)
@@ -956,6 +1060,7 @@ async def api_riesgo_colectivo(body: dict):
             perfil_mapa["ocupacion"] = body["ocupacion"]
         if body.get("deporte"):
             perfil_mapa["deporte"] = body["deporte"]
+        _aplicar_deporte_a_nivel(perfil_mapa)
 
         _hourly_num = primer_pred_num.get("weather", {}).get("perfil_horario", []) if primer_pred_num else []
         grp_curva = riesgo_horario_acumulado(_hourly_num, perfil_mapa)
@@ -1025,6 +1130,8 @@ async def api_riesgo_colectivo(body: dict):
                             perfil.setdefault("nivel_actividad", "muy_intensa")
                         elif tipo_actividad == "deporte":
                             perfil.setdefault("nivel_actividad", "moderada")
+                # El MET del deporte fija la intensidad antes de predecir (igual que el bot)
+                _aplicar_deporte_a_nivel(perfil)
                 pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj)
                 hourly = pred.get("weather", {}).get("perfil_horario", [])
                 if primer_pred is None:
@@ -1089,7 +1196,7 @@ async def api_get_perfil(perfil_id: int):
     """Devuelve un perfil guardado (escalares + arrays)."""
     p = _db.obtener_perfil(perfil_id)
     if p is None:
-        return {"error": "Perfil no encontrado"}
+        raise HTTPException(404, "Perfil no encontrado")
     # Quitar campos internos
     for k in ("id", "created_at", "updated_at", "aclimatado_actualizado_en"):
         p.pop(k, None)
@@ -1124,7 +1231,7 @@ async def api_save_perfil(body: dict):
             perfil_id = _db.crear_perfil(datos)
     except CampoDesconocidoError as exc:
         logger.warning("Perfil no guardado: %s", exc)
-        return {"error": str(exc)}
+        raise HTTPException(400, str(exc)) from exc
 
     return {"perfil_id": perfil_id}
 
@@ -1139,9 +1246,194 @@ async def api_update_tags(perfil_id: int, body: dict):
 
 @app.delete("/api/perfil/{perfil_id}")
 async def api_delete_perfil(perfil_id: int):
-    """Elimina un perfil."""
+    """Elimina un perfil y lo que dependía de él.
+
+    WEB-006: `rutinas` y `avisos_config` no tienen FK a `perfiles` (van por
+    chat_id), así que borrar el perfil las dejaba vivas. El aviso diario del
+    bot seguía leyéndolas y disparando cada día para un perfil que ya no está.
+
+    Qué se borra depende de a quién pertenece el chat_id:
+
+    - Perfil web puro (`web_<id>`): ese espacio muere con el perfil, nadie
+      puede volver a alcanzarlo. Se borran sus rutinas y su aviso.
+    - Perfil vinculado a Telegram: el chat sigue existiendo y sus rutinas
+      siguen siendo del usuario del bot — borrarlas desde la web sería
+      destruirle datos. Se quita solo el aviso, que es lo que se personaliza
+      con el perfil que estamos borrando.
+    """
+    perfil = _db.obtener_perfil(perfil_id)
+    if perfil is None:
+        raise HTTPException(404, "Perfil no encontrado")
+
+    chat_id = perfil.get("telegram_chat_id") or f"web_{perfil_id}"
+    es_web = not perfil.get("telegram_chat_id")
+
+    rutinas_borradas = 0
+    if es_web:
+        for r in _db.listar_rutinas(chat_id):
+            _db.eliminar_rutina(r["id"])
+            rutinas_borradas += 1
+    _db.guardar_hora_aviso(chat_id, None)
+
     _db.eliminar_perfil(perfil_id)
+    return {"ok": True, "rutinas_borradas": rutinas_borradas, "aviso_borrado": True}
+
+
+# ── BOT-008: rutinas semanales y avisos por perfil (web) ────────────────
+
+
+@app.get("/api/perfil/{perfil_id}/rutinas")
+async def api_list_rutinas(perfil_id: int):
+    """Rutinas semanales de un perfil (dias 1-7, 1=lunes)."""
+    chat_id = _chat_id_de_perfil(perfil_id)
+    if chat_id is None:
+        raise HTTPException(404, "Perfil no encontrado")
+    return {"rutinas": _db.listar_rutinas(chat_id)}
+
+
+@app.post("/api/perfil/{perfil_id}/rutinas")
+async def api_crear_rutina(perfil_id: int, body: dict):
+    """Crea una rutina semanal para el perfil.
+
+    Body: {nombre, dias: "1,2,3,4,5", hora_inicio, hora_fin,
+           ocupacion?, deporte?}. dias 1-7 (1=lunes, 7=domingo).
+    """
+    chat_id = _chat_id_de_perfil(perfil_id)
+    if chat_id is None:
+        raise HTTPException(404, "Perfil no encontrado")
+
+    nombre = (body.get("nombre") or "").strip()
+    dias = (body.get("dias") or "").strip()
+    if not nombre or not dias:
+        raise HTTPException(400, "Faltan campos: nombre y dias son obligatorios")
+    try:
+        hora_inicio = float(body.get("hora_inicio"))
+        hora_fin = float(body.get("hora_fin"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "hora_inicio y hora_fin deben ser números")
+    try:
+        nums = sorted({int(d) for d in dias.split(",") if d.strip()})
+    except ValueError:
+        raise HTTPException(400, "dias deben ser números separados por comas (1=lunes ... 7=domingo)")
+    if not nums or not all(1 <= d <= 7 for d in nums):
+        raise HTTPException(400, "dias deben estar entre 1 y 7 (1=lunes, 7=domingo)")
+    if not (0 <= hora_inicio < 24 and 0 < hora_fin <= 24 and hora_fin > hora_inicio):
+        raise HTTPException(400, "Horario inválido: 0 <= inicio < fin <= 24")
+
+    rutina_id = _db.crear_rutina(
+        chat_id,
+        nombre,
+        ",".join(str(d) for d in nums),
+        hora_inicio,
+        hora_fin,
+        ocupacion=body.get("ocupacion") or None,
+        deporte=body.get("deporte") or None,
+    )
+    return {"id": rutina_id}
+
+
+@app.delete("/api/perfil/{perfil_id}/rutinas/{rutina_id}")
+async def api_eliminar_rutina(perfil_id: int, rutina_id: int):
+    """Borra una rutina del perfil."""
+    chat_id = _chat_id_de_perfil(perfil_id)
+    if chat_id is None:
+        raise HTTPException(404, "Perfil no encontrado")
+    if not any(r["id"] == rutina_id for r in _db.listar_rutinas(chat_id)):
+        raise HTTPException(404, "Rutina no encontrada")
+    _db.eliminar_rutina(rutina_id)
     return {"ok": True}
+
+
+@app.get("/api/perfil/{perfil_id}/avisos")
+async def api_get_avisos(perfil_id: int):
+    """Hora de aviso diario del perfil ('HH:MM' o null si no hay)."""
+    chat_id = _chat_id_de_perfil(perfil_id)
+    if chat_id is None:
+        raise HTTPException(404, "Perfil no encontrado")
+    return {"hora": _db.obtener_hora_aviso(chat_id)}
+
+
+@app.post("/api/perfil/{perfil_id}/avisos")
+async def api_set_avisos(perfil_id: int, body: dict):
+    """Configura la hora de aviso diario del perfil; hora=null la desactiva."""
+    chat_id = _chat_id_de_perfil(perfil_id)
+    if chat_id is None:
+        raise HTTPException(404, "Perfil no encontrado")
+    hora = body.get("hora")
+    if hora is not None:
+        hora = _validar_hora_aviso(str(hora))
+        if hora is None:
+            raise HTTPException(400, "Formato de hora inválido. Usa HH:MM (ej: 08:00).")
+    _db.guardar_hora_aviso(chat_id, hora)
+    return {"ok": True}
+
+
+@app.post("/api/perfil/{perfil_id}/pronostico-dia")
+async def api_pronostico_dia(perfil_id: int, body: dict):
+    """Riesgo por cada ventana de las rutinas del día (weekday 1-7, 1=lunes).
+
+    La ventana de cada rutina la define la propia rutina (hora_inicio +
+    duración); el perfil aporta el resto de factores. Si el perfil no tiene
+    ubicación, error claro.
+    """
+    from datetime import datetime
+
+    from climasafeai.models.ensemble import predict_ensemble
+
+    perfil = _db.obtener_perfil(perfil_id)
+    if perfil is None:
+        raise HTTPException(404, "Perfil no encontrado")
+    if perfil.get("lat") is None or perfil.get("lon") is None:
+        raise HTTPException(400, "El perfil no tiene ubicación (lat/lon). Guarda la ubicación antes de pedir el pronóstico del día.")
+
+    chat_id = _chat_id_de_perfil(perfil_id)
+    weekday = body.get("weekday")
+    if weekday is None:
+        weekday = datetime.now().isoweekday()
+    else:
+        try:
+            weekday = int(weekday)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "weekday debe ser 1-7 (1=lunes, 7=domingo)")
+        if not (1 <= weekday <= 7):
+            raise HTTPException(400, "weekday debe estar entre 1 y 7 (1=lunes, 7=domingo)")
+
+    ventanas = []
+    for r in _db.rutinas_por_dia(chat_id, weekday):
+        perfil_pred = _perfil_prediccion_desde_rutina(perfil, r)
+        try:
+            result = predict_ensemble(
+                lat=perfil["lat"],
+                lon=perfil["lon"],
+                provincia=perfil.get("provincia") or "Madrid",
+                perfil=perfil_pred,
+            )
+        except Exception as exc:
+            ventanas.append({
+                "rutina_id": r["id"],
+                "nombre": r["nombre"],
+                "hora_inicio": r["hora_inicio"],
+                "hora_fin": r["hora_fin"],
+                "error": str(exc),
+            })
+            continue
+        temps = _temps_en_ventana(
+            result.get("weather", {}).get("perfil_horario") or [],
+            {"hora_inicio": r["hora_inicio"], "duracion_actividad_h": r["hora_fin"] - r["hora_inicio"]},
+        )
+        ventanas.append({
+            "rutina_id": r["id"],
+            "nombre": r["nombre"],
+            "dias": r["dias"],
+            "hora_inicio": r["hora_inicio"],
+            "hora_fin": r["hora_fin"],
+            "ocupacion": r.get("ocupacion"),
+            "deporte": r.get("deporte"),
+            "clase": result.get("clase_final_label", "SEGURO"),
+            "prob_riesgo": round(result.get("perfil", {}).get("calor", {}).get("prob_personalizada") or 0, 4),
+            "temp_media": round(sum(temps) / len(temps), 1) if temps else None,
+        })
+    return {"weekday": weekday, "rutinas": ventanas}
 
 
 # ── Tags disponibles ────────────────────────────────────────────────

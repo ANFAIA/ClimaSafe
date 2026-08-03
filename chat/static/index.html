@@ -377,6 +377,34 @@
         <button class="btn btn-outline" onclick="guardarPerfil()" style="background:#2ecc71;color:#fff">Guardar perfil</button>
         <button class="btn" onclick="predecir()" id="btn-predict">Predecir riesgo</button>
       </div>
+
+      <div class="card" id="rutinas-card" style="margin-top:16px">
+        <div class="card-title">Rutinas semanales</div>
+        <p style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px">
+          El riesgo se calcula por la ventana de cada rutina. Días: 1=lunes … 7=domingo.
+        </p>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group" style="max-width:160px">
+            <label>Aviso diario (HH:MM)</label>
+            <input type="text" id="aviso-hora" placeholder="08:00">
+          </div>
+          <button class="btn btn-outline" onclick="guardarAvisos()" style="padding:8px 16px">Guardar aviso</button>
+          <button class="btn btn-outline" onclick="quitarAvisos()" style="padding:8px 16px">Quitar</button>
+        </div>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group"><label>Días (1-7)</label><input type="text" id="rutina-dias" placeholder="1,2,3,4,5"></div>
+          <div class="form-group"><label>Nombre</label><input type="text" id="rutina-nombre" placeholder="trabajo / entreno"></div>
+          <div class="form-group"><label>Hora inicio</label><input type="number" id="rutina-inicio" min="0" max="23" step="0.5"></div>
+          <div class="form-group"><label>Hora fin</label><input type="number" id="rutina-fin" min="0" max="24" step="0.5"></div>
+          <button class="btn" onclick="crearRutina()" style="padding:8px 20px">Añadir</button>
+        </div>
+        <div id="rutinas-lista"></div>
+        <div class="form-row" style="align-items:center;justify-content:space-between;margin-top:8px">
+          <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Riesgo de hoy por ventana</div>
+          <button class="btn btn-outline" onclick="cargarPronosticoDia(false)" style="padding:6px 16px">Calcular</button>
+        </div>
+        <div id="pronostico-dia"></div>
+      </div>
       </div>
 
       <div id="grupo-form" style="display:none">
@@ -736,6 +764,16 @@ let currentMode = 'individual';
 let _vieneDeAdmin = false;
 let map = null;
 let mapMarker = null;
+
+// Escapa texto que viene del usuario antes de meterlo en innerHTML. Los nombres
+// de rutina y los alias de perfil los escribe el usuario (web o Telegram) y se
+// guardan en la BD: sin esto, un nombre con HTML se ejecuta al pintarlo.
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 function initMap(lat, lon) {
   if (!map) {
     map = L.map('map', { zoomControl: true }).setView([lat, lon], 8);
@@ -1275,7 +1313,7 @@ async function cargarTags() {
     const sel = document.getElementById('grupo-tag-select');
     sel.innerHTML = '<option value="">-- Seleccionar etiqueta --</option>';
     tags.forEach(t => {
-      sel.innerHTML += '<option value="' + t + '">' + t + '</option>';
+      sel.innerHTML += '<option value="' + esc(t) + '">' + esc(t) + '</option>';
     });
     sel.onchange = function() {
       const tag = this.value;
@@ -1784,6 +1822,7 @@ function guardarPerfilConNombre() {
       else localStorage.removeItem('climasafe_perfil_tags');
       mostrarPerfilGuardado(alias);
       refrescarListaPerfiles();
+      _precargarRutinas();
     }
   }).catch(() => alert('Error al guardar perfil'));
 }
@@ -1796,17 +1835,20 @@ function borrarPerfil() {
   document.getElementById('profile-tags-display').style.display = 'none';
   document.getElementById('btn-delete-profile').style.display = 'none';
   document.getElementById('perfil-select').value = '';
+  document.getElementById('rutinas-lista').innerHTML = '';
+  document.getElementById('pronostico-dia').innerHTML = '';
+  document.getElementById('aviso-hora').value = '';
 }
 
 function mostrarPerfilGuardado(nombre) {
   const el = document.getElementById('profile-indicator');
   el.style.display = 'inline';
-  el.innerHTML = 'Perfil: <strong>' + nombre + '</strong> <a href="#" onclick="borrarPerfil();return false" style="color:var(--text-light)">[borrar]</a>';
+  el.innerHTML = 'Perfil: <strong>' + esc(nombre) + '</strong> <a href="#" onclick="borrarPerfil();return false" style="color:var(--text-light)">[borrar]</a>';
   const tags = localStorage.getItem('climasafe_perfil_tags') || '';
   const tagEl = document.getElementById('profile-tags-display');
   if (tags) {
     const chips = tags.split(',').map(t => t.trim()).filter(Boolean).map(t =>
-      `<span style="display:inline-block;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:0.7rem;margin:1px">${t}</span>`
+      `<span style="display:inline-block;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:0.7rem;margin:1px">${esc(t)}</span>`
     ).join('');
     tagEl.style.display = 'inline';
     tagEl.innerHTML = chips;
@@ -2056,7 +2098,7 @@ async function cargarTagsDisponibles() {
     const tags = await r.json();
     container.innerHTML = tags.map(t =>
       `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--accent);color:#fff;border-radius:12px;padding:2px 8px;font-size:0.8rem;margin:3px">
-        ${t.nombre}
+        ${esc(t.nombre)}
         <span onclick="event.stopPropagation();eliminarTagDisponible(${t.id})" style="cursor:pointer;opacity:0.7;font-size:0.7rem">✕</span>
       </span>`
     ).join('');
@@ -2113,15 +2155,15 @@ async function cargarAdminUsuarios() {
       const checkboxHtml = tagsDisponibles.map(t => {
         const checked = userTags.includes(t.nombre) ? 'checked' : '';
         return `<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;font-size:0.85rem;cursor:pointer;white-space:nowrap">
-          <input type="checkbox" class="tag-cb" data-pid="${p.id}" data-tag="${t.nombre}" ${checked} onchange="guardarAdminTagsCb(${p.id})">
-          ${t.nombre}
+          <input type="checkbox" class="tag-cb" data-pid="${p.id}" data-tag="${esc(t.nombre)}" ${checked} onchange="guardarAdminTagsCb(${p.id})">
+          ${esc(t.nombre)}
         </label>`;
       }).join('');
       html += `<div class="card" style="padding:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer" onclick="cargarAdminPerfil(${p.id})">`;
       html += `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">`;
-      html += `<strong style="min-width:80px">${p.alias || 'Sin nombre'}</strong>`;
-      html += `<span style="font-size:0.8rem;color:var(--text-light)">${p.edad || '?'}a · ${p.sexo || '?'}</span>`;
-      html += `<span style="font-size:0.8rem;color:var(--text-light)">${p.provincia || ''}</span>`;
+      html += `<strong style="min-width:80px">${esc(p.alias || 'Sin nombre')}</strong>`;
+      html += `<span style="font-size:0.8rem;color:var(--text-light)">${esc(p.edad || '?')}a · ${esc(p.sexo || '?')}</span>`;
+      html += `<span style="font-size:0.8rem;color:var(--text-light)">${esc(p.provincia || '')}</span>`;
       html += `<button class="btn btn-outline" onclick="event.stopPropagation();borrarAdminPerfil(${p.id})" style="padding:4px 8px;font-size:0.75rem;color:#e74c3c;margin-left:auto">✕</button>`;
       html += '</div>';
       html += `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:2px" onclick="event.stopPropagation()">${checkboxHtml}</div>`;
@@ -2950,6 +2992,170 @@ function rellenarFormulario(p) {
   if (p.tags) localStorage.setItem('climasafe_perfil_tags', p.tags);
 }
 
+// ── BOT-008: rutinas, avisos y pronóstico del día por perfil ─────────────
+
+function _pidActual() {
+  return localStorage.getItem('climasafe_perfil_id') || '';
+}
+
+function _diasEtiqueta(diasTexto) {
+  // '1,2,3,4,5' → 'L-V'; '1,3,5' → 'L,X,V' (igual que el bot)
+  const nom = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  const nums = Array.from(new Set((diasTexto || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n)))).sort((a, b) => a - b);
+  if (!nums.length) return '?';
+  const partes = [];
+  let ini = nums[0], prev = nums[0];
+  for (let i = 1; i <= nums.length; i++) {
+    const n = nums[i];
+    if (n === prev + 1) { prev = n; continue; }
+    partes.push(ini === prev ? nom[ini - 1] : nom[ini - 1] + '-' + nom[prev - 1]);
+    ini = prev = n;
+  }
+  return partes.join(',');
+}
+
+function _horaEtiqueta(h) {
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return hh + ':' + String(mm).padStart(2, '0');
+}
+
+function _rendereRutinas(rutinas) {
+  const cont = document.getElementById('rutinas-lista');
+  if (!rutinas.length) {
+    cont.innerHTML = '<div style="font-size:0.85rem;color:var(--text-light)">No hay rutinas guardadas.</div>';
+    return;
+  }
+  let html = '';
+  for (const r of rutinas) {
+    const extra = r.deporte ? ' · ' + esc(r.deporte) : (r.ocupacion ? ' · trabajo: ' + esc(r.ocupacion) : '');
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">'
+      + '<span style="font-size:0.9rem"><strong>' + esc(r.nombre) + '</strong> — ' + _diasEtiqueta(r.dias)
+      + ', ' + _horaEtiqueta(r.hora_inicio) + '-' + _horaEtiqueta(r.hora_fin) + extra + '</span>'
+      + '<button class="btn btn-outline" onclick="borrarRutina(' + r.id + ')" style="padding:4px 12px;font-size:0.8rem">Borrar</button>'
+      + '</div>';
+  }
+  cont.innerHTML = html;
+}
+
+function cargarRutinas() {
+  const pid = _pidActual();
+  if (!pid) return;
+  fetch('/api/perfil/' + pid + '/rutinas').then(r => r.json()).then(d => {
+    if (d.error) return;
+    _rendereRutinas(d.rutinas || []);
+  }).catch(() => {});
+}
+
+function crearRutina() {
+  const pid = _pidActual();
+  if (!pid) return alert('Primero carga o guarda un perfil.');
+  const nombre = document.getElementById('rutina-nombre').value.trim();
+  const dias = document.getElementById('rutina-dias').value.trim();
+  const inicio = parseFloat(document.getElementById('rutina-inicio').value);
+  const fin = parseFloat(document.getElementById('rutina-fin').value);
+  if (!nombre || !dias || isNaN(inicio) || isNaN(fin)) {
+    return alert('Rellena días, nombre y horas de inicio-fin.');
+  }
+  fetch('/api/perfil/' + pid + '/rutinas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre, dias, hora_inicio: inicio, hora_fin: fin }),
+  }).then(r => r.json()).then(d => {
+    if (d.error) return alert(d.error);
+    document.getElementById('rutina-nombre').value = '';
+    document.getElementById('rutina-inicio').value = '';
+    document.getElementById('rutina-fin').value = '';
+    cargarRutinas();
+  }).catch(() => alert('Error al añadir la rutina'));
+}
+
+function borrarRutina(rid) {
+  const pid = _pidActual();
+  if (!pid) return;
+  fetch('/api/perfil/' + pid + '/rutinas/' + rid, { method: 'DELETE' })
+    .then(r => r.json()).then(d => {
+      if (d.error) return alert(d.error);
+      cargarRutinas();
+      cargarPronosticoDia(true);
+    }).catch(() => alert('Error al borrar la rutina'));
+}
+
+function cargarAvisos() {
+  const pid = _pidActual();
+  if (!pid) return;
+  fetch('/api/perfil/' + pid + '/avisos').then(r => r.json()).then(d => {
+    if (d.error) return;
+    document.getElementById('aviso-hora').value = d.hora || '';
+  }).catch(() => {});
+}
+
+function guardarAvisos() {
+  const pid = _pidActual();
+  if (!pid) return alert('Primero carga o guarda un perfil.');
+  const hora = document.getElementById('aviso-hora').value.trim();
+  fetch('/api/perfil/' + pid + '/avisos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hora: hora || null }),
+  }).then(r => r.json()).then(d => {
+    if (d.error) return alert(d.error);
+    alert('Aviso diario ' + (hora ? 'configurado a las ' + hora : 'desactivado') + '.');
+  }).catch(() => alert('Error al guardar el aviso'));
+}
+
+function quitarAvisos() {
+  document.getElementById('aviso-hora').value = '';
+  guardarAvisos();
+}
+
+function _claseBadge(clase) {
+  const cls = String(clase || 'SEGURO').toUpperCase();
+  return '<span class="class-' + cls + '" style="font-weight:700">' + cls + '</span>';
+}
+
+function cargarPronosticoDia(silencioso) {
+  const pid = _pidActual();
+  if (!pid) return;
+  const cont = document.getElementById('pronostico-dia');
+  if (!silencioso) cont.innerHTML = '<div style="font-size:0.85rem;color:var(--text-light)">Calculando…</div>';
+  fetch('/api/perfil/' + pid + '/pronostico-dia', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  }).then(r => r.json()).then(d => {
+    if (d.error) {
+      cont.innerHTML = '<div style="font-size:0.85rem;color:var(--text-light)">' + esc(d.error) + '</div>';
+      return;
+    }
+    if (!d.rutinas.length) {
+      cont.innerHTML = '<div style="font-size:0.85rem;color:var(--text-light)">Hoy no toca ninguna rutina.</div>';
+      return;
+    }
+    let html = '';
+    for (const v of d.rutinas) {
+      if (v.error) {
+        html += '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.9rem">'
+          + '<strong>' + esc(v.nombre) + '</strong> — no se pudo calcular: ' + esc(v.error) + '</div>';
+        continue;
+      }
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.9rem">'
+        + '<span><strong>' + esc(v.nombre) + '</strong> ' + _horaEtiqueta(v.hora_inicio) + '-' + _horaEtiqueta(v.hora_fin)
+        + (v.deporte ? ' · ' + esc(v.deporte) : '') + '</span>'
+        + '<span>' + _claseBadge(v.clase) + ' · ' + Math.round((v.prob_riesgo || 0) * 100) + '%'
+        + (v.temp_media != null ? ' · ~' + Math.round(v.temp_media) + ' °C' : '') + '</span></div>';
+    }
+    cont.innerHTML = html;
+  }).catch(() => {
+    if (!silencioso) cont.innerHTML = '<div style="font-size:0.85rem;color:var(--text-light)">Error al calcular el pronóstico.</div>';
+  });
+}
+
+function _precargarRutinas() {
+  cargarRutinas();
+  cargarAvisos();
+}
+
 function cargarPerfil() {
   const alias = localStorage.getItem('climasafe_perfil_alias');
   const pid = localStorage.getItem('climasafe_perfil_id');
@@ -2959,6 +3165,7 @@ function cargarPerfil() {
       rellenarFormulario(p);
       actualizarResumenPerfil();
       mostrarPerfilGuardado(p.alias || pid);
+      _precargarRutinas();
     }).catch(() => {});
   }
 }
@@ -2993,6 +3200,7 @@ function cargarPerfilSeleccionado() {
     localStorage.setItem('climasafe_perfil_alias', alias);
     mostrarPerfilGuardado(alias);
     refrescarListaPerfiles();
+    _precargarRutinas();
     irPaso2();
   }).catch(() => alert('Error al cargar perfil'));
 }
