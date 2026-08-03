@@ -473,8 +473,10 @@ def predict_ensemble(
     provincia: str = "Madrid",
     perfil: dict | None = None,
     target_date: date_type | None = None,
+    weather: dict | None = None,
 ) -> dict:
-    weather = fetch_weather_data(lat=lat, lon=lon, provincia=provincia, target_date=target_date)
+    if weather is None:
+        weather = fetch_weather_data(lat=lat, lon=lon, provincia=provincia, target_date=target_date)
 
     if perfil is None:
         perfil = {}
