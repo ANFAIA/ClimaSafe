@@ -322,10 +322,20 @@ def _proba_from_formula(current: dict) -> dict:
 
     Añade prob_riesgo a los campos que ya devuelve _predecir_formulas,
     manteniendo compatibilidad hacia atrás.
+
+    Si un dato meteorológico llega NaN (fetch corrupto), se sustituye por su
+    default seguro para que heat_index/wind_chill no propaguen NaN.
     """
-    t = current.get("t2m_c", 20.0)
-    rh = current.get("rh", 50.0)
-    ws = current.get("wind_speed_kmh", 10.0)
+    def _finito(v, default):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return default
+        return f if np.isfinite(f) else default
+
+    t = _finito(current.get("t2m_c"), 20.0)
+    rh = _finito(current.get("rh"), 50.0)
+    ws = _finito(current.get("wind_speed_kmh"), 10.0)
     hi = heat_index(t, rh)
     wc = wind_chill(t, ws)
 
@@ -428,6 +438,12 @@ def _conformal_weighted_ensemble(model_results: dict, tipo: str) -> dict:
                 set_size = 2
             weight = 1.0 / set_size
 
+        # Garantía del invariante: solo se acumula un prob_riesgo finito en
+        # [0, 1]. Un NaN/inf (dato corrupto) descarta el modelo igual que un
+        # "error", para que el clico no propague NaN al personalizar.
+        if not isinstance(prob, (int, float)) or not np.isfinite(float(prob)):
+            continue
+        prob = float(prob)
         prob_sum += prob * weight
         weight_sum += weight
 
@@ -517,6 +533,11 @@ def predict_ensemble(
             HI = max(h["HI"] for h in perfil_horario)
 
     def _personalizar_si_hay(prob_poblacional, tipo):
+        # Defensa final: si la prob poblacional no es finita (dato corrupto que
+        # hubiera sobrevivido al ensemble), se trata como dato ausente → fallback
+        # neutro (SEGURO) en vez de croncar personalizar_riesgo con NaN.
+        if not isinstance(prob_poblacional, (int, float)) or not np.isfinite(float(prob_poblacional)):
+            prob_poblacional = 0.0
         perfil_uv = dict(perfil) if perfil else {}
         uv = weather.get("uv_index")
         if uv is not None:
