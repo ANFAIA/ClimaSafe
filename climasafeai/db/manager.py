@@ -309,6 +309,84 @@ class DBManager:
             cur = c.execute("DELETE FROM perfiles WHERE id = ?", (perfil_id,))
             return cur.rowcount > 0
 
+    # ── Rutinas semanales (BOT-007) ─────────────────────────────────
+
+    def crear_rutina(
+        self,
+        chat_id: str,
+        nombre: str,
+        dias: str,
+        hora_inicio: float,
+        hora_fin: float,
+        ocupacion: str | None = None,
+        deporte: str | None = None,
+    ) -> int:
+        """Inserta una rutina semanal del chat y devuelve su id.
+
+        ``dias`` es una cadena coma-separada con los días de la semana en
+        formato 1-7 (1=lunes, 7=domingo), ej: "1,2,3,4,5".
+        """
+        with self.conn() as c:
+            cur = c.execute(
+                """INSERT INTO rutinas (chat_id, nombre, dias, hora_inicio, hora_fin, ocupacion, deporte)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (str(chat_id), nombre, dias, hora_inicio, hora_fin, ocupacion, deporte),
+            )
+            return cur.lastrowid
+
+    def listar_rutinas(self, chat_id: str) -> list[dict]:
+        """Todas las rutinas de un chat, ordenadas por hora de inicio."""
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM rutinas WHERE chat_id = ? ORDER BY hora_inicio, id",
+                (str(chat_id),),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def rutinas_por_dia(self, chat_id: str, weekday: int) -> list[dict]:
+        """Rutinas de un chat que caen en un día concreto (1=lunes ... 7=domingo)."""
+        resultado = []
+        for r in self.listar_rutinas(chat_id):
+            dias = [int(d) for d in r["dias"].split(",") if d.strip()]
+            if weekday in dias:
+                resultado.append(r)
+        return resultado
+
+    def eliminar_rutina(self, rutina_id: int) -> bool:
+        with self.conn() as c:
+            cur = c.execute("DELETE FROM rutinas WHERE id = ?", (rutina_id,))
+            return cur.rowcount > 0
+
+    # ── Hora de aviso diario (BOT-007) ───────────────────────────────
+
+    def obtener_hora_aviso(self, chat_id: str) -> str | None:
+        """Hora de aviso configurada ('HH:MM') o None si no hay."""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT hora FROM avisos_config WHERE chat_id = ?", (str(chat_id),)
+            ).fetchone()
+            return row["hora"] if row else None
+
+    def guardar_hora_aviso(self, chat_id: str, hora: str | None) -> None:
+        """Configura la hora de aviso de un chat; ``hora=None`` la desactiva."""
+        with self.conn() as c:
+            if hora is None:
+                c.execute("DELETE FROM avisos_config WHERE chat_id = ?", (str(chat_id),))
+                return
+            c.execute(
+                """INSERT INTO avisos_config (chat_id, hora, updated_at)
+                   VALUES (?, ?, datetime('now'))
+                   ON CONFLICT(chat_id) DO UPDATE SET
+                       hora = excluded.hora, updated_at = datetime('now')""",
+                (str(chat_id), hora),
+            )
+
+    def chats_con_aviso(self) -> list[dict]:
+        """Chats con hora de aviso configurada (chat_id, hora)."""
+        with self.conn() as c:
+            rows = c.execute("SELECT chat_id, hora FROM avisos_config ORDER BY chat_id").fetchall()
+            return [dict(r) for r in rows]
+
     # ── Tags disponibles ────────────────────────────────────────────
 
     def listar_tags_disponibles(self) -> list[dict]:

@@ -118,6 +118,27 @@ CREATE TABLE IF NOT EXISTS scout_entrenamiento (
     created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ── Rutinas semanales (BOT-007) ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS rutinas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id     TEXT NOT NULL,                -- chat_id de Telegram
+    nombre      TEXT NOT NULL,                -- ej: "trabajo", "entreno"
+    dias        TEXT NOT NULL,                -- coma-separada 1-7, 1=lunes
+    hora_inicio REAL NOT NULL,
+    hora_fin    REAL NOT NULL,
+    ocupacion   TEXT,                          -- si la rutina es laboral
+    deporte     TEXT,                          -- si la rutina es deportiva
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rutinas_chat ON rutinas(chat_id);
+
+-- ── Hora de aviso diario por chat (BOT-007) ───────────────────────
+CREATE TABLE IF NOT EXISTS avisos_config (
+    chat_id     TEXT PRIMARY KEY,
+    hora        TEXT NOT NULL,                 -- 'HH:MM'
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Las tablas vec0 (factores_vec, factores_vec_src) se crean desde
 -- RAG.initialize() con sqlite-vec cargado. No incluirlas aquí
 -- porque DBManager.initialize() ejecuta este script sin la extensión.
