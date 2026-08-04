@@ -281,8 +281,11 @@
         "El reindexado no duplica filas: RAG.stats() da el mismo total de factores antes y despues",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-04",
+      "review_rounds": 0,
+      "closed": "2026-08-04"
     },
     {
       "id": "BOT-003",
