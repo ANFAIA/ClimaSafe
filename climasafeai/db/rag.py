@@ -81,8 +81,12 @@ def _llm_model() -> str:
 
 def _factor_text(f: dict) -> str:
     parts = [f.get("nombre") or f["clave"], f"tipo: {f['tipo']}", f"categoría: {f['categoria']}"]
+    if f.get("coef") is not None:
+        parts.append(f"coeficiente: {f['coef']}")
     if f.get("poblacion"):
         parts.append(f"población: {f['poblacion']}")
+    if f.get("doi"):
+        parts.append(f"doi: {f['doi']}")
     return ". ".join(parts)
 
 
@@ -145,7 +149,7 @@ class RAG:
         nuevas = 0
         with self._conn() as conn:
             rows = conn.execute("""
-                SELECT f.id, f.tipo, f.categoria, f.clave, f.nombre, f.coef, f.poblacion
+                SELECT f.id, f.tipo, f.categoria, f.clave, f.nombre, f.coef, f.doi, f.poblacion
                 FROM factores_riesgo f
                 LEFT JOIN factores_vec_src s ON f.id = s.factor_id
                 WHERE s.factor_id IS NULL
