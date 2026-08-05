@@ -3,6 +3,7 @@ agents.tools.prediction_mcp_tool — MCP server para predicción de riesgo.
 
 Expone tools MCP para que un LLM (claude, etc.) pueda:
   - Predecir riesgo individual (con contrafactuales y recomendaciones)
+  - Dibujar la curva de riesgo por hora y devolverla como imagen PNG
   - Estimar volumen de afectados en un evento
   - Evaluar riesgo de una zona (grid)
   - Predecir riesgo colectivo (grupo demográfico)
@@ -20,6 +21,8 @@ Uso programático:
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import json
 import logging
 import os
@@ -667,6 +670,136 @@ def _sanitize(result: dict) -> None:
         del result["modelos"]["LSTM"]["error"]
 
 
+# ── Gráfica del riesgo por hora (PNG en memoria) ────────────────────────────
+
+
+def _hi_a_nivel(hi: float) -> float:
+    """Heat Index (°C) → peligrosidad ambiental 1-10.
+
+    Misma escala tramo a tramo que ``hiToNivel`` de la web (chat/static/index.html),
+    para que la imagen del MCP y la gráfica del navegador se lean igual.
+    """
+    if hi <= 15:
+        return 1.0
+    if hi <= 27:
+        return 1 + (hi - 15) / 12
+    if hi <= 32:
+        return 2 + (hi - 27) / 5 * 2
+    if hi <= 39:
+        return 4 + (hi - 32) / 7 * 3
+    if hi <= 46:
+        return 7 + (hi - 39) / 7 * 2
+    return min(10.0, 9 + (hi - 46) / 9)
+
+
+def grafica_riesgo_horario_png(
+    result: dict,
+    hora_inicio: float | None = None,
+    duracion_h: float | None = None,
+    edad: int | None = None,
+    fecha: str | None = None,
+) -> bytes | None:
+    """PNG de la curva de riesgo por hora a partir de un resultado de ``predict_risk``.
+
+    NO calcula riesgo: consume ``result["riesgo_horario"]`` (curva personal 0-1) y
+    ``result["weather"]["perfil_horario"]`` (HI por hora) que el pipeline ya dejó
+    en el resultado. Devuelve ``None`` si no hay serie horaria que pintar.
+
+    matplotlib se importa DENTRO de la función a propósito: el bloque MCP vive en
+    un ``try/except ImportError`` y un import fallido a nivel de módulo apagaría
+    todas las tools en silencio.
+    """
+    perfil_horario = (result.get("weather") or {}).get("perfil_horario") or []
+    curva = result.get("riesgo_horario") or []
+    puntos = sorted(
+        (p for p in perfil_horario if p.get("HI") is not None),
+        key=lambda p: p["hora"],
+    )
+    if not puntos or not curva:
+        return None
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    horas = [int(p["hora"]) for p in puntos]
+    niveles = [_hi_a_nivel(float(p["HI"])) for p in puntos]
+    riesgo_por_hora = {int(c["hora"]): c["riesgo"] for c in curva}
+    # NaN y no None en las horas sin curva: matplotlib deja hueco en la línea y
+    # el array sigue siendo numérico.
+    riesgos = [
+        float(riesgo_por_hora[h]) * 100 if riesgo_por_hora.get(h) is not None else float("nan")
+        for h in horas
+    ]
+
+    fig, ax = plt.subplots(figsize=(9.0, 4.2))
+    ax2 = ax.twinx()
+
+    # Ventana de actividad: sombreado gris de fondo.
+    if hora_inicio is not None and duracion_h:
+        ax.axvspan(float(hora_inicio), float(hora_inicio) + float(duracion_h),
+                   color="#2c3e50", alpha=0.10, zorder=0,
+                   label=f"Tu actividad ({int(hora_inicio)}:00-{int(float(hora_inicio) + float(duracion_h))}:00)")
+
+    # Franja recomendada por el backend (recomendar_horario), en verde.
+    rec = result.get("recomendacion_horario") or {}
+    if rec.get("hora_inicio") is not None and rec.get("hora_fin") is not None:
+        ax.axvspan(float(rec["hora_inicio"]), float(rec["hora_fin"]),
+                   color="#27ae60", alpha=0.14, zorder=0,
+                   label=f"Recomendado ({int(rec['hora_inicio'])}:00-{int(rec['hora_fin'])}:00)")
+
+    ax.plot(horas, niveles, color="#2c3e50", linewidth=2.0, marker="o",
+            markersize=3.5, label="Peligrosidad ambiental (HI)", zorder=3)
+    etiqueta_riesgo = f"Tu riesgo ({edad} años)" if edad is not None else "Tu riesgo"
+    ax2.plot(horas, riesgos, color="#e74c3c", linewidth=2.5,
+             label=etiqueta_riesgo, zorder=4)
+
+    # Pico de la curva personal, con etiqueta directa.
+    validos = [(h, r) for h, r in zip(horas, riesgos) if r == r]  # descarta NaN
+    if validos:
+        hora_pico, pico = max(validos, key=lambda hr: hr[1])
+        ax2.plot([hora_pico], [pico], marker="o", markersize=8,
+                 color="#e74c3c", markeredgecolor="white", markeredgewidth=2, zorder=5)
+        ax2.annotate(f"pico {pico:.0f}% a las {hora_pico}:00",
+                     xy=(hora_pico, pico), xytext=(0, 12),
+                     textcoords="offset points", ha="center",
+                     fontsize=9, color="#c0392b")
+
+    ax.set_xlabel("Hora del día", fontsize=10)
+    ax.set_ylabel("Nivel de peligro (1-10)", fontsize=10, color="#2c3e50")
+    ax2.set_ylabel("Tu riesgo (%)", fontsize=10, color="#c0392b")
+    ax.set_ylim(0.5, 10.5)
+    ax2.set_ylim(0, 100)
+    ax.set_xlim(min(horas) - 0.5, max(horas) + 0.5)
+    ax.set_xticks([h for h in horas if h % 2 == 0])
+    ax.set_xticklabels([f"{h:02d}" for h in horas if h % 2 == 0], fontsize=9)
+    ax.grid(axis="y", color="#000000", alpha=0.07)
+    ax.set_axisbelow(True)
+    for lado in ("top", "right", "left"):
+        ax.spines[lado].set_visible(False)
+    ax2.spines["top"].set_visible(False)
+
+    provincia = (result.get("weather") or {}).get("provincia") or ""
+    titulo = "Riesgo por hora"
+    if provincia:
+        titulo += f" — {provincia}"
+    if fecha:
+        titulo += f" ({fecha})"
+    ax.set_title(titulo, fontsize=12, loc="left")
+
+    manejadores = ax.get_legend_handles_labels()[0] + ax2.get_legend_handles_labels()[0]
+    etiquetas = ax.get_legend_handles_labels()[1] + ax2.get_legend_handles_labels()[1]
+    # Fondo semitransparente: la leyenda va arriba a la izquierda y ahí puede
+    # cruzarse con las curvas cuando el riesgo ya es alto de mañana.
+    ax.legend(manejadores, etiquetas, loc="upper left", fontsize=8, ncol=2,
+              framealpha=0.85, edgecolor="none").set_zorder(10)
+
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
+    plt.close(fig)
+    return buffer.getvalue()
+
+
 # ── Rutinas semanales: resolución de perfil/chat y perfil de predicción ─────
 
 
@@ -817,6 +950,7 @@ def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.types import ImageContent
     _mcp = FastMCP("ClimaSafeAI Predicción de Riesgo")
 
     @_mcp.tool()
@@ -1169,6 +1303,71 @@ recomendación por ventana."""
                 "ventanas": ventanas,
             },
             indent=2, ensure_ascii=False, default=str,
+        )
+
+    @_mcp.tool(structured_output=False)
+    def grafica_riesgo_horario_mcp(
+        lat: float,
+        lon: float,
+        provincia: str = "",
+        edad: int = 40,
+        sexo: str = "hombre",
+        nivel_actividad: str = "ligera",
+        hora_inicio: int = 10,
+        duracion_h: float = 2.0,
+        aclimatado: bool = False,
+        grasa: Optional[float] = None,
+        ocupacion: Optional[str] = None,
+        entrenado: Optional[bool] = None,
+        deporte: Optional[str] = None,
+        comorbilidades: Optional[str] = None,
+        medicacion: Optional[str] = None,
+        fototipo: Optional[str] = None,
+        situacion_social: Optional[str] = None,
+        falta_sueno: Optional[bool] = None,
+        enfermedad_reciente: Optional[bool] = None,
+        fiesta: Optional[bool] = None,
+        fecha: Optional[str] = None,
+    ) -> ImageContent | str:
+        """Devuelve la curva de riesgo por hora como IMAGEN PNG, no como JSON.
+
+Misma gráfica que enseña la web: eje izquierdo la peligrosidad ambiental 1-10
+derivada del Heat Index, eje derecho tu riesgo personal en % hora a hora, con la
+ventana de actividad sombreada, la franja recomendada en verde y el pico marcado.
+
+Los parámetros son los mismos que `predict_risk_mcp`: úsala cuando el usuario
+pida ver, dibujar o graficar el riesgo del día. Si quieres los números en vez
+del dibujo, usa `predict_risk_mcp`."""
+        comorb_list = [c.strip() for c in comorbilidades.split(",")] if comorbilidades else None
+        med_list = [m.strip() for m in medicacion.split(",")] if medicacion else None
+        sit_list = [s.strip() for s in situacion_social.split(",")] if situacion_social else None
+        result = predict_risk(
+            lat=lat, lon=lon, provincia=provincia,
+            edad=edad, sexo=sexo, nivel_actividad=nivel_actividad,
+            hora_inicio=hora_inicio, duracion_h=duracion_h,
+            aclimatado=aclimatado, grasa=grasa,
+            ocupacion=ocupacion, entrenado=entrenado, deporte=deporte,
+            comorbilidades=comorb_list, medicacion=med_list,
+            fototipo=fototipo, situacion_social=sit_list,
+            falta_sueno=falta_sueno, enfermedad_reciente=enfermedad_reciente,
+            fiesta=fiesta,
+            fecha=fecha,
+            incluir_contrafactuales=False,
+            incluir_recomendaciones=False,
+        )
+        png = grafica_riesgo_horario_png(
+            result, hora_inicio=hora_inicio, duracion_h=duracion_h,
+            edad=edad, fecha=fecha,
+        )
+        if png is None:
+            return (
+                "No hay perfil horario para esta ubicación y fecha, así que no hay "
+                "curva que dibujar. Usa predict_risk_mcp para el riesgo puntual."
+            )
+        return ImageContent(
+            type="image",
+            data=base64.b64encode(png).decode("ascii"),
+            mimeType="image/png",
         )
 
     _HAS_MCP = True
