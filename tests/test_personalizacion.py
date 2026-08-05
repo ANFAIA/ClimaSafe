@@ -197,3 +197,46 @@ def test_conformal_weighted_ensemble_solo_nan_fallback_seguro():
     ens = _conformal_weighted_ensemble(res, "calor")
     assert ens["prob_riesgo"] == 0.0
     assert ens["clase"] == 0
+
+
+def test_puede_salir_peligro_con_porcentaje_bajo(monkeypatch):
+    """BOT-013 criterio 3: sí, y por eso el parte tiene que decir que el nivel
+    no sale del porcentaje.
+
+    El override físico de `predict_ensemble` (HI_peak >= 39 → PELIGRO) no mira
+    `prob_personalizada`: solo exige que la clase por probabilidad no sea ya
+    PELIGRO. Con los modelos dando riesgo casi nulo y un día de HI 41 sale
+    PELIGRO con un porcentaje de un dígito.
+    """
+    import climasafeai.models.ensemble as ensemble
+
+    weather = _weather_nan()
+    # Día con pico de HI de 41°C entre las 12 y las 17
+    weather["df_hora"] = pd.DataFrame({
+        "datetime": pd.date_range("2026-08-05 00:00", periods=24, freq="h"),
+        "heat_index_c": [20.0] * 12 + [41.0] * 5 + [20.0] * 7,
+        "t2m_c": [20.0] * 12 + [38.0] * 5 + [20.0] * 7,
+    })
+    weather["current"] = {"t2m_c": 38.0, "rh": 30.0, "wind_speed_kmh": 5.0}
+    monkeypatch.setattr(ensemble, "fetch_weather_data", lambda **kw: weather)
+    monkeypatch.setattr(
+        ensemble, "_predecir_tabular",
+        lambda *a, **k: {"prob_riesgo": 0.01, "conformal_set_size": 2, "clase": 0, "_X": None},
+    )
+    monkeypatch.setattr(
+        ensemble, "_predecir_lstm",
+        lambda *a, **k: {"calor": {"prob_riesgo": 0.01, "clase": 0}, "frio": {"prob_riesgo": 0.0, "clase": 0}},
+    )
+    monkeypatch.setattr(
+        ensemble, "_proba_from_formula",
+        lambda *a, **k: {"calor": {"prob_riesgo": 0.01, "heat_index_c": 41.0},
+                         "frio": {"prob_riesgo": 0.0, "wind_chill_c": 38.0}},
+    )
+
+    perfil = {"edad": 30, "sexo": "hombre", "nivel_actividad": "reposo",
+              "hora_inicio": 13, "duracion_actividad_h": 3}
+    r = predict_ensemble(lat=37.888, lon=-4.779, provincia="Cordoba", perfil=perfil)
+
+    assert r["clase_final_label"] == "PELIGRO"
+    assert r["perfil"]["calor"]["prob_personalizada"] < 0.10
+    assert ">=39" in r["override_fisico"]["razon"]
