@@ -359,8 +359,11 @@
         "Se elige un modelo por defecto POR LOS NUMEROS y se cambia _modelo_por_defecto() en consecuencia, dejando escrito el porque",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-04",
+      "review_rounds": 1,
+      "blocked_reason": "Pausada por prioridad: se antepone MCP-IMG-001 (graficas del MCP) por encargo del humano el 2026-08-04. Trabajo a medias sin commitear en climasafeai/llm/benchmark.py. Sin perdida de estado: la bitacora de current.md estaba vacia y los criterios viven en featureslist.json."
     },
     {
       "id": "ARNES-002",
@@ -1012,8 +1015,11 @@
         "Si la confianza es baja el parte lo advierte en vez de dar el numero con la misma seguridad",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-05",
+      "review_rounds": 1,
+      "closed": "2026-08-05"
     },
     {
       "id": "BOT-014",
@@ -1024,6 +1030,105 @@
         "Los factores se mandan ordenados por su coeficiente y CON el coeficiente, para que el modelo pueda decir cual pesa mas. Hoy solo se manda la lista de nombres y no puede saberlo",
         "Al preguntar por los factores de riesgo, la respuesta nombra el que mas pesa y su valor. Se pega la conversacion real",
         "Hay test de que un resultado con dominancia de calor no mete datos de frio en el contexto, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "MCP-IMG-001",
+      "title": "Grafica del riesgo por hora desde el MCP: una tool que devuelve la imagen",
+      "description": "Grafica del riesgo por hora desde el MCP: una tool que devuelve la imagen",
+      "acceptance_criteria": [
+        "Una tool MCP nueva devuelve la curva de riesgo por hora como imagen PNG embebida (ImageContent base64), sin tocar las 11 tools existentes ni sus tests",
+        "La imagen reutiliza riesgo_horario y perfil_horario que el pipeline ya calcula, sin recalcular la prediccion por su cuenta",
+        "El caso sin datos horarios devuelve un texto claro en vez de reventar o de una imagen vacia",
+        "matplotlib se importa dentro de la funcion y no en el bloque try del MCP, para no desactivar las 11 tools si el import falla",
+        "Hay test que comprueba que la salida es ImageContent con mimeType image/png y que los bytes decodifican como PNG valido",
+        "Se demuestra invocando la tool contra el servidor MCP arrancado de verdad, pegando la salida real",
+        "make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-04",
+      "review_rounds": 0,
+      "blocked_reason": "Trabajo implementado y verificado (8/8 tests + invocacion real MCP), pero la puerta completa (make test, ~10min) quedo pendiente: el usuario la aborto para priorizar LLM-005 (mejora del parte del LLM). Se retoma cerrando con la puerta en verde.",
+      "closed": "2026-08-05"
+    },
+    {
+      "id": "MCP-IMG-002",
+      "title": "Franja a evitar: subir al backend la ventana deslizante que hoy calcula el JS",
+      "description": "Franja a evitar: subir al backend la ventana deslizante que hoy calcula el JS",
+      "acceptance_criteria": [
+        "La ventana de peor riesgo (franja Evitar) se calcula en Python en el backend, no en el navegador: hoy vive solo en chat/static/index.html lineas 2833-2840 y por eso no la puede usar ni el MCP ni el bot",
+        "El resultado del pipeline expone esa franja junto a recomendacion_horario, de forma que web, MCP y bot lean el mismo valor",
+        "La web deja de recalcularla en JS y consume la del backend, sin cambiar lo que ve el usuario",
+        "La grafica del MCP (MCP-IMG-001) marca la franja a evitar ademas de la recomendada",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "LLM-005",
+      "title": "El parte del LLM explica los factores que pesan y recomendaciones según el contexto",
+      "description": "El parte del LLM explica los factores que pesan y recomendaciones según el contexto",
+      "acceptance_criteria": [
+        "El prompt de ask_con_perfil pasa los factores de riesgo con su coeficiente (xN), no solo el nombre, y el LLM explica cual es el factor dominante y cuanto multiplica el riesgo",
+        "El parte ya no incluye la coletilla '(mayor cuanto mas se acerque a 100%)' — se quita del prompt y del ejemplo",
+        "Cuando el parte menciona un termino tecnico (SPF, HI, WC) lo explica en lenguaje llano, p. ej. que es el SPF",
+        "El prompt pasa la ocupacion del perfil (p. ej. construccion) y la franja horaria real de riesgo (recomendacion_horario) en vez de dejar que el LLM invente horas pico",
+        "El contexto del chat RAG (ask_with_rag) no repite consejos sin sentido como reducir la exposicion en interiores, y adapta la recomendacion al contexto (obra, oficina, deporte)",
+        "Hay tests que comprueban que el prompt de ask_con_perfil lleva coeficientes y ocupacion, que no contiene la coletilla, y make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-04",
+      "review_rounds": 0,
+      "closed": "2026-08-05"
+    },
+    {
+      "id": "BOT-015",
+      "title": "Al anadir una rutina de trabajo el bot pregunta el tipo de trabajo (con su intensidad) y no fija ubicacion",
+      "description": "Al anadir una rutina de trabajo el bot pregunta el tipo de trabajo (con su intensidad) y no fija ubicacion",
+      "acceptance_criteria": [
+        "/rutinas_anadir L-V trabajo 8-16 no guarda directo: responde preguntando el tipo de trabajo (construccion, reparto, mantenimiento, campo, oficina) con la intensidad derivada de _OCUPACION_NIVELES",
+        "La rutina de trabajo se guarda con la columna ocupacion rellena, y el resumen la muestra con su etiqueta e intensidad (ej: Construccion x2.2)",
+        "El aviso diario usa la ocupacion de la rutina en la prediccion (perfil_prediccion_desde_rutina), no intensidad ligera generica",
+        "La rutina de trabajo no fija ubicacion: el aviso se calcula con la ubicacion del perfil del dia (el lugar puede cambiar)",
+        "Los deportes (entreno, correr) mantienen el comportamiento actual sin cuestionario",
+        "Hay tests del flujo de anadir trabajo con cuestionario, del guardado con ocupacion y del aviso con ocupacion, y make test pasa"
+      ],
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-05",
+      "review_rounds": 0,
+      "blocked_reason": "El usuario amplia el alcance: los deportes tambien deben preguntar el tipo de actividad y no fijar ubicacion (puede jugar al futbol en distintos campos). El criterio 5 de BOT-015 (deportes sin cuestionario) queda invalidado; el mecanismo ya implementado (_rutina_pendiente + callback con prefijo) se reutiliza en BOT-016 con el alcance completo."
+    },
+    {
+      "id": "BOT-016",
+      "title": "Al anadir una rutina de trabajo o deporte el bot pregunta el tipo (ocupacion o actividad) y no fija ubicacion",
+      "description": "Al anadir una rutina de trabajo o deporte el bot pregunta el tipo (ocupacion o actividad) y no fija ubicacion",
+      "acceptance_criteria": [
+        "/rutinas_anadir L-V trabajo 8-16 no guarda directo: responde preguntando el tipo de trabajo (construccion, reparto, mantenimiento, campo, oficina) con la intensidad derivada de _OCUPACION_NIVELES",
+        "/rutinas_anadir L-X futbol 18-20 (o entreno, o un deporte de la lista DEPORTES) no guarda directo: responde preguntando el tipo de actividad deportiva con la lista DEPORTES del bot y su intensidad MET",
+        "La rutina se guarda con la columna ocupacion o deporte rellena segun el caso, y el resumen la muestra con su etiqueta e intensidad (ej: Construccion x2.2, Futbol MET 7)",
+        "El aviso diario usa la ocupacion o el deporte de la rutina en la prediccion (_perfil_prediccion_desde_rutina), no intensidad ligera generica",
+        "La rutina no fija ubicacion: el aviso se calcula con la ubicacion del perfil del dia (el lugar puede cambiar, tanto trabajo como deporte)",
+        "Hay tests del flujo de anadir trabajo y deporte con cuestionario, del guardado con ocupacion/deporte y del aviso con ocupacion/deporte, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DATA-003",
+      "title": "El perfil horario mezcla el HI de los ultimos 15 dias: hoy proyecta 36C cuando el HI real es 26C",
+      "description": "El perfil horario mezcla el HI de los ultimos 15 dias: hoy proyecta 36C cuando el HI real es 26C",
+      "acceptance_criteria": [
+        "El perfil horario que se devuelve al usuario (predict_risk_mcp, web y aviso de Telegram) se construye SOLO con el dia objetivo (hoy o target_date), no con el maximo por hora de los ultimos 15 dias",
+        "El HI que alimenta el override fisico (HI>=39 -> PELIGRO) y la franja recomendada (recomendar_horario) usa el HI del dia objetivo, no el de dias anteriores",
+        "Se verifica contra datos reales que para Vigo hoy el perfil horario da un HI maximo ~26C (no ~36C), comparando con el forecast de Open-Meteo",
+        "Hay un test de regresion que construye un df_hora con dos dias (uno caluroso y uno templado) y comprueba que el perfil solo usa el dia pedido",
+        "make test pasa"
       ],
       "status": "pending",
       "depends_on": []
