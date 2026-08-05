@@ -442,7 +442,8 @@ class TestRutinas:
         assert "/rutinas_anadir" in r
 
     @pytest.mark.asyncio
-    async def test_anadir_rutina_formato_lv_trabajo(self, monkeypatch):
+    async def test_anadir_rutina_trabajo_pregunta_tipo_y_no_guarda(self, monkeypatch):
+        """BOT-015: una rutina de trabajo no se guarda directo, pregunta el tipo."""
         import climasafeai.bot.telegram_bot as mod
 
         _sin_modelo(monkeypatch)
@@ -452,13 +453,90 @@ class TestRutinas:
 
         r = await mod.procesar_mensaje(1, "/rutinas_anadir L-V trabajo 8-16")
 
-        assert "añadida" in r.lower()
+        assert "tipo de trabajo" in r.lower()
+        assert db.rutinas == []  # no guarda directo
+        pendiente = _conversaciones[1]["_rutina_pendiente"]
+        assert pendiente["dias"] == "1,2,3,4,5"
+        assert pendiente["hora_inicio"] == 8.0
+        assert pendiente["hora_fin"] == 16.0
+        assert pendiente["nombre"] == "trabajo"
+        assert "ocupacion" not in pendiente
+
+    @pytest.mark.asyncio
+    async def test_anadir_rutina_trabajo_guarda_con_ocupacion_al_elegir_tipo(self, monkeypatch):
+        """BOT-015: elegir el tipo de trabajo guarda la rutina con su ocupación."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        await mod.procesar_mensaje(1, "/rutinas_anadir L-V trabajo 8-16")
+        r, _ = await mod.procesar_callback(1, "rutina_tipo_construccion")
+
         assert len(db.rutinas) == 1
+        assert db.rutinas[0]["ocupacion"] == "construccion"
         assert db.rutinas[0]["dias"] == "1,2,3,4,5"
         assert db.rutinas[0]["hora_inicio"] == 8.0
-        assert db.rutinas[0]["hora_fin"] == 16.0
-        assert db.rutinas[0]["nombre"] == "trabajo"
-        assert "Trabajo — L-V, 8:00-16:00" in r
+        assert "añadida" in r.lower()
+        assert "Construcción x2.2" in r
+        assert "_rutina_pendiente" not in _conversaciones[1]
+
+    @pytest.mark.asyncio
+    async def test_anadir_rutina_trabajo_oficina(self, monkeypatch):
+        """BOT-015: 'oficina' es un tipo de trabajo válido (x1.0) en el cuestionario."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        await mod.procesar_mensaje(1, "/rutinas_anadir L-V trabajo 8-16")
+        r, _ = await mod.procesar_callback(1, "rutina_tipo_oficina")
+
+        assert db.rutinas[0]["ocupacion"] == "oficina"
+        assert "Oficina / interior x1.0" in r
+
+    @pytest.mark.asyncio
+    async def test_cuestionario_trabajo_sin_pendiente_no_guarda(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r, _ = await mod.procesar_callback(1, "rutina_tipo_campo")
+
+        assert "ninguna rutina pendiente" in r.lower()
+        assert db.rutinas == []
+
+    @pytest.mark.asyncio
+    async def test_cuestionario_trabajo_tipo_invalido(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        await mod.procesar_mensaje(1, "/rutinas_anadir L-V trabajo 8-16")
+        r, _ = await mod.procesar_callback(1, "rutina_tipo_buceo")
+
+        assert "inválido" in r.lower()
+        assert db.rutinas == []
+
+    def test_kb_tipo_trabajo_incluye_oficina_con_prefijo(self):
+        from climasafeai.bot.telegram_bot import _kb_tipo_trabajo
+
+        kb = _kb_tipo_trabajo("rutina_tipo_")
+        datas = [b["callback_data"] for fila in kb for b in fila]
+
+        assert "rutina_tipo_oficina" in datas
+        assert "rutina_tipo_campo" in datas
+        assert all(d.startswith("rutina_tipo_") for d in datas)
 
     @pytest.mark.asyncio
     async def test_anadir_rutina_entreno(self, monkeypatch):
@@ -473,6 +551,24 @@ class TestRutinas:
 
         assert db.rutinas[0]["hora_inicio"] == 18.0
         assert "Entreno — L-V, 18:00-20:00" in r
+        assert db.rutinas[0].get("ocupacion") is None
+
+    @pytest.mark.asyncio
+    async def test_anadir_rutina_deporte_directo_sin_cuestionario(self, monkeypatch):
+        """BOT-015: un deporte conocido (correr) se guarda directo, sin pregunta."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r = await mod.procesar_mensaje(1, "/rutinas_anadir L,X correr 18-20")
+
+        assert "añadida" in r.lower()
+        assert db.rutinas[0]["deporte"] == "correr"
+        assert db.rutinas[0].get("ocupacion") is None
+        assert "_rutina_pendiente" not in _conversaciones[1]
 
     @pytest.mark.asyncio
     async def test_anadir_rutina_formato_invalido(self, monkeypatch):
@@ -523,6 +619,32 @@ class TestRutinas:
 
         assert "Trabajo" in r and "L-V, 8:00-16:00" in r
         assert "Entreno" in r and "S-D, 18:00-20:00" in r
+
+    @pytest.mark.asyncio
+    async def test_listar_muestra_ocupacion_con_intensidad(self, monkeypatch):
+        """BOT-015: el resumen muestra la etiqueta del trabajo y su intensidad."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        db.rutinas = [
+            {
+                "id": 1,
+                "chat_id": "1",
+                "nombre": "trabajo",
+                "dias": "1,2,3,4,5",
+                "hora_inicio": 8.0,
+                "hora_fin": 16.0,
+                "ocupacion": "construccion",
+                "deporte": None,
+            },
+        ]
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r = await mod.procesar_mensaje(1, "/rutinas")
+
+        assert "Trabajo — L-V, 8:00-16:00 (Construcción x2.2)" in r
 
     @pytest.mark.asyncio
     async def test_borrar_rutina_por_callback(self, monkeypatch):
@@ -760,6 +882,80 @@ class TestAvisoDiario:
         assert "35%" in enviados[0]
 
     @pytest.mark.asyncio
+    async def test_aviso_usa_ocupacion_de_la_rutina(self, monkeypatch):
+        """BOT-015: el aviso pasa la ocupación de la rutina a la predicción y
+        la etiqueta muestra su intensidad, con la ubicación del perfil del día."""
+        import climasafeai.bot.telegram_bot as mod
+
+        class _DB:
+            def buscar_por_telegram(self, chat_id):
+                return {"id": 7} if chat_id == "1" else None
+
+            def obtener_perfil(self, _pid):
+                return {
+                    "id": 7,
+                    "alias": "Aldán",
+                    "edad": 57,
+                    "sexo": "hombre",
+                    "aclimatado": False,
+                    "lat": 42.29,
+                    "lon": -8.81,
+                    "provincia": "Pontevedra",
+                }
+
+            def rutinas_por_dia(self, chat_id, weekday):
+                if weekday == 1:
+                    return [
+                        {
+                            "id": 1,
+                            "nombre": "campo",
+                            "dias": "1,2,3,4,5",
+                            "hora_inicio": 8.0,
+                            "hora_fin": 16.0,
+                            "ocupacion": "campo",
+                            "deporte": None,
+                        }
+                    ]
+                return []
+
+        capturado: dict = {}
+
+        def _fake_predict(**kwargs):
+            capturado.update(kwargs)
+            return {
+                "clase_final_label": "PELIGRO",
+                "perfil": {"calor": {"prob_personalizada": 0.62}},
+                "weather": {
+                    "perfil_horario": [
+                        {"hora": 8, "HI": 27.0, "temp": 28.0},
+                        {"hora": 9, "HI": 28.0, "temp": 29.0},
+                    ],
+                    "current": {"t2m_c": 28.0, "rh": 60},
+                },
+                "modelos": {
+                    "Formula": {"frio": {"wind_chill_c": 20}, "calor": {"heat_index_c": 28}}
+                },
+            }
+
+        monkeypatch.setattr(mod, "_db", _DB())
+        monkeypatch.setattr(mod, "predict_ensemble", _fake_predict)
+        enviados = _stub_tg(monkeypatch)
+
+        await mod._enviar_aviso_diario("1", 1)
+
+        # La ocupación de la rutina entra en la predicción (no queda en ligera
+        # genérica) y la ubicación sigue siendo la del perfil, no la de la rutina.
+        perfil_pred = capturado["perfil"]
+        assert perfil_pred["ocupacion"] == "campo"
+        assert capturado["lat"] == 42.29 and capturado["lon"] == -8.81
+        assert capturado["provincia"] == "Pontevedra"
+
+        assert len(enviados) == 1
+        assert "Campo 8:00-16:00 (Campo / agricultura x2.7)" in enviados[0]
+        assert "PELIGRO" in enviados[0]
+        assert "62%" in enviados[0]
+
+    @pytest.mark.asyncio
     async def test_sin_rutinas_hoy_no_envia_nada(self, monkeypatch):
         import climasafeai.bot.telegram_bot as mod
 
@@ -807,3 +1003,18 @@ class TestAvisoDiario:
         assert p["nivel_actividad"] == "muy_intensa"  # correr = 10.5 MET
         assert p["comorbilidades"] == {"cardiovascular"}
         assert p["farmacos"] == {"diureticos_asa"}
+
+    def test_perfil_prediccion_desde_rutina_usa_ocupacion(self):
+        from climasafeai.bot.telegram_bot import _perfil_prediccion_desde_rutina
+
+        perfil = {
+            "sexo": "hombre",
+            "edad": 57,
+            "aclimatado": False,
+        }
+        rutina = {"hora_inicio": 8.0, "hora_fin": 16.0, "deporte": None, "ocupacion": "campo"}
+
+        p = _perfil_prediccion_desde_rutina(perfil, rutina)
+
+        assert p["ocupacion"] == "campo"
+        assert p.get("deporte") is None

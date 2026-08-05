@@ -23,7 +23,7 @@ from datetime import date, datetime
 from enum import Enum, auto
 
 from climasafeai.bot.geocoding import buscar_lugar, provincia_desde_coords
-from climasafeai.features.personalizacion import nivel_actividad_de_deporte
+from climasafeai.features.personalizacion import _OCUPACION_NIVELES, nivel_actividad_de_deporte
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,7 @@ from climasafeai.llm.rag_qwen import (
     ask_con_perfil,
     ask_with_rag,
     check_ollama,
+    lineas_parte,
 )
 from climasafeai.models.ensemble import predict_ensemble
 from climasafeai.models.recomendaciones import recomendacion_resumen
@@ -62,7 +63,10 @@ MEDICACION_LABELS = {
 
 # La ocupación describe ESTA salida, no el oficio: quien trabaja en el campo pero
 # sale a pasear el domingo no lleva ocupación.
+# Orden de intensidad ascendente (igual que `_OCUPACION_NIVELES`): se muestra así
+# en los botones del cuestionario de tipo de trabajo.
 OCUPACIONES = {
+    "oficina": "Oficina / interior",
     "reparto": "Reparto / conducción",
     "mantenimiento": "Mantenimiento / jardinería",
     "construccion": "Construcción",
@@ -93,6 +97,11 @@ DEPORTES: dict[str, str] = {
     "tenis_dobles": "Tenis dobles",
     "tenis": "Tenis individual",
 }
+
+# Nombres de rutina que son entrenamiento físico genérico, no una salida laboral:
+# no tienen MET propio en el Compendium (por eso no están en DEPORTES), pero se
+# guardan directo como hoy, sin el cuestionario de tipo de trabajo (BOT-015).
+_NOMBRES_ENTRENAMIENTO = {"entreno", "entrenamiento"}
 
 # Cómo llega el usuario a la salida. Son los tres factores situacionales que el
 # modelo sí sabe puntuar; el de fiesta es de los que más pesan de todo el sistema.
@@ -311,8 +320,14 @@ def _kb_trabajo() -> list[list[dict]]:
     ]
 
 
-def _kb_tipo_trabajo() -> list[list[dict]]:
-    return [[{"text": v, "callback_data": k}] for k, v in OCUPACIONES.items()]
+def _kb_tipo_trabajo(prefijo: str = "") -> list[list[dict]]:
+    """Teclado de tipo de trabajo.
+
+    En /start el callback es la clave pura (``"campo"``); en el cuestionario de
+    rutina (BOT-015) se pasa ``prefijo="rutina_tipo_"`` para distinguir ese
+    callback del flujo normal y del chat RAG posterior.
+    """
+    return [[{"text": v, "callback_data": f"{prefijo}{k}"}] for k, v in OCUPACIONES.items()]
 
 
 def _kb_estado_previo() -> list[list[dict]]:
@@ -456,11 +471,13 @@ FIELD_LABELS: dict[Estado, tuple[str, str, Any]] = {
 
 # ── Formateo de respuesta ─────────────────────────────────────────────────
 
+# BOT-013: la cabecera y las frases de riesgo salen de `lineas_parte`, las
+# mismas que se le dan al LLM. Antes esta plantilla ponía "Riesgo PRECAUCIÓN
+# (19%)" y el 19% parecía explicar la clase cuando ni siquiera sale de ahí.
 RESPONSE_TEMPLATE = textwrap.dedent("""\
-    {ubicacion} — Riesgo {clase} ({prob:.0%})
+    {cabecera}
 
-    🟡 Nivel de riesgo: {clase} ({prob:.0%})
-    🔎 {prob:.0%} de probabilidad de riesgo térmico durante la actividad (mayor cuanto más se acerque a 100%).
+    {explicacion}
     🌡️ Temperatura prevista: {temp:.1f} °C
     ☀️ Índice UV (media): {uv}
     ❗ Recomendación: {recomendacion}
@@ -504,13 +521,11 @@ def _format_template(result: dict, lugar: str | None = None) -> str:
     uv = w.get("uv_index")
     if uv is None:
         uv = cur.get("uv_index")
-    clase = result.get("clase_final_label", "?")
-    prob = result.get("perfil", {}).get("calor", {}).get("prob_personalizada") or 0
 
+    cabecera, *explicacion = lineas_parte(result, lugar)
     return RESPONSE_TEMPLATE.format(
-        ubicacion=lugar or w.get("provincia") or "?",
-        clase=clase,
-        prob=prob,
+        cabecera=cabecera,
+        explicacion="\n".join(f"🔎 {linea}" for linea in explicacion),
         temp=temp,
         uv=_format_uv(uv),
         recomendacion=recomendacion_resumen(result),
@@ -878,12 +893,24 @@ def _parsear_rutina(texto: str) -> dict | None:
     }
 
 
+def _etiqueta_ocupacion(ocupacion: str | None) -> str | None:
+    """'Construcción x2.2' para una ocupación conocida, o None si no lo es."""
+    if not ocupacion or ocupacion not in _OCUPACION_NIVELES:
+        return None
+    coef, _ = _OCUPACION_NIVELES[ocupacion]
+    return f"{OCUPACIONES.get(ocupacion, ocupacion.capitalize())} x{coef}"
+
+
 def _resumen_rutinas(rutinas: list[dict]) -> str:
     lineas = ["*Tus rutinas:*"]
     for r in rutinas:
+        extra = ""
+        etiqueta_ocp = _etiqueta_ocupacion(r.get("ocupacion"))
+        if etiqueta_ocp:
+            extra = f" ({etiqueta_ocp})"
         lineas.append(
             f"  {r['id']}. {r['nombre'].capitalize()} — "
-            f"{_formatear_dias(r['dias'])}, {_formato_hora(r['hora_inicio'])}-{_formato_hora(r['hora_fin'])}"
+            f"{_formatear_dias(r['dias'])}, {_formato_hora(r['hora_inicio'])}-{_formato_hora(r['hora_fin'])}{extra}"
         )
     lineas.append("\nAñade una con: /rutinas_anadir <dias> <nombre> <inicio-fin>")
     lineas.append("Ej: /rutinas_anadir L-V trabajo 8-16")
@@ -937,6 +964,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         # preguntas con el contexto nuevo (CHAT-003).
         conv.pop("ultima_prediccion", None)
         conv.pop("ultimo_resultado", None)
+        conv.pop("_rutina_pendiente", None)
         # ¿Tiene perfil guardado?
         match = _db.buscar_por_telegram(str(chat_id))
         if match:
@@ -999,6 +1027,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
 
     if texto.startswith("/perfil"):
         conv.pop("_editando", None)
+        conv.pop("_rutina_pendiente", None)
         conv["data"].pop("_edit_set", None)
         match = _db.buscar_por_telegram(str(chat_id))
         if not match:
@@ -1020,11 +1049,19 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
                 "No entendí la rutina. Formato: /rutinas_anadir <dias> <nombre> <inicio-fin>\n"
                 "Ej: /rutinas_anadir L-V trabajo 8-16"
             )
-        _db.crear_rutina(str(chat_id), **rutina)
-        return "Rutina añadida:\n" + _resumen_rutinas(_db.listar_rutinas(str(chat_id)))
+        # BOT-015: los deportes (y el entrenamiento genérico) se guardan directo;
+        # una rutina que no es deporte se trata como salida laboral y se pregunta
+        # el tipo de trabajo antes de guardar: la intensidad laboral (x1.0 a x2.7)
+        # es un factor que el modelo sí sabe puntuar, no puede quedar en genérico.
+        if rutina["deporte"] or rutina["nombre"] in _NOMBRES_ENTRENAMIENTO:
+            _db.crear_rutina(str(chat_id), **rutina)
+            return "Rutina añadida:\n" + _resumen_rutinas(_db.listar_rutinas(str(chat_id)))
+        conv["_rutina_pendiente"] = rutina
+        return FIELD_LABELS[Estado.TIPO_TRABAJO][0]
 
     if texto.startswith("/rutinas"):
         conv.pop("_editando", None)
+        conv.pop("_rutina_pendiente", None)
         rutinas = _db.listar_rutinas(str(chat_id))
         if not rutinas:
             return (
@@ -1036,6 +1073,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
 
     if texto.startswith("/avisos"):
         conv.pop("_editando", None)
+        conv.pop("_rutina_pendiente", None)
         resto = texto[len("/avisos") :].strip()
         if not resto:
             hora_actual = _db.obtener_hora_aviso(str(chat_id))
@@ -1201,6 +1239,19 @@ async def procesar_callback(chat_id: int, callback_data: str) -> tuple[str | Non
             return "Rutina inválida.", False
         _db.eliminar_rutina(rid)
         return "Rutina eliminada. /rutinas para ver las que quedan.", False
+
+    # ── BOT-015: elegir el tipo de trabajo de una rutina pendiente ──
+    if callback_data.startswith("rutina_tipo_"):
+        rutina = conv.get("_rutina_pendiente")
+        if not rutina:
+            return "No hay ninguna rutina pendiente. Usa /rutinas_anadir.", False
+        ocupacion = callback_data[len("rutina_tipo_"):]
+        if ocupacion not in OCUPACIONES:
+            return "Tipo de trabajo inválido.", False
+        rutina["ocupacion"] = ocupacion
+        conv.pop("_rutina_pendiente", None)
+        _db.crear_rutina(str(chat_id), **rutina)
+        return "Rutina añadida:\n" + _resumen_rutinas(_db.listar_rutinas(str(chat_id))), False
 
     # ── BOT-007: iniciar la edición de un campo del perfil ───────────
     if callback_data.startswith("edit_"):
@@ -1433,17 +1484,35 @@ def _contexto_parte_conversacion(conv: dict) -> str:
         if prob_frio is not None:
             lineas.append(f"Probabilidad personalizada (frío): {prob_frio:.0%}")
         if factores:
-            nombres = [f["nombre"] if isinstance(f, dict) else str(f) for f in factores]
+            nombres = []
+            for f in factores:
+                if isinstance(f, dict):
+                    nombre = f.get("nombre", str(f))
+                    coef = f.get("factor")
+                    # Coeficiente real del pipeline (xN), no solo el nombre:
+                    # sin él el LLM se inventa cuánto pesa cada factor.
+                    nombres.append(f"{nombre} (x{coef})" if coef is not None else nombre)
+                else:
+                    nombres.append(str(f))
             lineas.append("Factores que suben tu riesgo: " + ", ".join(nombres))
         else:
             lineas.append("Factores que suben tu riesgo: ninguno relevante")
+        # Ocupación de esta salida (obra, oficina, reparto...) con su etiqueta
+        # y coeficiente, para que la respuesta se adapte al contexto.
+        ocp = (result.get("perfil_usuario") or {}).get("ocupacion")
+        if ocp in _OCUPACION_NIVELES:
+            coef, label = _OCUPACION_NIVELES[ocp]
+            lineas.append(f"Ocupación: {label} (x{coef})")
         if cur.get("t2m_c") is not None:
             lineas.append(f"Temperatura prevista: {cur['t2m_c']:.1f} °C")
         partes.append("DATOS REALES DE ESTA PREDICCIÓN:\n" + "\n".join(lineas))
     partes.append(
         "El usuario pregunta sobre su parte. Responde en 2-3 frases con los "
         "datos reales de ESTA predicción (porcentaje, factores, ubicación), "
-        "sin textos genéricos."
+        "sin textos genéricos. Adapta la respuesta al contexto de la persona "
+        "(trabajo en obra, oficina, deporte...): nunca le digas 'reduce la "
+        "exposición en interiores' ni repitas consejos genéricos que no "
+        "apliquen a su situación."
     )
     return "\n\n".join(partes)
 
@@ -1451,7 +1520,42 @@ def _contexto_parte_conversacion(conv: dict) -> str:
 async def _preguntar_al_rag(texto: str, conv: dict, contexto: str | None = None) -> str:
     """Pregunta libre al LLM con RAG. `contexto` es el parte ya entregado."""
     config = LLMConfig(model=conv["modelo"])
-    res = await asyncio.to_thread(ask_with_rag, texto, 3, 3, config, contexto)
+    # Extraer el último resultado de la predicción para obtener el perfil de usuario y factores
+    ultimo_resultado = conv.get("ultimo_resultado") or {}
+    # Perfil del usuario desde el último resultado (si está presente); de lo contrario, reconstruir desde los datos de la conversación
+    perfil_usuario = ultimo_resultado.get("perfil_usuario") or {}
+    if not perfil_usuario:
+        # Reconstruir el perfil igual que en ejecutar_prediccion
+        data = conv.get("data") or {}
+        perfil_usuario = {
+            "sexo": data.get("sexo", "hombre"),
+            "edad": data.get("edad"),
+            "aclimatado": data.get("aclimatado", False),
+            "nivel_actividad": data.get("nivel_actividad", "ligera"),
+            "duracion_actividad_h": data.get("duracion_h", 1),
+            "hora_inicio": data.get("hora_inicio", 10),
+            "comorbilidades": data.get("comorbilidades", set()),
+            "farmacos": data.get("farmacos", set()),
+        }
+        if data.get("porcentaje_grasa") is not None:
+            perfil_usuario["porcentaje_grasa"] = data["porcentaje_grasa"]
+        if data.get("fototipo") is not None:
+            perfil_usuario["fototipo"] = data["fototipo"]
+        if data.get("deporte"):
+            perfil_usuario["deporte"] = data["deporte"]
+        sit_social = data.get("situacion_social") or set()
+        if sit_social:
+            perfil_usuario["situacion_social"] = set(sit_social)
+        previo = data.get("estado_previo") or set()
+        for clave in ESTADO_PREVIO_OPTS:
+            if clave in previo:
+                perfil_usuario[clave] = True
+        if data.get("entrenado") is not None:
+            perfil_usuario["entrenado"] = data["entrenado"]
+        if data.get("ocupacion"):
+            perfil_usuario["ocupacion"] = data["ocupacion"]
+    # Llamar a ask_with_rag con el perfil para adaptación contextual
+    res = await asyncio.to_thread(ask_with_rag, texto, 3, 3, config, contexto, perfil_usuario)
     return res.get("answer") or (
         f"El LLM no respondió. Revisa que {conv['modelo']} esté disponible."
     )
@@ -1660,14 +1764,15 @@ def _perfil_prediccion_desde_rutina(perfil: dict, rutina: dict) -> dict:
 
 
 def _etiqueta_rutina(rutina: dict) -> str:
-    """'Trabajo 8:00-16:00 (campo)' o 'Entreno 18:00-20:00 (correr)'."""
+    """'Trabajo 8:00-16:00 (Campo x2.7)' o 'Entreno 18:00-20:00 (correr)'."""
     nombre = rutina["nombre"].capitalize()
     ventana = f"{_formato_hora(rutina['hora_inicio'])}-{_formato_hora(rutina['hora_fin'])}"
     actividad = ""
     if rutina.get("deporte"):
         actividad = f" ({rutina['deporte']})"
     elif rutina.get("ocupacion"):
-        actividad = f" (trabajo: {rutina['ocupacion']})"
+        etiqueta = _etiqueta_ocupacion(rutina["ocupacion"])
+        actividad = f" ({etiqueta})" if etiqueta else f" (trabajo: {rutina['ocupacion']})"
     return f"{nombre} {ventana}{actividad}"
 
 
@@ -1820,6 +1925,16 @@ async def procesar_update(update: dict) -> None:
             respuesta = await procesar_mensaje(chat_id, texto)
             if respuesta:
                 kb = _kb_edicion_perfil() if _db.buscar_por_telegram(str(chat_id)) else None
+                await enviar_mensaje(chat_id, respuesta, kb)
+            return
+
+        if texto.startswith("/rutinas_anadir"):
+            respuesta = await procesar_mensaje(chat_id, texto)
+            if respuesta:
+                # BOT-015: si la rutina es de trabajo queda pendiente y la
+                # respuesta es la pregunta del tipo, con sus botones inline.
+                conv_actual = _conversaciones.get(chat_id, {})
+                kb = _kb_tipo_trabajo("rutina_tipo_") if conv_actual.get("_rutina_pendiente") else None
                 await enviar_mensaje(chat_id, respuesta, kb)
             return
 

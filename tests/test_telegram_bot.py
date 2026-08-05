@@ -287,11 +287,12 @@ class TestTemplate:
             ],
         }
         texto = _format_template(result, "Sevilla")
-        assert "🟡 Nivel de riesgo: PELIGRO (72%)" in texto
+        # BOT-013: la clase va anclada en su escala y el % como frecuencia
+        assert "Sevilla — PELIGRO, el nivel más alto de tres" in texto
+        assert "en unos 72 el calor te pasaría factura" in texto
         assert "🌡️ Temperatura prevista: 38.0 °C" in texto
         assert "☀️ Índice UV (media): 8" in texto
         assert "Recomendación:" in texto
-        assert "Sevilla — Riesgo PELIGRO (72%)" in texto
 
 
 class TestParteFinal:
@@ -318,8 +319,8 @@ class TestParteFinal:
 
     def test_parte_incluye_riesgo_temperatura_uv_y_ubicacion(self):
         texto = _format_template(self._resultado(), "Moaña, Pontevedra")
-        assert "Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%)" in texto
-        assert "🟡 Nivel de riesgo: PRECAUCIÓN (20%)" in texto
+        assert "Moaña, Pontevedra — PRECAUCIÓN, el nivel intermedio de tres" in texto
+        assert "en unos 20 el calor te pasaría factura" in texto
         # Temperatura: media en las horas de actividad (8-9 → (20+22)/2)
         assert "🌡️ Temperatura prevista: 21.0 °C" in texto
         assert "☀️ Índice UV (media): 6" in texto
@@ -1012,9 +1013,10 @@ class TestChatAbiertoTrasStart:
         import climasafeai.bot.telegram_bot as mod
         recibido: dict = {}
 
-        def _fake_rag(q, k1, k2, c, ctx=None):
+        def _fake_rag(q, k1, k2, c, ctx=None, perfil=None):
             recibido["pregunta"] = q
             recibido["contexto"] = ctx
+            recibido["perfil"] = perfil
             return {"answer": "El SPF es el factor de protección solar."}
 
         monkeypatch.setattr(mod, "ask_with_rag", _fake_rag)
@@ -1084,7 +1086,7 @@ class TestChatAbiertoTrasStart:
         )
         monkeypatch.setattr(
             mod, "ask_with_rag",
-            lambda q, k1, k2, c, ctx=None: {"answer": "Usa SPF 30+ y renueva cada 2 horas."},
+            lambda q, k1, k2, c, ctx=None, perfil=None: {"answer": "Usa SPF 30+ y renueva cada 2 horas."},
         )
         enviados: list[str] = []
 
@@ -1236,7 +1238,13 @@ class TestFechaNacimiento:
 
 
 class TestPartePorcentaje:
-    """BOT-010: el parte explica el % de riesgo en lenguaje llano."""
+    """BOT-010: el parte explica el % de riesgo en lenguaje llano.
+
+    BOT-013: ese "lenguaje llano" era otro porcentaje ("21% de probabilidad de
+    riesgo térmico"). Ahora es frecuencia natural, y las dos vías del parte
+    —plantilla y LLM— dicen exactamente lo mismo porque comparten
+    `lineas_parte`.
+    """
 
     def _resultado(self, prob=0.21, clase="PRECAUCIÓN"):
         return {
@@ -1258,8 +1266,33 @@ class TestPartePorcentaje:
 
     def test_parte_porcentaje_plantilla_explica_el_porcentaje(self):
         texto = _format_template(self._resultado(prob=0.21), "Moaña, Pontevedra")
-        assert "21% de probabilidad de riesgo térmico durante la actividad" in texto
-        assert "mayor cuanto más se acerque a 100%" in texto
+        assert "en unos 21 el calor te pasaría factura" in texto
+        # El porcentaje suelto y su coletilla ya no aparecen
+        assert "21%" not in texto
+        assert "mayor cuanto más se acerque a 100%" not in texto
+
+    def test_plantilla_separa_la_clase_del_porcentaje(self):
+        """Criterio 2 de BOT-013 en la vía determinista, sin depender del LLM."""
+        texto = _format_template(self._resultado(prob=0.21), "Moaña, Pontevedra")
+        assert "no es lo que decide tu nivel" in texto
+        assert "umbrales de tu provincia" in texto
+        assert "una cifra baja puede venir con un nivel alto" in texto
+
+    def test_plantilla_avisa_de_la_confianza_baja(self):
+        """Criterio 4: con confianza baja el parte no da la cifra igual de seco."""
+        result = self._resultado(prob=0.21)
+        result["modelos"]["XGBoost_calor"] = {"conformal_confianza": "baja"}
+        texto = _format_template(result, "Moaña, Pontevedra")
+        assert "hoy el modelo tiene poca confianza" in texto
+        assert "ve por el lado seguro" in texto
+
+    def test_plantilla_sin_conformal_no_se_inventa_la_confianza(self):
+        """`conformal_confianza` es None si falta el joblib: se calla, no revienta."""
+        result = self._resultado(prob=0.21)
+        result["modelos"]["XGBoost_calor"] = {"conformal_confianza": None}
+        texto = _format_template(result, "Moaña, Pontevedra")
+        assert "confianza" not in texto.lower()
+        assert "en unos 21 el calor te pasaría factura" in texto
 
     def test_parte_porcentaje_prompt_llm_instruye_explicar(self, monkeypatch):
         import climasafeai.llm.rag_qwen as rag
@@ -1272,8 +1305,7 @@ class TestPartePorcentaje:
             user_msgs = [m for m in messages if m["role"] == "user"]
             capturado["prompt"] = user_msgs[0]["content"]
             return ("Moaña — Riesgo PRECAUCIÓN: 21% de probabilidad de riesgo térmico "
-                    "durante la actividad (mayor cuanto más se acerque a 100%). "
-                    "Mantente hidratado.")
+                    "durante la actividad. Mantente hidratado.")
 
         monkeypatch.setattr(rag, "_chat_litellm", _fake_chat)
         texto = rag.ask_con_perfil(
@@ -1283,9 +1315,14 @@ class TestPartePorcentaje:
             lugar="Moaña, Pontevedra",
         )
 
-        assert "21% de probabilidad de riesgo térmico durante la actividad" in capturado["prompt"]
-        assert "mayor cuanto más se acerque a 100%" in capturado["prompt"]
-        assert "21% de probabilidad de riesgo térmico" in texto
+        # BOT-013: al LLM se le da la frase ya redactada, no un porcentaje que
+        # tenga que explicar él
+        assert "en unos 21 el calor te pasaría factura" in capturado["prompt"]
+        assert "de probabilidad de riesgo térmico durante la actividad" not in capturado["prompt"]
+        # LLM-005: la coletilla del % ya no está en el prompt ni en el ejemplo
+        assert "mayor cuanto más se acerque a 100%" not in capturado["prompt"]
+        # El parte devuelto conserva lo que escribió el LLM
+        assert texto.startswith("Moaña — Riesgo PRECAUCIÓN")
 
 
 class TestChatParteConcisa:
@@ -1321,14 +1358,40 @@ class TestChatParteConcisa:
         assert "2-3 frases" in ctx                   # instrucción de concisión
         assert "sin textos genéricos" in ctx
 
+    def test_chat_parte_concisa_contexto_lleva_multiplicadores_y_ocupacion(self):
+        from climasafeai.bot.telegram_bot import _contexto_parte_conversacion
+
+        conv = self._conv()
+        # Factores como los del pipeline real: dicts {nombre, factor}
+        conv["ultimo_resultado"]["perfil"]["calor"]["factores"] = [
+            {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)", "factor": 2.2},
+            {"nombre": "no aclimatado", "factor": 1.3},
+        ]
+        conv["ultimo_resultado"]["perfil_usuario"] = {
+            "hora_inicio": 8, "duracion_actividad_h": 2, "ocupacion": "construccion",
+        }
+
+        ctx = _contexto_parte_conversacion(conv)
+
+        # LLM-005: el contexto lleva los coeficientes (xN), no solo el nombre
+        assert "trabajo Construcción / albañilería" in ctx
+        assert "x2.2" in ctx
+        assert "no aclimatado (x1.3)" in ctx
+        # La ocupación se pasa con su etiqueta y coeficiente
+        assert "Ocupación:" in ctx
+        assert "Construcción / albañilería (carga pesada, PPE, sol directo) (x2.2)" in ctx
+        # Prohibido el consejo genérico del RAG sin filtrar
+        assert "reduce la exposición en interiores" in ctx
+
     @pytest.mark.asyncio
     async def test_chat_parte_concisa_flujo_pasa_el_contexto_al_rag(self, monkeypatch):
         import climasafeai.bot.telegram_bot as mod
         recibido: dict = {}
 
-        def _fake_rag(q, k1, k2, c, ctx=None):
+        def _fake_rag(q, k1, k2, c, ctx=None, perfil=None):
             recibido["pregunta"] = q
             recibido["contexto"] = ctx
+            recibido["perfil"] = perfil
             return {"answer": "Tu riesgo de calor es del 21% por no estar aclimatado."}
 
         monkeypatch.setattr(mod, "ask_with_rag", _fake_rag)
