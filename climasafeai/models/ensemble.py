@@ -286,15 +286,27 @@ from datetime import date as date_type
 PERS_THRESHOLD_PELIGRO = 0.55
 
 
-def perfil_horario_desde_df(df_hora) -> list[dict] | None:
-    """Perfil horario ``[{"hora", "HI", "temp"}, ...]`` a partir del df por horas.
+def perfil_horario_desde_df(df_hora, target_date=None) -> list[dict] | None:
+    """Perfil horario ``[{"hora", "HI", "temp"}, ...]`` del día objetivo.
 
-    Se queda con el HI máximo de cada hora del día (el df puede traer varios
-    días). Extraído de ``predict_ensemble`` para que otros endpoints puedan
-    construir el mismo perfil sin ejecutar el ensemble entero.
+    Se queda con el HI máximo de cada hora del DÍA OBJETIVO (hoy o
+    ``target_date``), no del máximo por hora de todos los días que traiga el
+    df. El df_hora concatenado (14 días de histórico + el día objetivo) solo
+    debe usarse entero para el LSTM y las features; el perfil del usuario se
+    filtra por fecha ANTES de agrupar (bug DATA-003: sin filtrar mezclaba días
+    y proyectaba picos de días pasados). Si ``target_date`` no se pasa, se usa
+    la última fecha presente en el df. Extraído de ``predict_ensemble`` para
+    que otros endpoints puedan construir el mismo perfil sin ejecutar el
+    ensemble entero.
     """
     if df_hora is None or "datetime" not in df_hora.columns or "heat_index_c" not in df_hora.columns:
         return None
+
+    if target_date is not None:
+        dia_objetivo = pd.to_datetime(target_date).date()
+    else:
+        dia_objetivo = pd.to_datetime(df_hora["datetime"]).dt.date.max()
+    df_hora = df_hora[pd.to_datetime(df_hora["datetime"]).dt.date == dia_objetivo]
 
     horas_agrupadas = {}
     temp_por_hora = {}
@@ -510,7 +522,9 @@ def predict_ensemble(
 
     perfil_aplicado = {}
 
-    perfil_horario = perfil_horario_desde_df(df_hora)
+    perfil_horario = perfil_horario_desde_df(
+        df_hora, target_date=target_date or weather.get("target_date")
+    )
     if perfil_horario and perfil:
         perfil["_perfil_horario"] = perfil_horario
 

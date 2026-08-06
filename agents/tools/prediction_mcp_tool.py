@@ -565,9 +565,9 @@ def predict_group_risk(
         "clase": "PELIGRO" if pct_peligro > 20 else ("PRECAUCION" if pct_peligro > 5 else "SEGURO"),
         "factor_extra": round(factor_extra, 3),
         "factores_grupo": factores_activos,
-        "factores_detalle": c["factores_detalle"],
+        "factores_detalle": factores_detalle,
         "demografico": demografico,
-        "resumen": _generar_resumen(pct_peligro, total_peligro, total_precaucion, total_seguros, factor_extra, c["factores_detalle"], c["actividad"]),
+        "resumen": _generar_resumen(pct_peligro, total_peligro, total_precaucion, total_seguros, factor_extra, factores_detalle, actividad),
     }
 
 
@@ -603,7 +603,7 @@ def predict_age_curves(
     if df_hora is None or df_hora.empty:
         return {"error": "No se pudieron obtener datos meteorológicos"}
 
-    perfil_horario = perfil_horario_desde_df(df_hora)
+    perfil_horario = perfil_horario_desde_df(df_hora, target_date=weather.get("target_date"))
     perfil["_perfil_horario"] = perfil_horario
 
     result = _try_prediction(lat, lon, provincia, perfil, target_date)

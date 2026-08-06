@@ -787,7 +787,9 @@ async def api_curvas_edad(body: dict):
                 lat=body.get("lat"), lon=body.get("lon"),
                 provincia=body.get("provincia", "Madrid"), target_date=target_date,
             )
-            perfil_horario = perfil_horario_desde_df(weather.get("df_hora"))
+            perfil_horario = perfil_horario_desde_df(
+                weather.get("df_hora"), target_date=weather.get("target_date")
+            )
         except Exception as exc:
             return {"error": str(exc)}
     if not perfil_horario:
@@ -1092,7 +1094,23 @@ async def api_riesgo_colectivo(body: dict):
         tag = body.get("tag", "").strip()
         if not tag:
             return {"error": "tag requerido"}
-                # Parámetros del grupo que sobreescriben a los saved del perfil
+
+        # La ubicación y la fecha salen del body igual que en el modo número:
+        # aquí no se pasa por _calcular_riesgo_colectivo, así que hay que
+        # resolverlas en esta rama (antes no existían y cada persona fallaba).
+        lat = body.get("lat")
+        lon = body.get("lon")
+        provincia = body.get("provincia", "Madrid")
+        date_obj = None
+        if body.get("fecha"):
+            try:
+                from datetime import date as date_type
+                date_obj = date_type.fromisoformat(body["fecha"])
+            except ValueError:
+                pass
+        from climasafeai.models.ensemble import predict_ensemble
+
+        # Parámetros del grupo que sobreescriben a los saved del perfil
         hora_inicio = body.get("hora_inicio")
         duracion = body.get("duracion")
         nivel_actividad = body.get("actividad")
