@@ -128,7 +128,7 @@ class KnowledgeAgent(BaseAgent):
         if graph_exists:
             try:
                 graph = GraphifyTool.load_graph(root)
-                n_nodes, n_edges = len(graph["nodes"]), len(graph["edges"])
+                n_nodes, n_edges = len(graph["nodes"]), len(GraphifyTool._links(graph))
             except Exception:  # noqa: BLE001 — grafo corrupto, no debe tumbar el status
                 pass
 
@@ -316,7 +316,7 @@ class KnowledgeAgent(BaseAgent):
         if GraphifyTool.graph_exists(root):
             try:
                 g = GraphifyTool.load_graph(root)
-                graph_stats = {"nodes": len(g["nodes"]), "edges": len(g["edges"])}
+                graph_stats = {"nodes": len(g["nodes"]), "edges": len(GraphifyTool._links(g))}
             except Exception:  # noqa: BLE001
                 pass
 

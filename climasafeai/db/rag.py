@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 import struct
@@ -79,6 +80,13 @@ def _llm_model() -> str:
     return os.getenv("RAG_MODEL", "llama-3.3-70b-versatile")
 
 
+def _hash_texto(texto: str) -> str:
+    """Huella del contenido embebido. La detección de cambios se hace con esto
+    y no con la clave (ruta::sección o factor_id): editar el cuerpo sin tocar
+    el título dejaba el fragmento viejo indexado para siempre."""
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
 def _factor_text(f: dict) -> str:
     parts = [f.get("nombre") or f["clave"], f"tipo: {f['tipo']}", f"categoría: {f['categoria']}"]
     if f.get("coef") is not None:
@@ -124,7 +132,8 @@ class RAG:
                     tipo TEXT NOT NULL,
                     categoria TEXT NOT NULL,
                     clave TEXT NOT NULL,
-                    texto TEXT NOT NULL
+                    texto TEXT NOT NULL,
+                    hash TEXT
                 )
             """)
             conn.execute(f"""
@@ -139,27 +148,49 @@ class RAG:
                     titulo TEXT NOT NULL,
                     seccion TEXT,
                     texto TEXT NOT NULL,
-                    palabras INTEGER NOT NULL DEFAULT 0
+                    palabras INTEGER NOT NULL DEFAULT 0,
+                    hash TEXT
                 )
             """)
+            # Bases ya creadas antes de RAG-005 no tienen la columna. Sin hash
+            # se comportan como antes (todo se ve como cambiado) hasta el
+            # primer sync, que las rellena.
+            for tabla in ("factores_vec_src", "docs_vec_src"):
+                columnas = {r["name"] for r in conn.execute(f"PRAGMA table_info({tabla})")}
+                if "hash" not in columnas:
+                    conn.execute(f"ALTER TABLE {tabla} ADD COLUMN hash TEXT")
         self.sync_factores()
         self.sync_documentos()
 
     def sync_factores(self) -> int:
+        """Indexa los factores nuevos y REINDEXA los que cambiaron de contenido
+        (nombre, coeficiente o DOI): la comparación es por hash del texto."""
         nuevas = 0
         with self._conn() as conn:
             rows = conn.execute("""
-                SELECT f.id, f.tipo, f.categoria, f.clave, f.nombre, f.coef, f.doi, f.poblacion
+                SELECT f.id, f.tipo, f.categoria, f.clave, f.nombre, f.coef, f.doi, f.poblacion,
+                       s.vec_rowid as _vec_rowid, s.hash as _hash
                 FROM factores_riesgo f
                 LEFT JOIN factores_vec_src s ON f.id = s.factor_id
-                WHERE s.factor_id IS NULL
                 ORDER BY f.id
             """).fetchall()
 
             model = _get_embedder()
             for r in rows:
                 f = dict(r)
+                vec_rowid_previo = f.pop("_vec_rowid", None)
+                hash_previo = f.pop("_hash", None)
                 texto = _factor_text(f)
+                hash_actual = _hash_texto(texto)
+                if vec_rowid_previo is not None and hash_previo == hash_actual:
+                    continue
+
+                # Cambió: fuera la fila vieja antes de insertar, o stats()
+                # contaría el factor dos veces.
+                if vec_rowid_previo is not None:
+                    conn.execute("DELETE FROM factores_vec WHERE rowid = ?", (vec_rowid_previo,))
+                    conn.execute("DELETE FROM factores_vec_src WHERE vec_rowid = ?", (vec_rowid_previo,))
+
                 emb = model.encode(texto)
                 emb_bytes = struct.pack(f"{len(emb)}f", *emb)
                 cur = conn.execute(
@@ -167,8 +198,8 @@ class RAG:
                 )
                 vec_rowid = cur.lastrowid
                 conn.execute(
-                    "INSERT INTO factores_vec_src (vec_rowid, factor_id, tipo, categoria, clave, texto) VALUES (?, ?, ?, ?, ?, ?)",
-                    (vec_rowid, f["id"], f["tipo"], f["categoria"], f["clave"], texto),
+                    "INSERT INTO factores_vec_src (vec_rowid, factor_id, tipo, categoria, clave, texto, hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (vec_rowid, f["id"], f["tipo"], f["categoria"], f["clave"], texto, hash_actual),
                 )
                 nuevas += 1
         return nuevas
@@ -225,15 +256,17 @@ class RAG:
         return secciones
 
     def _documentos_nuevos(self, project_root: Path) -> list[dict[str, Any]]:
-        """Escanea documentacion/ y devuelve los fragmentos no indexados."""
+        """Escanea documentacion/ y devuelve los fragmentos nuevos y los que
+        cambiaron de contenido. Cada fragmento a reindexar lleva el
+        ``_vec_rowid`` de su fila vieja para que sync la borre antes."""
         docs_dir = project_root / DOCS_DIR
         if not docs_dir.is_dir():
             return []
         with self._conn() as conn:
             indexed = {
-                row["ruta"] + "::" + (row["seccion"] or "")
+                row["ruta"] + "::" + (row["seccion"] or ""): (row["vec_rowid"], row["hash"])
                 for row in conn.execute(
-                    "SELECT DISTINCT ruta, COALESCE(seccion,'') as seccion FROM docs_vec_src"
+                    "SELECT ruta, COALESCE(seccion,'') as seccion, vec_rowid, hash FROM docs_vec_src"
                 ).fetchall()
             }
 
@@ -245,7 +278,12 @@ class RAG:
                 continue
             for chunk in self._chunks_desde_md(md_file):
                 key = chunk["ruta"] + "::" + (chunk["seccion"] or "")
-                if key not in indexed:
+                chunk["hash"] = _hash_texto(chunk["texto"])
+                previo = indexed.get(key)
+                if previo is None:
+                    chunks_nuevos.append(chunk)
+                elif previo[1] != chunk["hash"]:
+                    chunk["_vec_rowid"] = previo[0]
                     chunks_nuevos.append(chunk)
         return chunks_nuevos
 
@@ -259,14 +297,21 @@ class RAG:
         model = _get_embedder()
         with self._conn() as conn:
             for c in chunks:
+                # Fragmento que ya existía y cambió: fuera la fila vieja, o
+                # stats() contaría dos veces la misma sección.
+                vec_rowid_previo = c.get("_vec_rowid")
+                if vec_rowid_previo is not None:
+                    conn.execute("DELETE FROM docs_vec WHERE rowid = ?", (vec_rowid_previo,))
+                    conn.execute("DELETE FROM docs_vec_src WHERE vec_rowid = ?", (vec_rowid_previo,))
+
                 emb = model.encode(c["texto"])
                 emb_bytes = struct.pack(f"{len(emb)}f", *emb)
                 cur = conn.execute(
                     "INSERT INTO docs_vec (embedding) VALUES (?)", (emb_bytes,)
                 )
                 conn.execute(
-                    "INSERT INTO docs_vec_src (vec_rowid, ruta, titulo, seccion, texto, palabras) VALUES (?, ?, ?, ?, ?, ?)",
-                    (cur.lastrowid, c["ruta"], c["titulo"], c["seccion"], c["texto"], c["palabras"]),
+                    "INSERT INTO docs_vec_src (vec_rowid, ruta, titulo, seccion, texto, palabras, hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (cur.lastrowid, c["ruta"], c["titulo"], c["seccion"], c["texto"], c["palabras"], c["hash"]),
                 )
         return len(chunks)
 
