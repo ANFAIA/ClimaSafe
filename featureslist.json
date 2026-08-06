@@ -329,8 +329,11 @@
         "Si se anade: make lint y make typecheck no se pisan (ruff no hace type checking)",
         "init.sh sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-06",
+      "review_rounds": 0,
+      "blocked_reason": "Pospuesta: el usuario prioriza ejecutar el fine-tuning vía Google Colab (LLM-006). Se retoma cuando LLM-006 esté cerrada."
     },
     {
       "id": "BAYES-001",
@@ -1130,8 +1133,28 @@
         "Hay un test de regresion que construye un df_hora con dos dias (uno caluroso y uno templado) y comprueba que el perfil solo usa el dia pedido",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-06",
+      "review_rounds": 0,
+      "blocked_reason": "En curso por opencode en paralelo: el filtro por dia ya esta en perfil_horario_desde_df pero falta arreglar la prioridad forecast vs archive en _generar_features_completas"
+    },
+    {
+      "id": "LLM-006",
+      "title": "Fine-tuning de Qwen en Google Colab (GPU T4 gratuita)",
+      "description": "Fine-tuning de Qwen en Google Colab (GPU T4 gratuita)",
+      "acceptance_criteria": [
+        "Notebook de Colab que instala unsloth y entrena qwen2.5-1.5b en QLoRA con data/llm real (300/100) y los hiperparametros de fine_tune.py",
+        "El notebook persiste el adaptador LoRA y el GGUF q4_k_m en Google Drive",
+        "El dataset se empaqueta con verificacion de version (300/100, no la fake) para subirlo a Colab",
+        "Instrucciones paso a paso en documentacion (abrir Colab, activar GPU T4, subir dataset, ejecutar, bajar artefactos a models/llm/)",
+        "El notebook no depende de paths locales de esta maquina (solo /content y Drive)",
+        "Verificacion local sin GPU: sintaxis valida y estructura del notebook comprobada"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-06",
+      "review_rounds": 0
     }
   ]
 }
