@@ -1,0 +1,7 @@
+# .vault/ es el DESTINO de la exportacion de graphify (una nota por nodo del
+# grafo), no una fuente. Sin esta linea, cada `graphify --update` reescanea
+# las notas que el propio export genero en la sincronizacion anterior y las
+# trata como documentacion nueva del proyecto: la ultima vez infló "docs
+# cambiados" de 149 (los reales) a 4613, porque 4464 eran notas autogeneradas
+# re-ingeridas como si fueran fuente. Bucle de realimentacion, no bug de cuota.
+.vault/

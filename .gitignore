@@ -148,6 +148,27 @@ data/raw/*
 # --- graphify ---
 graphify-out/cache/
 
+# --- .vault: solo se versiona lo curado a mano, no la exportacion de graphify ---
+# graphify exporta UNA nota por nodo del grafo (cada funcion, rationale, cita)
+# como fichero suelto en la raiz de .vault/. Eso es basura regenerable: no se
+# sube. Se versionan las carpetas curadas (00_META...07_REFERENCIAS, .obsidian/)
+# y el indice 05_AGENTES.md. Si graphify exportara a subcarpetas nuevas, quedan
+# cubiertas por .vault/* igualmente.
+.vault/*
+!.vault/.obsidian/
+!.vault/00_META/
+!.vault/01_PROYECTO/
+!.vault/02_DATOS/
+!.vault/03_MODELOS/
+!.vault/04_VISUALIZACIONES/
+!.vault/05_AGENTES/
+!.vault/06_OBSERVACIONES/
+!.vault/07_REFERENCIAS/
+!.vault/05_AGENTES.md
+
+# --- .tmp: basura de ejecucion (pytest, uv) ---
+.tmp/
+
 # --- LLM ---
 .claude
 .opencode/node_modules/
