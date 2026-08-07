@@ -633,8 +633,11 @@ def riesgo_horario_acumulado(
             r = odds / (1.0 + odds)
         else:
             r = base
+        # DATA-004: con perfil sub-horario (res_min<60) la hora NO se trunca a
+        # int; con perfil horario (res_min=60) e["hora"] ya es int y la salida
+        # es idéntica a la histórica.
         out.append({
-            "hora": int(e["hora"]),
+            "hora": e["hora"],
             "riesgo": round(min(r, 0.99), 4),
             "hi": round(hi, 1),
             "temp": e.get("temp"),
@@ -669,28 +672,65 @@ def recomendar_horario(
     Usa :func:`riesgo_horario_acumulado` y busca la ventana contigua de menor
     riesgo medio, dando prioridad a horas de luz razonables (6-21h). Devuelve
     ``{"hora_inicio", "hora_fin", "riesgo_medio", "riesgo_actual"}`` o None.
+
+    Resolución (DATA-004): el perfil horario puede traer puntos sub-horarios
+    (``perfil_horario_desde_df(res_min=5/15/30)``). Si la curva es horaria se
+    ejecuta el algoritmo histórico exacto, punto por punto (ventanas de horas
+    enteras). Si trae puntos sub-horarios, la misma ventana deslizante se
+    desliza por los puntos reales (cada 15 min, p. ej.) y ``hora_inicio`` /
+    ``hora_fin`` ganan resolución real. El contrato de salida no cambia; la
+    lógica no se duplica fuera de esta función.
     """
     curva = riesgo_horario_acumulado(perfil_horario, perfil)
     if not curva:
         return None
-    dur = int(round(duracion_h or perfil.get("duracion_actividad_h") or 2))
-    dur = max(1, dur)
     por_hora = {c["hora"]: c["riesgo"] for c in curva}
-    horas_dia = [h for h in range(6, 22) if h in por_hora]
-    if len(horas_dia) < dur:
-        horas_dia = sorted(por_hora)
+    puntos = sorted(por_hora)
+    paso = min(puntos[i + 1] - puntos[i] for i in range(len(puntos) - 1)) if len(puntos) > 1 else 1.0
+
+    if paso >= 1.0:
+        # ——— Modo horario: algoritmo histórico intacto (criterio 5 DATA-004). ———
+        dur = int(round(duracion_h or perfil.get("duracion_actividad_h") or 2))
+        dur = max(1, dur)
+        horas_dia = [h for h in range(6, 22) if h in por_hora]
+        if len(horas_dia) < dur:
+            horas_dia = sorted(por_hora)
+        mejor = None
+        for i in range(0, len(horas_dia) - dur + 1):
+            tramo = horas_dia[i:i + dur]
+            if tramo[-1] - tramo[0] != dur - 1:
+                continue  # ventana no contigua
+            medio = sum(por_hora[h] for h in tramo) / dur
+            if mejor is None or medio < mejor["riesgo_medio"]:
+                mejor = {"hora_inicio": tramo[0], "hora_fin": tramo[0] + dur, "riesgo_medio": round(medio, 4)}
+        if mejor is None:
+            return None
+        h_ini_actual = perfil.get("hora_inicio")
+        if h_ini_actual is not None:
+            actual = [por_hora[h] for h in range(int(h_ini_actual), int(h_ini_actual) + dur) if h in por_hora]
+            mejor["riesgo_actual"] = round(sum(actual) / len(actual), 4) if actual else None
+        return mejor
+
+    # ——— Modo sub-horario (res_min < 60): la ventana se desliza por los puntos reales. ———
+    dur = float(duracion_h if duracion_h is not None else perfil.get("duracion_actividad_h") or 2)
+    dur = max(1.0, dur)
+    n = max(1, int(round(dur / paso)))
+    span = (n - 1) * paso
+    horas_dia = [h for h in puntos if 6 <= h < 22]
+    if len(horas_dia) < n:
+        horas_dia = puntos
     mejor = None
-    for i in range(0, len(horas_dia) - dur + 1):
-        tramo = horas_dia[i:i + dur]
-        if tramo[-1] - tramo[0] != dur - 1:
+    for i in range(0, len(horas_dia) - n + 1):
+        tramo = horas_dia[i:i + n]
+        if abs((tramo[-1] - tramo[0]) - span) > 1e-9:
             continue  # ventana no contigua
-        medio = sum(por_hora[h] for h in tramo) / dur
+        medio = sum(por_hora[h] for h in tramo) / n
         if mejor is None or medio < mejor["riesgo_medio"]:
             mejor = {"hora_inicio": tramo[0], "hora_fin": tramo[0] + dur, "riesgo_medio": round(medio, 4)}
     if mejor is None:
         return None
     h_ini_actual = perfil.get("hora_inicio")
     if h_ini_actual is not None:
-        actual = [por_hora[h] for h in range(int(h_ini_actual), int(h_ini_actual) + dur) if h in por_hora]
+        actual = [por_hora[h] for h in puntos if h_ini_actual <= h < h_ini_actual + dur]
         mejor["riesgo_actual"] = round(sum(actual) / len(actual), 4) if actual else None
     return mejor

@@ -631,6 +631,9 @@ async def api_predict(body: dict, date: str | None = None):
     provincia = body.get("provincia", "Madrid")
     lat = body.get("lat")
     lon = body.get("lon")
+    # Resolución del perfil horario en minutos por punto (5/15/30/60; default 60
+    # = comportamiento histórico de un punto por hora). DATA-007.
+    resolucion = body.get("resolucion", 60)
     raw_perfil = body.get("perfil") or {}
     perfil_id = raw_perfil.get("perfil_id")
     perfil = _normalize_perfil(raw_perfil)
@@ -652,7 +655,8 @@ async def api_predict(body: dict, date: str | None = None):
 
     try:
         from climasafeai.models.ensemble import predict_ensemble
-        result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=target_date)
+        result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil,
+                                  target_date=target_date, resolucion=resolucion)
     except Exception as exc:
         return {"error": str(exc)}
 

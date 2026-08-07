@@ -286,7 +286,7 @@ from datetime import date as date_type
 PERS_THRESHOLD_PELIGRO = 0.55
 
 
-def perfil_horario_desde_df(df_hora, target_date=None) -> list[dict] | None:
+def perfil_horario_desde_df(df_hora, target_date=None, res_min: int = 60) -> list[dict] | None:
     """Perfil horario ``[{"hora", "HI", "temp"}, ...]`` del día objetivo.
 
     Se queda con el HI máximo de cada hora del DÍA OBJETIVO (hoy o
@@ -298,9 +298,23 @@ def perfil_horario_desde_df(df_hora, target_date=None) -> list[dict] | None:
     la última fecha presente en el df. Extraído de ``predict_ensemble`` para
     que otros endpoints puedan construir el mismo perfil sin ejecutar el
     ensemble entero.
+
+    ``res_min`` — resolución del perfil en minutos (5, 15, 30 o 60; por defecto
+    60). Con 60 devuelve exactamente el perfil horario histórico: un punto por
+    hora con el HI máximo de esa hora. Con menos, añade los puntos intermedios
+    por interpolación LINEAL entre los máximos horarios consecutivos; la fuente
+    (Open-Meteo forecast/archive) solo publica datos horarios, no hay fuente
+    sub-horaria que consultar (DATA-004). La marca :00 de cada hora conserva el
+    máximo horario; los puntos :15/:30/:45 salen de la interpolación y la
+    última hora del día se mantiene plana (no hay hora siguiente a la que
+    interpolar). El campo ``hora`` no se redondea a propósito (la resolución de
+    5 min no es decimal exacta y la ventana deslizante necesita el paso
+    exacto); ``HI`` y ``temp`` sí se redondean como el resto del perfil.
     """
     if df_hora is None or "datetime" not in df_hora.columns or "heat_index_c" not in df_hora.columns:
         return None
+    if res_min not in (5, 15, 30, 60):
+        raise ValueError(f"res_min debe ser 5, 15, 30 o 60, no {res_min!r}")
 
     if target_date is not None:
         dia_objetivo = pd.to_datetime(target_date).date()
@@ -323,10 +337,44 @@ def perfil_horario_desde_df(df_hora, target_date=None) -> list[dict] | None:
 
     if not horas_agrupadas:
         return None
-    return [
-        {"hora": h, "HI": hi, "temp": temp_por_hora.get(h)}
-        for h, hi in sorted(horas_agrupadas.items())
-    ]
+    horas = sorted(horas_agrupadas)
+    if res_min == 60:
+        return [
+            {"hora": h, "HI": horas_agrupadas[h], "temp": temp_por_hora.get(h)}
+            for h in horas
+        ]
+
+    paso = res_min / 60.0
+    n_intermedios = int(60 / res_min)
+    perfil = []
+    for i, h in enumerate(horas):
+        hi = horas_agrupadas[h]
+        t = temp_por_hora.get(h)
+        perfil.append({"hora": float(h), "HI": hi, "temp": t})
+        if i + 1 < len(horas):
+            h_next = horas[i + 1]
+            hi_next = horas_agrupadas[h_next]
+            t_next = temp_por_hora.get(h_next)
+        else:
+            h_next = h  # última hora del día: se mantiene plana
+            hi_next = hi
+            t_next = t
+        span = h_next - h
+        for q in range(1, n_intermedios):
+            if span > 0:
+                frac = q * paso / span
+                hi_q = hi + frac * (hi_next - hi)
+                t_q = t + frac * (t_next - t) if t is not None and t_next is not None else None
+            else:
+                # Última hora del día: sin hora siguiente, se mantiene plana.
+                hi_q = hi
+                t_q = t
+            perfil.append({
+                "hora": h + q * paso,
+                "HI": round(hi_q, 4),
+                "temp": round(t_q, 4) if t_q is not None else None,
+            })
+    return perfil
 
 
 def _proba_from_formula(current: dict) -> dict:
@@ -486,7 +534,15 @@ def predict_ensemble(
     perfil: dict | None = None,
     target_date: date_type | None = None,
     weather: dict | None = None,
+    resolucion: int = 60,
 ) -> dict:
+    """Predice el riesgo cardiovascular de una persona (ensemble conformal).
+
+    ``resolucion`` — resolución del perfil horario en minutos por punto (5, 15,
+    30 o 60; por defecto 60). Con 60 la salida es exactamente la de siempre:
+    un punto por hora. Valores menores interpolan el HI entre horas (ver
+    ``perfil_horario_desde_df``); el resto del contrato de salida no cambia.
+    """
     if weather is None:
         weather = fetch_weather_data(lat=lat, lon=lon, provincia=provincia, target_date=target_date)
 
@@ -523,7 +579,8 @@ def predict_ensemble(
     perfil_aplicado = {}
 
     perfil_horario = perfil_horario_desde_df(
-        df_hora, target_date=target_date or weather.get("target_date")
+        df_hora, target_date=target_date or weather.get("target_date"),
+        res_min=resolucion,
     )
     if perfil_horario and perfil:
         perfil["_perfil_horario"] = perfil_horario

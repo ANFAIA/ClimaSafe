@@ -57,7 +57,7 @@ def sin_prediccion(monkeypatch):
     """`_try_prediction` falso: devuelve perfil horario sin llamar al ensemble."""
     llamadas: list[dict] = []
 
-    def _fake(lat, lon, provincia, perfil, target_date=None):
+    def _fake(lat, lon, provincia, perfil, target_date=None, resolucion=60):
         llamadas.append(dict(perfil))
         return _resultado(_perfil_horario())
 
@@ -144,7 +144,7 @@ class TestGraficaRiesgoHorarioMCP:
 
     def test_sin_serie_horaria_devuelve_texto_claro(self, monkeypatch):
         monkeypatch.setattr(mcp, "_try_prediction",
-                            lambda lat, lon, provincia, perfil, target_date=None: _resultado([]))
+                            lambda lat, lon, provincia, perfil, target_date=None, resolucion=60: _resultado([]))
         out = mcp.grafica_riesgo_horario_mcp(lat=42.29, lon=-8.81, provincia="Pontevedra")
         assert isinstance(out, str)
         assert "no hay" in out.lower()

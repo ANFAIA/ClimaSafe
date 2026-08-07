@@ -240,3 +240,183 @@ def test_puede_salir_peligro_con_porcentaje_bajo(monkeypatch):
     assert r["clase_final_label"] == "PELIGRO"
     assert r["perfil"]["calor"]["prob_personalizada"] < 0.10
     assert ">=39" in r["override_fisico"]["razon"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA-004: recomendar_horario y pico_riesgo_actividad sobre perfil sub-horario
+# ─────────────────────────────────────────────────────────────────────────────
+
+from climasafeai.features.personalizacion import (
+    riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad,
+)
+from climasafeai.models.ensemble import perfil_horario_desde_df
+from datetime import date, datetime
+
+
+def _perfil_horario_campana() -> list[dict]:
+    """24 h con campana de HI (pico 41 a las 16h), como la gráfica MCP."""
+    return [
+        {"hora": h, "HI": round(20.0 + (41.0 - 20.0) * max(0.0, 1 - abs(h - 16) / 10), 1),
+         "temp": round(15.0 + h * 0.4, 1)}
+        for h in range(24)
+    ]
+
+
+def _df_hora_pico_al_empezar_la_hora() -> pd.DataFrame:
+    """Día donde el mínimo de 1h NO está en una hora en punto: la hora 6 baja de
+    26°C (heredando el calor de las 5:00) hacia las 22°C de las 7:00, y a partir
+    de las 8:00 vuelve a subir. Con 15 min la mejor ventana empieza a las 6:45;
+    en modo horario solo puede elegir la hora 7 completa."""
+    hi = {h: 30.0 for h in range(6)}
+    hi[6] = 26.0
+    hi[7] = 22.0
+    for h in range(8, 24):
+        hi[h] = 24.0
+    return pd.DataFrame([
+        {"datetime": datetime(2026, 7, 21, h), "t2m_c": 25.0, "heat_index_c": hi[h]}
+        for h in range(24)
+    ])
+
+
+def _perfil_usuario(**kw) -> dict:
+    p = {"edad": 40, "sexo": "hombre", "nivel_actividad": "ligera",
+         "hora_inicio": 7, "duracion_actividad_h": 1}
+    p.update(kw)
+    return p
+
+
+def test_recomendar_horario_modo_horario_identico_al_historico():
+    """DATA-004 criterio 5: con perfil horario la recomendación es la de siempre.
+    Valor capturado con el código anterior a DATA-004 (regresión)."""
+    ph = _perfil_horario_campana()
+    perfil = _perfil_usuario(hora_inicio=10, duracion_actividad_h=2)
+    assert recomendar_horario(ph, perfil) == {
+        "hora_inicio": 6, "hora_fin": 8, "riesgo_medio": 0.1254, "riesgo_actual": 0.462,
+    }
+
+
+def test_recomendar_horario_15min_mismo_contrato_y_ventana_subhoraria():
+    """DATA-004 criterio 3: la misma función, sobre el perfil de 15 min, devuelve
+    el mismo contrato y una ventana que se desliza por cuartos de hora."""
+    df = _df_hora_pico_al_empezar_la_hora()
+    ph15 = perfil_horario_desde_df(df, target_date=date(2026, 7, 21), res_min=15)
+    ph60 = perfil_horario_desde_df(df, target_date=date(2026, 7, 21), res_min=60)
+
+    rec60 = recomendar_horario(ph60, _perfil_usuario())
+    rec15 = recomendar_horario(ph15, _perfil_usuario())
+
+    # Modo horario: solo puede elegir la hora entera 7 (la de menor riesgo).
+    assert rec60["hora_inicio"] == 7
+    # Modo 15 min: la ventana de 1h se desliza y empieza a las 6:45, evitando el
+    # tramo caluroso del inicio de la hora 6 (26°C a las 6:00 vs 23°C a las 6:45).
+    assert set(rec15) == {"hora_inicio", "hora_fin", "riesgo_medio", "riesgo_actual"}
+    assert rec15["hora_inicio"] == 6.75
+    assert rec15["hora_fin"] - rec15["hora_inicio"] == 1.0
+    assert rec15["hora_inicio"] % 0.25 == 0  # sigue la malla de 15 min
+
+
+def test_pico_riesgo_actividad_15min_captura_el_repunte_dentro_de_la_hora():
+    """DATA-004 criterio 3: el pico se recalcula sobre la curva de 15 min y ve el
+    repunte hacia la hora siguiente que el pico horario se pierde."""
+    df = _df_hora_pico_al_empezar_la_hora()
+    ph15 = perfil_horario_desde_df(df, target_date=date(2026, 7, 21), res_min=15)
+    ph60 = perfil_horario_desde_df(df, target_date=date(2026, 7, 21), res_min=60)
+    perfil = _perfil_usuario()
+
+    curva15 = riesgo_horario_acumulado(ph15, perfil)
+    curva60 = riesgo_horario_acumulado(ph60, perfil)
+
+    p15 = pico_riesgo_actividad(curva15, perfil)  # ventana 7 a 8
+    p60 = pico_riesgo_actividad(curva60, perfil)
+
+    assert p60 == 0.1692  # el punto de la hora 7 (22°C) no ve la subida a las 8:00
+    assert p15 == pytest.approx(max(c["riesgo"] for c in curva15 if 7 <= c["hora"] < 8), abs=1e-4)
+    assert p15 == pytest.approx(0.2072, abs=1e-4)
+    assert p15 > p60  # el pico de 15 min ve el repunte que el horario pierde
+
+
+def test_recomendar_horario_15min_duracion_subhora_en_cuartos():
+    """DATA-004: una salida de 40 min sobre el perfil de 15 min usa 3 cuartos
+    (45 min) y mantiene el contrato; la resolución ya no la mete entera en un
+    único punto horario."""
+    df = _df_hora_pico_al_empezar_la_hora()
+    ph15 = perfil_horario_desde_df(df, target_date=date(2026, 7, 21), res_min=15)
+    perfil = _perfil_usuario(duracion_actividad_h=40 / 60)
+
+    rec = recomendar_horario(ph15, perfil)
+    assert set(rec) == {"hora_inicio", "hora_fin", "riesgo_medio", "riesgo_actual"}
+    assert 0.25 <= rec["hora_fin"] - rec["hora_inicio"] <= 1.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA-007: predict_ensemble acepta `resolucion` (min por punto, default 60)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _df_hora_dia_completo() -> pd.DataFrame:
+    """24 h de un día con campana de HI (pico 41 a las 16h)."""
+    return pd.DataFrame({
+        "datetime": pd.date_range("2026-08-05 00:00", periods=24, freq="h"),
+        "heat_index_c": [round(20.0 + 21.0 * max(0.0, 1 - abs(h - 16) / 10), 1) for h in range(24)],
+        "t2m_c": [round(15.0 + h * 0.4, 1) for h in range(24)],
+    })
+
+
+def _weather_con_perfil_horario() -> dict:
+    """Weather completo (offline) con un día de datos horarios."""
+    weather = _weather_nan()
+    weather["df_hora"] = _df_hora_dia_completo()
+    weather["target_date"] = "2026-08-05"
+    return weather
+
+
+def _stub_predictores_resolucion(monkeypatch):
+    """Igual que el stub de BUG-001 pero con un día de df_hora (el de arriba)."""
+    import climasafeai.models.ensemble as ensemble
+
+    weather = _weather_con_perfil_horario()
+    monkeypatch.setattr(ensemble, "fetch_weather_data", lambda **kw: weather)
+    monkeypatch.setattr(
+        ensemble, "_predecir_tabular",
+        lambda *a, **k: {"prob_riesgo": 0.3, "conformal_set_size": 2, "clase": 0, "_X": None},
+    )
+    monkeypatch.setattr(
+        ensemble, "_predecir_lstm",
+        lambda *a, **k: {"calor": {"prob_riesgo": 0.4, "clase": 0}, "frio": {"prob_riesgo": 0.1, "clase": 0}},
+    )
+
+
+def test_predict_ensemble_resolucion_60_identico_al_default(monkeypatch):
+    """DATA-007 criterio 1: `resolucion=60` da exactamente el perfil horario de
+    hoy (un punto por hora), idéntico a no pasar el parámetro (default 60)."""
+    _stub_predictores_resolucion(monkeypatch)
+    perfil = {"edad": 40, "sexo": "hombre", "nivel_actividad": "ligera"}
+
+    r_default = predict_ensemble(lat=42.29, lon=-8.81, provincia="Pontevedra", perfil=perfil)
+    r60 = predict_ensemble(lat=42.29, lon=-8.81, provincia="Pontevedra", perfil=perfil, resolucion=60)
+
+    ph_default = r_default["weather"]["perfil_horario"]
+    ph60 = r60["weather"]["perfil_horario"]
+    assert ph60 == ph_default
+    assert len(ph60) == 24
+    assert all(isinstance(p["hora"], int) for p in ph60)
+    # El resto del contrato no cambia: misma clase y perfil aplicado.
+    assert r60["clase_final"] == r_default["clase_final"]
+    assert r60["perfil"] == r_default["perfil"]
+
+
+def test_predict_ensemble_resolucion_15_cuadruplica_los_puntos(monkeypatch):
+    """DATA-007 criterio 2: con `resolucion=15` el perfil horario tiene 4 puntos
+    por hora (96 en un día) y el contrato de salida se mantiene."""
+    _stub_predictores_resolucion(monkeypatch)
+    perfil = {"edad": 40, "sexo": "hombre", "nivel_actividad": "ligera"}
+
+    r15 = predict_ensemble(lat=42.29, lon=-8.81, provincia="Pontevedra", perfil=perfil, resolucion=15)
+
+    ph15 = r15["weather"]["perfil_horario"]
+    assert len(ph15) == 24 * 4
+    # Las anclas :00 conservan el máximo horario (interpolación de DATA-004).
+    assert any(p["hora"] == 16.0 for p in ph15)
+    assert all(p["hora"] % 0.25 == 0 for p in ph15)
+    # Contrato intacto: los campos top-level siguen existiendo.
+    for key in ("clase_final", "clase_final_label", "perfil", "explicacion", "recomendaciones"):
+        assert key in r15

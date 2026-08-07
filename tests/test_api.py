@@ -222,3 +222,44 @@ def test_api_predict_con_persistir_false_no_escribe_en_bbdd(client, db_espia):
     })
     assert response.status_code == 200
     assert db_espia.escrituras == []
+
+
+def test_api_predict_envia_resolucion_a_predict_ensemble(client, monkeypatch):
+    """DATA-007 criterio 3: el body acepta `resolucion` (min por punto) y se lo
+    pasa a predict_ensemble; sin él, el default es 60 (1h)."""
+    from climasafeai.models import ensemble
+
+    capturado: dict = {}
+
+    def _fake(**kwargs):
+        capturado.update(kwargs)
+        return {
+            "clase_final": 0,
+            "modelos": {},
+            "weather": {"lat": kwargs.get("lat"), "lon": kwargs.get("lon"), "perfil_horario": []},
+        }
+
+    monkeypatch.setattr(ensemble, "predict_ensemble", _fake)
+    monkeypatch.setattr("chat.app._db", _DBEspia())
+
+    response = client.post("/api/predict", json={
+        "provincia": "Pontevedra",
+        "lat": 42.29,
+        "lon": -8.81,
+        "perfil": {"edad": 30},
+        "persistir": False,
+        "resolucion": 15,
+    })
+    assert response.status_code == 200
+    assert capturado["resolucion"] == 15
+
+    capturado.clear()
+    response = client.post("/api/predict", json={
+        "provincia": "Pontevedra",
+        "lat": 42.29,
+        "lon": -8.81,
+        "perfil": {"edad": 30},
+        "persistir": False,
+    })
+    assert response.status_code == 200
+    assert capturado["resolucion"] == 60
