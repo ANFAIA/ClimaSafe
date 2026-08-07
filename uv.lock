@@ -571,7 +571,7 @@ wheels = [
 
 [[package]]
 name = "climasafeai"
-version = "0.0.20"
+version = "0.0.26"
 source = { editable = "." }
 dependencies = [
     { name = "cdsapi" },
