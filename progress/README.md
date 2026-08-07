@@ -16,7 +16,8 @@ vez de releer el repositorio entero — menos tokens, menos degradación.
 
 | Fichero | Se escribe con | Qué contiene |
 |---------|----------------|--------------|
-| `current.md` | `harness start` / `harness finish` | Feature en curso, criterios, bitácora y bloqueos |
+| `current.md` | `harness start` / `finish` / `block` | Estado **derivado**: la tarea en curso, o el índice si hay varias |
+| `current-<dueño>.md` | `harness start` | Detalle de una tarea en curso: criterios, bitácora y bloqueos |
 | `history.md` | `harness finish` | Append-only: features cerradas con su evidencia |
 | `<AGENTE>-<FEATURE-ID>.md` | `harness record` | Resultado de una ejecución concreta |
 
@@ -24,6 +25,44 @@ vez de releer el repositorio entero — menos tokens, menos degradación.
 uv run python -m agents --json run harness record \
   --agent explorer --id DATA-001 --verdict ok --content "<informe>"
 ```
+
+## Varios asistentes a la vez: el candado es por dueño
+
+Dos asistentes pueden trabajar en paralelo (uno en opencode, otro en Claude
+Code) si cada uno se identifica al abrir su feature:
+
+```bash
+uv run python -m agents --json run harness start --id ARNES-013 --owner claude
+uv run python -m agents --json run harness start --id DATA-004  --owner opencode
+```
+
+La regla: **un dueño, una feature abierta.** Se pueden tener varias features
+`in_progress` a la vez si son de dueños distintos; abrir una segunda con el
+mismo dueño se rechaza. Todas las features **sin** campo `owner` comparten un
+mismo dueño implícito —el legado—, así que quien no usa `--owner` ve el
+comportamiento de siempre: una sola tarea abierta.
+
+Y por eso `current.md` dejó de ser un fichero que escribe quien pasa por ahí:
+
+- **`current.md` es estado derivado** de `featureslist.json`. `harness` lo
+  regenera entero en cada `start`, `finish` y `block`, mirando qué hay
+  `in_progress` — no quién llamó. Con 0 tareas queda en idle; con 1, es la
+  ficha completa de siempre (mismo formato, mismos campos); con 2 o más, es un
+  índice con feature, dueño, fecha de inicio y ruta al detalle de cada una.
+- **Cada tarea en curso tiene su ficha.** Ahí va el detalle. El fichero se
+  llama por el dueño si lo hay (`current-claude.md`) y por el id de la feature
+  si no (`current-data-004.md`), así que una tarea abierta sin `--owner`
+  tampoco pierde su objetivo ni sus criterios cuando el índice se activa.
+  `finish` y `block` retiran **solo** la ficha de esa feature; las demás no se
+  tocan. Antes `finish` reescribía `current.md` en idle a lo bruto y borraba el
+  trabajo del otro asistente.
+- Una ficha que ya existe no se sobrescribe: la bitácora que haya escrito su
+  dueño se queda.
+- El nombre del dueño se normaliza (minúsculas, sin espacios alrededor) para el
+  candado, y se sanea a `[a-z0-9_-]` para el nombre de fichero.
+
+`current.md` existe siempre —`init.sh` lo comprueba—, tenga o no tareas
+abiertas.
 
 ## Formato de los ficheros de subagente
 
@@ -46,8 +85,9 @@ La cabecera (fecha y veredicto) la pone `harness record`; tú aportas el cuerpo:
 2. **Un fichero por ejecución.** No sobrescribas el resultado de otro subagente.
 3. **Corto.** Si un fichero de progreso pasa de ~100 líneas, resume: el objetivo
    es ahorrar contexto, no fabricar más.
-4. **`current.md` se vacía al cerrar la feature**, y su resumen se añade a
-   `history.md`. Los ficheros de subagente se pueden borrar cuando la feature
+4. **`current.md` no se edita: se regenera.** Al cerrar la feature, su resumen
+   se añade a `history.md` y `current.md` refleja lo que quede abierto (idle si
+   no queda nada). Los ficheros de subagente se pueden borrar cuando la feature
    está en `history.md`.
 
 ## Las otras dos memorias

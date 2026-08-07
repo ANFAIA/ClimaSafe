@@ -13,9 +13,12 @@ código, tests, dependencias y despliegue.
 > uv run python -m agents --json run git commit_with_changelog --message "<msg>"
 > ```
 >
-> Ningún asistente ejecuta `git` ni `gh` por su cuenta ni por iniciativa propia
-> — ni siquiera para aplicar o deshacer un cambio. Se editan los ficheros, se
-> dejan sin commitear, y el humano decide cuándo se commitea.
+> Con una excepción automática: al cerrar una feature, `harness finish` commitea
+> por sí solo **solo** las rutas de ese ticket (las de `--changes` más los
+> ficheros del propio cierre: featureslist.json, progress/, pyproject.toml,
+> README.md). El resto del árbol queda sin commitear y lo decide el humano.
+> Ningún otro asistente ejecuta `git` ni `gh` por su cuenta ni por iniciativa
+> propia — ni siquiera para aplicar o deshacer un cambio.
 
 ---
 

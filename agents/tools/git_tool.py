@@ -43,9 +43,17 @@ class GitTool:
     def is_repo(self) -> bool:
         return self._git("rev-parse", "--is-inside-work-tree").ok
 
-    def status_porcelain(self) -> list[tuple[str, str]]:
-        """Devuelve [(código_estado, ruta), ...] tal y como `git status --porcelain`."""
-        result = self._git("status", "--porcelain")
+    def status_porcelain(self, *, all_untracked: bool = False) -> list[tuple[str, str]]:
+        """
+        Devuelve [(código_estado, ruta), ...] tal y como `git status --porcelain`.
+        Con `all_untracked` (es el `-uall` de git) los untracked se listan fichero
+        a fichero en vez de agruparse por directorio: lo necesita `harness finish`
+        (ARNES-014) para detectar rutas ajenas dentro de un dir untracked.
+        """
+        args = ["status", "--porcelain"]
+        if all_untracked:
+            args.append("-uall")
+        result = self._git(*args)
         entries = []
         for line in result.stdout.splitlines():
             if not line.strip():
@@ -53,6 +61,17 @@ class GitTool:
             code, path = line[:2].strip(), line[3:].strip()
             entries.append((code, path))
         return entries
+
+    def staged_files(self, *paths: str) -> list[str]:
+        """
+        Rutas staged (`git diff --cached --name-only`). Con `paths`, solo las
+        que casan con esos pathspecs: lo usa `harness finish` para saber si tras
+        el filtrado del cierre (ARNES-014) queda algo que commitear.
+        """
+        args = ["diff", "--cached", "--name-only"]
+        if paths:
+            args += ["--", *paths]
+        return [f for f in self._git(*args).stdout.splitlines() if f.strip()]
 
     def diff(self, *, staged: bool = False, name_only: bool = False) -> str:
         args = ["diff"]
@@ -101,7 +120,10 @@ class GitTool:
     def current_branch(self) -> str:
         return self._git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
 
-    def commit(self, message: str) -> ProcessResult:
+    def commit(self, message: str, *paths: str) -> ProcessResult:
+        """Commit del mensaje dado. Con paths, commit parcial acotado a esas rutas (ARNES-014)."""
+        if paths:
+            return self._git("commit", "-m", message, "--", *paths)
         return self._git("commit", "-m", message)
 
     def add(self, *paths: str) -> ProcessResult:

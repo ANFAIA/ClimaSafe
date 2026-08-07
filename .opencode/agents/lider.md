@@ -22,6 +22,12 @@ uv run python -m agents --json run harness start --id <FEATURE-ID>
 # 4. Delegar → ver tabla abajo
 
 # 5. Cerrar. RECHAZA si init.sh no pasa o si no le das evidencia real.
+#    Al cerrar, `finish` commitea automáticamente SOLO las rutas del ticket
+#    (--changes, separadas por ';') más los ficheros del cierre
+#    (featureslist.json, progress/, pyproject.toml, README.md), con mensaje
+#    Conventional Commits (subject `cierra <ID>`) y sin co-autoría. Si no
+#    quedan rutas que commitear o no hay nada staged, avisa y no commitea;
+#    los cambios ajenos al ticket se quedan sin commitear para el siguiente.
 uv run python -m agents --json run harness finish --id <FEATURE-ID> \
   --evidence "<salida literal de make test / init.sh>" \
   --changes "<rutas tocadas>" --decisions "<lo no obvio>"
@@ -119,5 +125,8 @@ Un hallazgo duradero sobre los datos o el modelo no va en `progress/`: pídele a
   rechaza — no intentes rodearlo editando el JSON a mano.)
 - Aceptar «los tests pasan» como evidencia. Exige la salida real del comando.
 - Editar `featureslist.json` o `progress/` a mano. Usa el agente `harness`.
-- Hacer commits, ramas o push salvo que el usuario lo pida explícitamente. Y
-  cuando lo pida: vía el agente `git` (Conventional Commits, sin co-autoría).
+- Hacer commits, ramas o push por tu cuenta fuera del cierre de una feature.
+  El único commit automático es el de `harness finish` al cerrar, y solo con
+  las rutas del ticket. Cualquier otro commit, rama o push: solo si el usuario
+  lo pide explícitamente, y vía el agente `git` (Conventional Commits, sin
+  co-autoría).

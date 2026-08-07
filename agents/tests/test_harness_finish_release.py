@@ -1,11 +1,14 @@
 """
-GIT-001 — Al cerrar una feature: bump de versión en README y propuesta de
-commit sin co-autoría.
+GIT-001 + ARNES-014 — Al cerrar una feature: bump de versión en README y
+commit automático del cierre, sin co-autoría.
 
 El flujo es: `harness finish` cierra la feature, sube un punto de versión
-patch (pyproject.toml + README) y deja lista una propuesta de commit
-Conventional Commits sin línea de co-autoría. El commit NO se ejecuta solo:
-lo aprueba el humano y entonces se ejecuta tal cual.
+patch (pyproject.toml + README) y commitea automáticamente SOLO las rutas del
+ticket (`--changes` + los ficheros del propio cierre) con mensaje Conventional
+Commits sin línea de co-autoría. El commit automático no depende de ningún
+flag: se intenta siempre; si no queda nada que commitear se avisa en
+`warnings` y la feature se cierra igualmente. Los cambios ajenos al ticket se
+quedan sin commitear (acumulados para el siguiente ticket).
 """
 
 from __future__ import annotations
@@ -132,3 +135,139 @@ def test_approved_suggestion_is_committed_exactly_without_coauthorship(context):
     ).stdout
     assert log.strip() == message
     assert "Co-authored-by" not in log
+
+
+# ── ARNES-014: commit automático al cerrar, acotado a las rutas del ticket ──
+
+def _head(root: Path) -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def _setup_ticket(project_root: Path, changes: str = "mi_paquete/nuevo.py") -> None:
+    """
+    Estado sano para el commit automático: backlog + puerta + versión + una ruta
+    del ticket. `init.sh` es infraestructura del test, no del ticket: se
+    commitea aparte para que el working tree solo tenga cambios autorizados.
+    """
+    _write_backlog(project_root)
+    _write_fake_gate(project_root)
+    _write_versioned_files(project_root)
+    (project_root / changes.split(";")[0]).parent.mkdir(parents=True, exist_ok=True)
+    (project_root / changes.split(";")[0]).write_text("x = 1\n")
+    subprocess.run(["git", "add", "init.sh"], cwd=project_root, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "chore: puerta de test"], cwd=project_root, check=True)
+
+
+def test_finish_commits_only_ticket_paths(project_root):
+    """Al cerrar, finish commitea SOLO --changes + los ficheros del cierre, y el mensaje va sin co-autoría."""
+    _setup_ticket(project_root)
+    before = _head(project_root)
+
+    result = HarnessAgent(context=_harness_ctx(project_root)).finish(
+        id="GIT-001", evidence="salida real", changes="mi_paquete/nuevo.py",
+    )
+
+    assert result.success
+    auto = result.data["auto_commit"]
+    assert auto["success"]
+    assert _head(project_root) != before  # el cierre sí commitea
+
+    # el commit incluye las rutas del ticket + las del cierre, y nada más
+    files = set(auto["files"])
+    assert "mi_paquete/nuevo.py" in files
+    assert "featureslist.json" in files
+    assert any(f.startswith("progress/") for f in files)
+    assert "pyproject.toml" in files
+    assert "README.md" in files
+    assert "init.sh" not in files
+    assert all(f in {"mi_paquete/nuevo.py", "featureslist.json", "pyproject.toml", "README.md"}
+               or f.startswith("progress/") for f in files)
+
+    # mensaje Conventional Commits, id como subject, sin co-autoría
+    assert GitTool.parse_conventional_commit(auto["message"]) is not None
+    assert "GIT-001" in auto["message"]
+    assert "Co-authored-by" not in auto["message"]
+
+    log = subprocess.run(
+        ["git", "log", "-1", "--format=%B"], cwd=project_root,
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert log.strip() == auto["message"]  # el commit usa el mensaje exacto, sin pie de herramienta
+    assert "Co-authored-by" not in log
+
+
+def test_finish_empty_changes_does_not_commit(project_root):
+    """--changes vacío → no se commitea nada y se avisa; la feature se cierra igual."""
+    _setup_ticket(project_root)
+    before = _head(project_root)
+
+    result = HarnessAgent(context=_harness_ctx(project_root)).finish(
+        id="GIT-001", evidence="salida real", changes="",
+    )
+
+    assert result.success
+    assert result.data["id"] == "GIT-001"
+    assert "auto_commit" not in result.data
+    assert any("sin --changes" in w for w in result.warnings)
+    assert _head(project_root) == before
+
+
+def test_finish_missing_path_does_not_commit(project_root):
+    """--changes con rutas inexistentes → no se commitea nada y se avisa."""
+    _setup_ticket(project_root)
+    before = _head(project_root)
+
+    result = HarnessAgent(context=_harness_ctx(project_root)).finish(
+        id="GIT-001", evidence="salida real",
+        changes="mi_paquete/nuevo.py;mi_paquete/no_existe.py",
+    )
+
+    assert result.success
+    assert "auto_commit" not in result.data
+    assert any("no existen" in w for w in result.warnings)
+    assert _head(project_root) == before
+
+
+def test_finish_foreign_changes_left_out_of_commit(project_root):
+    """Cambios ajenos en el árbol: no paran el cierre; se quedan sin commitear y se avisa."""
+    _setup_ticket(project_root)
+    # un cambio ajeno al ticket, sin declarar en --changes
+    (project_root / "mi_paquete" / "ajeno.py").write_text("y = 2\n")
+    before = _head(project_root)
+
+    result = HarnessAgent(context=_harness_ctx(project_root)).finish(
+        id="GIT-001", evidence="salida real", changes="mi_paquete/nuevo.py",
+    )
+
+    assert result.success
+    auto = result.data["auto_commit"]
+    assert auto["success"]  # el ticket se commitea igualmente
+    assert "ajeno.py" not in set(auto["files"])
+    assert any("fuera del ticket" in w for w in result.warnings)
+
+    # el commit avanzó, y ajeno.py sigue sin commitear (acumulado para el siguiente ticket)
+    assert _head(project_root) != before
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=project_root,
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert "mi_paquete/ajeno.py" in status
+
+
+def test_auto_commit_nothing_staged_does_not_commit(project_root):
+    """Tras filtrar no queda nada staged (rutas ya commiteadas) → no se commitea y se avisa."""
+    _setup_ticket(project_root)
+    # progress/ ya existe y está commiteado, como en un cierre previo
+    (project_root / "progress").mkdir()
+    (project_root / "progress" / ".keep").write_text("")
+    subprocess.run(["git", "add", "-A"], cwd=project_root, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "chore: todo commiteado"], cwd=project_root, check=True)
+    before = _head(project_root)
+
+    result = HarnessAgent(context=_harness_ctx(project_root))._auto_commit({"id": "GIT-001"}, "mi_paquete/nuevo.py")
+
+    assert "auto_commit" not in result["data"]
+    assert any("nada staged" in w for w in result["warnings"])
+    assert _head(project_root) == before

@@ -62,6 +62,18 @@ CURRENT_TEMPLATE = """# Tarea actual
 {blockers}
 """
 
+INDEX_CURRENT_HEADER = """# Tareas actuales
+
+> {n} features in_progress a la vez, como mucho una por dueño. Este fichero es
+> estado **derivado** de `featureslist.json`: lo regenera `harness` en cada
+> `start` / `finish` / `block`, así que nadie pisa el trabajo de otro. El
+> detalle de cada tarea (criterios, bitácora, bloqueos) vive en su propio
+> fichero, el de la última columna.
+
+| Feature | Dueño | Iniciada | Detalle |
+|---------|-------|----------|---------|
+"""
+
 IDLE_CURRENT = """# Tarea actual
 
 > Estado vivo de la ejecución en curso. Es la memoria **fuera** de la ventana de
@@ -135,6 +147,94 @@ class HarnessAgent(BaseAgent):
     def _history_file(self) -> Path:
         return self._progress_dir / "history.md"
 
+    # -- dueños --------------------------------------------------------------
+    # El candado del arnés es por dueño, no global: dos asistentes trabajando en
+    # paralelo (uno por feature) no se bloquean. Las features sin campo `owner`
+    # comparten un mismo dueño implícito —el legado—, así que quien no usa
+    # `--owner` sigue viendo exactamente el comportamiento de antes: una sola
+    # feature abierta a la vez.
+    @staticmethod
+    def _norm_owner(owner: str | None) -> str:
+        return (owner or "").strip().lower()
+
+    @classmethod
+    def _owner_slug(cls, owner: str | None) -> str:
+        """Nombre de fichero seguro para un dueño. '' si no tiene dueño explícito."""
+        return re.sub(r"[^a-z0-9_-]+", "-", cls._norm_owner(owner)).strip("-")
+
+    def _detail_file(self, feat: dict) -> Path:
+        """
+        Fichero de detalle de una feature en curso. Lo nombra su dueño si lo
+        tiene (`current-claude.md`), y si no su propio id (`current-data-004.md`):
+        una feature abierta antes de ARNES-013 —sin campo `owner`— también
+        conserva su objetivo y sus criterios cuando el índice se activa.
+        """
+        slug = self._owner_slug(feat.get("owner")) or self._owner_slug(feat.get("id"))
+        return self._progress_dir / f"current-{slug}.md"
+
+    # -- progress/ derivado --------------------------------------------------
+    @staticmethod
+    def _render_current(feat: dict) -> str:
+        criteria = "\n".join(f"- [ ] {c}" for c in feat.get("acceptance_criteria", []))
+        return CURRENT_TEMPLATE.format(
+            fid=feat.get("id", ""),
+            status=feat.get("status", ""),
+            started=feat.get("started", "—"),
+            owner=feat.get("owner") or "implementer",
+            description=feat.get("description", ""),
+            criteria=criteria or "_(sin criterios definidos)_",
+            log="_(pendiente)_",
+            blockers="_(ninguno)_",
+        )
+
+    def _refresh_current(self, doc: dict) -> None:
+        """
+        Reescribe `progress/current.md` a partir del backlog. Es estado
+        derivado: no depende de quién llamó, así que cerrar una feature nunca
+        borra el `current.md` de otro dueño.
+
+        0 in_progress → idle · 1 → la plantilla de siempre · 2 o más → un
+        índice que apunta al `current-<dueño>.md` de cada uno.
+        """
+        self._progress_dir.mkdir(parents=True, exist_ok=True)
+        running = [f for f in doc["features"] if f.get("status") == "in_progress"]
+
+        # Cada tarea en curso tiene su fichero de detalle: con dueño explícito
+        # siempre, y sin dueño en cuanto se activa el índice —si no, el
+        # objetivo y los criterios de una feature legada desaparecerían de
+        # progress/ al abrir otro asistente la suya—. Si ya existe no se
+        # sobrescribe: la bitácora que haya escrito su dueño no se toca.
+        for feat in running:
+            path = self._detail_file(feat)
+            if not path.exists() and (feat.get("owner") or len(running) > 1):
+                path.write_text(self._render_current(feat), encoding="utf-8")
+
+        if not running:
+            self._current_file.write_text(IDLE_CURRENT, encoding="utf-8")
+            return
+        if len(running) == 1:
+            self._current_file.write_text(self._render_current(running[0]), encoding="utf-8")
+            return
+
+        rows = [
+            f"| {feat.get('id', '')} | {feat.get('owner') or '_(sin dueño)_'} | "
+            f"{feat.get('started', '—')} | `progress/{self._detail_file(feat).name}` |"
+            for feat in running
+        ]
+        self._current_file.write_text(
+            INDEX_CURRENT_HEADER.format(n=len(running)) + "\n".join(rows) + "\n",
+            encoding="utf-8",
+        )
+
+    def _release_detail_file(self, feat: dict) -> None:
+        """
+        Retira el fichero de detalle de esta feature al cerrarla o bloquearla.
+        Es por feature, así que nunca alcanza al de otra: el candado ya impide
+        que un dueño tenga dos abiertas, y las que no tienen dueño se nombran
+        por su id.
+        """
+        self._detail_file(feat).unlink(missing_ok=True)
+
     # -- backlog -------------------------------------------------------------
     def _load(self) -> tuple[dict | None, str]:
         """Devuelve (documento, error). Si error != "", el documento es None."""
@@ -186,13 +286,20 @@ class HarnessAgent(BaseAgent):
         for feat in features:
             counts[feat.get("status", "pending")] = counts.get(feat.get("status", "pending"), 0) + 1
 
-        running = [f["id"] for f in features if f.get("status") == "in_progress"]
-        warnings = []
-        if len(running) > 1:
-            warnings.append(
-                f"{len(running)} features in_progress a la vez ({', '.join(running)}). "
-                f"El arnés espera una: cierra o bloquea las demás."
-            )
+        open_feats = [f for f in features if f.get("status") == "in_progress"]
+        running = [f["id"] for f in open_feats]
+        # varias in_progress a la vez es normal si son de dueños distintos; lo
+        # que el arnés no admite es que un mismo dueño tenga dos abiertas
+        por_dueño: dict[str, list[str]] = {}
+        for feat in open_feats:
+            por_dueño.setdefault(self._norm_owner(feat.get("owner")), []).append(feat["id"])
+        warnings = [
+            f"{len(ids)} features in_progress del mismo dueño "
+            f"{repr(dueño) if dueño else '(sin dueño)'}: {', '.join(ids)}. "
+            f"El arnés espera una por dueño: cierra o bloquea las demás."
+            for dueño, ids in por_dueño.items()
+            if len(ids) > 1
+        ]
 
         eligible = self._eligible(doc)
         return AgentResult(
@@ -255,8 +362,15 @@ class HarnessAgent(BaseAgent):
             data=feat,
         )
 
-    def start(self, *, id: str = "", owner: str = "implementer") -> AgentResult:
-        """Abre una feature: status in_progress y progress/current.md rellenado."""
+    def start(self, *, id: str = "", owner: str = "") -> AgentResult:
+        """
+        Abre una feature: status in_progress y progress/ regenerado.
+
+        `owner` identifica a quién abre la tarea, y el candado es por dueño:
+        dos asistentes en paralelo pueden tener una feature abierta cada uno,
+        pero ninguno puede abrir dos. Sin `--owner` el comportamiento es el de
+        siempre (una sola feature abierta entre todas las que no tienen dueño).
+        """
         if not id:
             return self._fail("start", "Falta el id de la feature.",
                               needs=["¿Qué feature abro? Usa el id de featureslist.json (ej. DATA-001)."])
@@ -269,12 +383,20 @@ class HarnessAgent(BaseAgent):
         if feat is None:
             return self._fail("start", f"No existe la feature '{id}' en el backlog.")
 
-        running = [f["id"] for f in doc["features"] if f.get("status") == "in_progress"]
-        if running and running != [id]:
+        mine = [
+            f["id"]
+            for f in doc["features"]
+            if f.get("status") == "in_progress"
+            and f["id"] != id
+            and self._norm_owner(f.get("owner")) == self._norm_owner(owner)
+        ]
+        if mine:
+            quien = f"'{owner.strip()}'" if owner.strip() else "sin dueño (legado)"
             return self._fail(
                 "start",
-                f"Ya hay trabajo abierto: {', '.join(running)}. Ciérralo o bloquéalo antes de abrir '{id}'.",
-                data={"in_progress": running},
+                f"Ya hay trabajo abierto de {quien}: {', '.join(mine)}. "
+                f"Ciérralo o bloquéalo antes de abrir '{id}'.",
+                data={"in_progress": mine, "owner": owner.strip()},
             )
 
         done = {f["id"] for f in doc["features"] if f.get("status") == "done"}
@@ -288,6 +410,10 @@ class HarnessAgent(BaseAgent):
 
         feat["status"] = "in_progress"
         feat["started"] = date.today().isoformat()
+        # sin --owner la feature no gana el campo: se queda con el dueño
+        # implícito (el legado) y el backlog sigue siendo el de antes
+        if owner.strip():
+            feat["owner"] = owner.strip()
         # Abrir una feature reinicia el contador de rondas: si venía bloqueada
         # por agotar el bucle, se reabre con las tres rondas enteras — el
         # humano ya intervino, no tiene sentido heredar el castigo anterior.
@@ -296,25 +422,20 @@ class HarnessAgent(BaseAgent):
         self._save(doc)
 
         self._progress_dir.mkdir(parents=True, exist_ok=True)
-        criteria = "\n".join(f"- [ ] {c}" for c in feat.get("acceptance_criteria", []))
-        self._current_file.write_text(
-            CURRENT_TEMPLATE.format(
-                fid=feat["id"],
-                status="in_progress",
-                started=feat["started"],
-                owner=owner,
-                description=feat.get("description", ""),
-                criteria=criteria or "_(sin criterios definidos)_",
-                log="_(pendiente)_",
-                blockers="_(ninguno)_",
-            ),
-            encoding="utf-8",
-        )
+        # con dueño explícito, la ficha propia se escribe siempre (y se
+        # refresca al reabrir); sin dueño la crea `_refresh_current` solo si
+        # hace falta el índice, para no cambiarle nada al flujo de siempre
+        detail = self._detail_file(feat) if feat.get("owner") else None
+        if detail is not None:
+            detail.write_text(self._render_current(feat), encoding="utf-8")
+        self._refresh_current(doc)
 
+        destino = f"progress/{detail.name} y progress/current.md" if detail else "progress/current.md"
         return AgentResult(
             success=True, agent=self.name, action="start",
-            message=f"{id} abierta (in_progress) y volcada en progress/current.md.",
-            data={"id": id, "criteria": feat.get("acceptance_criteria", [])},
+            message=f"{id} abierta (in_progress) y volcada en {destino}.",
+            data={"id": id, "owner": feat.get("owner", ""),
+                  "criteria": feat.get("acceptance_criteria", [])},
         )
 
     def gate(self, *, quick: bool = False) -> AgentResult:
@@ -326,7 +447,9 @@ class HarnessAgent(BaseAgent):
         args = ["bash", str(script), "--json"]
         if quick:
             args.append("--quick")
-        proc = run_command(args, cwd=self.ctx.root, timeout=900)
+        # La suite completa (pytest tests/ + agents/tests/) tarda ~25 min; un
+        # timeout menor (900s) mataba gate/finish y ninguna feature se podía cerrar.
+        proc = run_command(args, cwd=self.ctx.root, timeout=3600)
 
         try:
             report = json.loads(proc.stdout)
@@ -359,12 +482,14 @@ class HarnessAgent(BaseAgent):
 
         Al cerrar, encadena el flujo de release ligero de GIT-001: sube un
         punto de versión patch en pyproject.toml/README.md (delegando en
-        `DocumentationAgent.bump_version`) y deja lista la propuesta de commit
-        Conventional Commits sin línea de co-autoría (delegando en
-        `GitAgent.suggest_commit_message`). El commit NO se ejecuta aquí: lo
-        decide el humano aprobando la propuesta que devuelve `data`. Ninguno
-        de los dos encadenados bloquea el cierre: si fallan, se avisa en
-        `warnings` y la feature queda cerrada igualmente.
+        `DocumentationAgent.bump_version`) y commitea automáticamente el cierre
+        (ARNES-014) acotado a las rutas de `--changes` más los ficheros del
+        propio cierre, con mensaje Conventional Commits sin línea de co-autoría
+        (delegando en `GitAgent`). El commit automático no depende de ningún
+        flag: se intenta SIEMPRE; el único caso en que no se commitea es que no
+        quede nada que commitear (y entonces se avisa en `warnings`). Ninguno de
+        los encadenados bloquea el cierre: si fallan, se avisa en `warnings` y
+        la feature queda cerrada igualmente.
         """
         if not id:
             return self._fail("finish", "Falta el id de la feature.",
@@ -421,14 +546,19 @@ class HarnessAgent(BaseAgent):
         with self._history_file.open("a", encoding="utf-8") as fh:
             fh.write(entry)
 
-        self._current_file.write_text(IDLE_CURRENT, encoding="utf-8")
+        # progress/ es estado derivado: se retira solo la ficha de ESTA feature
+        # y se regenera current.md desde el backlog, así que si otro asistente
+        # sigue trabajando su tarea no se pierde
+        self._release_detail_file(feat)
+        self._refresh_current(doc)
 
-        release = self._release_on_close(feat)
-        message = f"{id} cerrada. Histórico actualizado y current.md en idle."
+        release = self._release_on_close(feat, changes=changes)
+        message = f"{id} cerrada. Histórico actualizado y current.md regenerado."
         if "version_bump" in release["data"]:
             message += f" README bumped a {release['data']['version_bump']['new_version']}."
-        if "commit_suggestion" in release["data"]:
-            message += " Propuesta de commit lista — revísala en data.commit_suggestion."
+        auto = release["data"].get("auto_commit")
+        if auto and auto.get("success"):
+            message += f" Commit automático creado: {auto['message']}."
 
         return AgentResult(
             success=True, agent=self.name, action="finish",
@@ -448,13 +578,13 @@ class HarnessAgent(BaseAgent):
         major, minor, patch = (int(g) for g in match.groups())
         return f"{major}.{minor}.{patch + 1}"
 
-    def _release_on_close(self, feat: dict) -> dict:
+    def _release_on_close(self, feat: dict, changes: str = "") -> dict:
         """
         Flujo de cierre de GIT-001: bump de versión patch (README incluido,
-        vía `DocumentationAgent.bump_version`) y propuesta de commit
-        Conventional Commits sin línea de co-autoría (vía
-        `GitAgent.suggest_commit_message`, con el id de la feature como
-        subject). No ejecuta el commit: eso lo decide el humano.
+        vía `DocumentationAgent.bump_version`) y commit automático del cierre
+        (vía `GitAgent`, con el id de la feature como subject). El commit
+        automático de ARNES-014 se intenta SIEMPRE al cerrar, sin flag: si no
+        queda nada que commitear se avisa en `warnings` y el cierre sigue.
 
         Nunca bloquea el cierre: si algo falla (sin versión parseable, sin
         cambios que resumir, sin repo git) se avisa en `warnings` y se
@@ -499,6 +629,141 @@ class HarnessAgent(BaseAgent):
         else:
             warnings.append(f"No se generó propuesta de commit: {suggestion.message}")
 
+        auto = self._auto_commit(feat, changes)
+        warnings.extend(auto["warnings"])
+        data.update(auto["data"])
+
+        return {"warnings": warnings, "data": data}
+
+    @staticmethod
+    def _parse_changes(changes: str) -> list[str]:
+        """Rutas del ticket pasadas en `--changes`, separadas por ';' (como criteria/depends_on)."""
+        return [c.strip() for c in changes.split(";") if c.strip()]
+
+    def _closure_paths(self) -> list[str]:
+        """Rutas relativas que el propio cierre toca: solo existen si hay algo que commitear."""
+        paths = ["featureslist.json", "progress/"]
+        for f in (self.ctx.pyproject_file, self.ctx.readme_file):
+            if f.exists():
+                paths.append(str(f.relative_to(self.ctx.root)))
+        return paths
+
+    def _auto_commit(self, feat: dict, changes: str) -> dict:
+        """
+        ARNES-014 — commit automático del cierre. Se intenta SIEMPRE al cerrar
+        una feature, sin flag (decisión del usuario): el único caso en que no
+        se commitea es que no quede nada que commitear, y entonces se avisa en
+        `warnings` y la feature se cierra igualmente.
+
+        El commit se acota a las rutas de `--changes` (separadas por ';') más
+        los ficheros del propio cierre (`featureslist.json`, `progress/`,
+        `pyproject.toml`, `README.md`). Si `--changes` viene vacío o trae
+        rutas que no existen, no se commitea nada y se avisa. Si el árbol trae
+        cambios ajenos al ticket (trabajo de otro dueño o de otro ticket), NO
+        se para: se commitea solo lo del ticket, el resto se queda sin
+        commitear (acumulado para el siguiente) y se avisa de qué se deja
+        fuera. Si tras el filtrado no queda nada staged, no se commitea y se
+        avisa.
+
+        El mensaje es Conventional Commits con el id de la feature como
+        subject y sin línea de co-autoría: se genera con
+        `GitAgent.suggest_commit_message` una vez las rutas están en el índice,
+        así el mensaje describe exactamente lo que se commitea. Delega en
+        `GitTool` (git add/commit): este agente no inventa una capa git nueva.
+        Los fallos del commit nunca bloquean el cierre: van a `warnings`.
+        """
+        warnings: list[str] = []
+        data: dict[str, Any] = {}
+
+        rutas = self._parse_changes(changes)
+        if not rutas:
+            warnings.append(
+                "finish sin --changes: no hay rutas del ticket que commitear — "
+                "no se commitea nada."
+            )
+            return {"warnings": warnings, "data": data}
+
+        missing = [r for r in rutas if not (self.ctx.root / r).exists()]
+        if missing:
+            warnings.append(
+                f"--changes trae rutas que no existen ({', '.join(missing)}) — "
+                "no se commitea nada."
+            )
+            return {"warnings": warnings, "data": data}
+
+        from agents.agents.git_agent import GitAgent
+
+        git_agent = GitAgent(context=self.ctx)
+        if not git_agent.git.is_repo():
+            warnings.append("No es un repositorio git — no se commitea nada.")
+            return {"warnings": warnings, "data": data}
+
+        stage_paths = set(rutas) | set(self._closure_paths())
+        allowed = set(stage_paths)
+        # El log de auditoría (`agents/workspace/audit/audit.jsonl`) lo escribe
+        # el propio cierre: cada `run` de los agentes delegados queda auditado.
+        # No entra en el commit (es un log de trabajo, gitignored en el repo
+        # real), pero su presencia no es trabajo ajeno que deba manchar el
+        # commit ni el aviso de acumulación.
+        audit_dir = self.ctx.workspace_dir / "audit"
+        if audit_dir.exists():
+            allowed.add(str(audit_dir.relative_to(self.ctx.root)) + "/")
+
+        def _in_allowed(path: str) -> bool:
+            if path in allowed:
+                return True
+            # "progress/" cubre todo lo que cuelga de él; "mi_paquete/" (dir
+            # untracked agrupado por git) cubre cualquier fichero declarado
+            # dentro — p. ej. "mi_paquete/nuevo.py"
+            for p in allowed:
+                base = p if p.endswith("/") else p + "/"
+                if path.startswith(base) or base.startswith(path.rstrip("/") + "/"):
+                    return True
+            return False
+
+        # Cambios ajenos al ticket: no paran el cierre (decisión del usuario).
+        # Se quedan sin commitear, acumulados para el siguiente ticket, y se
+        # avisa de qué se deja fuera.
+        ajenas = [p for _, p in git_agent.git.status_porcelain(all_untracked=True) if not _in_allowed(p)]
+        if ajenas:
+            warnings.append(
+                f"Cambios fuera del ticket ({', '.join(ajenas[:5])}"
+                f"{'…' if len(ajenas) > 5 else ''}) se quedan sin commitear — "
+                "trabajo de otro dueño o de otro ticket, acumulado para el "
+                "siguiente cierre."
+            )
+
+        stage = git_agent.git.add(*stage_paths)
+        if not stage.ok:
+            warnings.append(f"'git add' falló: {stage.stderr.strip()} — no se commitea nada.")
+            return {"warnings": warnings, "data": data}
+
+        # Tras filtrar por las rutas del ticket, ¿queda algo staged? Si no
+        # (p. ej. las rutas existen pero ya estaban commiteadas), no hay nada
+        # que commitear: se avisa y se cierra igual.
+        staged = git_agent.git.staged_files(*stage_paths)
+        if not staged:
+            warnings.append(
+                "Tras el filtrado no queda nada staged — no se commitea nada."
+            )
+            return {"warnings": warnings, "data": data}
+
+        suggestion = git_agent.run("suggest_commit_message", hint=f"cierra {feat.get('id', '')}")
+        if not suggestion.success:
+            warnings.append(f"No se generó mensaje de commit: {suggestion.message} — no se commitea nada.")
+            return {"warnings": warnings, "data": data}
+        message = suggestion.data["suggested_message"]
+
+        # commit acotado por pathspec: aunque el índice arrastrara algo staged
+        # de antes, el commit solo puede contener las rutas autorizadas
+        commit_result = git_agent.git.commit(message, *stage_paths)
+        if not commit_result.ok:
+            warnings.append(f"'git commit' falló: {commit_result.stderr.strip()} — no se commiteó.")
+            return {"warnings": warnings, "data": data}
+
+        proc = run_command(["git", "show", "--name-only", "--format=", "HEAD"], cwd=self.ctx.root)
+        files = [f for f in proc.stdout.splitlines() if f.strip()]
+        data["auto_commit"] = {"success": True, "message": message, "files": files}
         return {"warnings": warnings, "data": data}
 
     def block(self, *, id: str = "", reason: str = "") -> AgentResult:
@@ -522,6 +787,8 @@ class HarnessAgent(BaseAgent):
         feat["status"] = "blocked"
         feat["blocked_reason"] = reason
         self._save(doc)
+        self._release_detail_file(feat)
+        self._refresh_current(doc)
         return AgentResult(
             success=True, agent=self.name, action="block",
             message=f"{id} bloqueada: {reason}",

@@ -714,8 +714,12 @@
         "Hay un test que llama a la rama de etiqueta con un perfil real y comprueba que NO hay clave 'error' en ningun resultado",
         "La suite pasa en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-07"
     },
     {
       "id": "BOT-011",
@@ -792,8 +796,11 @@
         "RAG.stats() no duplica filas al reindexar",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "review_rounds": 0,
+      "closed": "2026-08-07"
     },
     {
       "id": "RAG-006",
@@ -1133,11 +1140,12 @@
         "Hay un test de regresion que construye un df_hora con dos dias (uno caluroso y uno templado) y comprueba que el perfil solo usa el dia pedido",
         "make test pasa"
       ],
-      "status": "blocked",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-06",
       "review_rounds": 0,
-      "blocked_reason": "En curso por opencode en paralelo: el filtro por dia ya esta en perfil_horario_desde_df pero falta arreglar la prioridad forecast vs archive en _generar_features_completas"
+      "blocked_reason": "En curso por opencode en paralelo: el filtro por dia ya esta en perfil_horario_desde_df pero falta arreglar la prioridad forecast vs archive en _generar_features_completas",
+      "closed": "2026-08-07"
     },
     {
       "id": "LLM-006",
@@ -1151,9 +1159,388 @@
         "El notebook no depende de paths locales de esta maquina (solo /content y Drive)",
         "Verificacion local sin GPU: sintaxis valida y estructura del notebook comprobada"
       ],
-      "status": "in_progress",
+      "status": "blocked",
       "depends_on": [],
       "started": "2026-08-06",
+      "review_rounds": 1,
+      "blocked_reason": "El trabajo (notebook, guia, empaquetador) esta commiteado; los criterios 1-2 requieren ejecutar el notebook en Google Colab (GPU T4, accion humana). Se retoma cuando se ejecute."
+    },
+    {
+      "id": "MCP-002",
+      "title": "Capar el MCP: solo lectura por defecto, escritura habilitada por token",
+      "description": "Pedido en la reunion del 06/08/2026: 'capar las capacidades del mcp, crear y leer, o por tokens activar el writing'. Hoy el servidor MCP expone 12 tools sin distincion de privilegio: junto a las de lectura (predict_risk_mcp, cargar_perfil_mcp, listar_rutinas_mcp, listar_usuarios_mcp, riesgo_rutinas_dia_mcp, grafica_riesgo_horario_mcp) estan las que escriben en la BD de perfiles de salud (crear_perfil_mcp, crear_rutina_mcp, borrar_rutina_mcp, vincular_chat_id_mcp, configurar_hora_aviso_mcp). Cualquier host que conecte el MCP puede crear y borrar sin mas. Interpretacion de 'por tokens': la escritura se habilita con un token/credencial, no con un presupuesto de tokens del LLM — confirmar con el humano si se referia a otra cosa. OJO: no confundir con ARNES-005/ARNES-011, que son el gateway de permisos del harness propio sobre SUS tools. Esto es el servidor MCP que el proyecto publica hacia fuera. MCP-001 ya arreglo la comprobacion de propiedad en borrar_rutina_mcp: esto es la capa de encima.",
+      "acceptance_criteria": [
+        "Las tools del MCP quedan clasificadas explicitamente en lectura y escritura, y la lista clasificada se pega como evidencia",
+        "Por defecto el servidor arranca en modo solo lectura: las tools de escritura devuelven un error explicativo y NO tocan la BD, se pega la traza de un intento",
+        "La escritura se habilita con un token (variable de entorno o parametro de arranque) y sin token valido no hay ninguna ruta que escriba: se demuestra con una llamada con token y otra sin el",
+        "El token no aparece en los logs ni en la respuesta de ninguna tool, se demuestra con un grep sobre logs/ (misma leccion que BOT-004)",
+        "Un host que solo lee (Claude Desktop, opencode) sigue funcionando igual sin configurar nada",
+        "Hay tests de los tres casos (lectura sin token, escritura sin token rechazada, escritura con token) y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "SEC-001",
+      "title": "Proteger la BD de perfiles: permisos del fichero, datos de salud fuera de los logs y backup verificado",
+      "description": "Acta de la reunion del 06/08/2026: 'Medidas de seguridad para proteger la base de datos' y 'Implementar medidas de seguridad adicionales'. Lo que hay hoy son parches puntuales de acceso (MCP-001 comprobacion de propiedad, WEB-004 XSS, WEB-005 codigos de error, BOT-004 el token fuera del log) pero nadie ha mirado el fichero SQLite como lo que es: una base de datos con edad, sexo, porcentaje de grasa, comorbilidades, medicacion, situacion social, ubicacion y chat_id de Telegram de personas reales. Prefijo SEC- nuevo porque el alcance cruza bot, web y MCP y no encaja en ninguno de los tres.",
+      "acceptance_criteria": [
+        "El fichero SQLite tiene permisos restrictivos (600) y su ruta esta fuera del control de versiones: se demuestra con ls -l y con git check-ignore",
+        "Ningun log escribe datos de salud identificables (edad, comorbilidades, medicacion, ubicacion exacta, chat_id completo): se demuestra con un grep sobre logs/ despues de una conversacion completa del bot y una prediccion desde la web",
+        "Existe un comando de backup y otro de restauracion y se ejecutan de ida y vuelta, pegando la salida y comprobando que los datos sobreviven",
+        "Queda escrito en documentacion/ quien escribe en la BD (bot, web, MCP), con que validacion y que pasa si dos escriben a la vez",
+        "Se decide y se documenta si los datos de salud se cifran en reposo o no, con el motivo: una decision escrita, no un silencio",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-017",
+      "title": "Al cargar el perfil, ofrecer repetir la ultima salida en vez de repreguntarlo todo",
+      "description": "Nota de la reunion del 06/08/2026: 'cargar el perfil y preguntar si hare lo mismo?'. Hoy BOT-005 ya dice 'se cargaron tus datos previos' y salta a preguntar la intensidad, pero los datos de la ACTIVIDAD (que iba a hacer, cuanto tiempo, donde, a que hora) se vuelven a pedir enteros en cada /start, aunque el usuario salga a caminar por el mismo sitio todos los dias. La idea es preguntar '¿vas a hacer lo mismo que la ultima vez?' con un boton: si dice que si, se predice directo con el tiempo de HOY. No confundir con las rutinas de BOT-007: aquella son horarios programados con aviso diario, esto es la ultima salida puntual.",
+      "acceptance_criteria": [
+        "El perfil guarda la ultima salida usada (actividad u ocupacion, intensidad, duracion, hora y ubicacion) al terminar un /start",
+        "Al hacer /start con una salida previa guardada, el bot la resume y ofrece repetirla con botones si/no antes de preguntar campo a campo, y se pega la conversacion real",
+        "Si el usuario dice que si, no se le vuelve a preguntar nada y la prediccion usa el tiempo de HOY, no el guardado del dia anterior: se demuestra con la salida del pipeline",
+        "Si dice que no, el formulario sigue exactamente igual que hoy, campo a campo",
+        "Un chat sin salidas previas no ve la pregunta y el flujo actual no cambia",
+        "Hay tests de las tres ramas (sin previa, repetir, no repetir) y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-018",
+      "title": "Voz en el bot: notas de audio transcritas con Whisper y parte final hablado",
+      "description": "Nota de la reunion del 06/08/2026: 'reconocimiento de voz, whisper de openai y text-to-speech'. Hoy el bot solo entiende texto y botones. Con voz, alguien que va a salir a trabajar al campo o a entrenar puede mandar una nota de audio y escuchar el parte sin mirar la pantalla, que es justo el momento de uso. Whisper se puede ejecutar en local (faster-whisper o whisper.cpp) como ya se hace con Qwen via Ollama, asi que no hace falta depender de una API de pago ni sacar audio con datos de salud del portatil. Ojo: los audios llevan datos personales, no se pueden quedar tirados en disco ni en el log.",
+      "acceptance_criteria": [
+        "Una nota de voz enviada al bot se transcribe y entra en el mismo flujo que el texto, sin duplicar la logica del formulario, y se pega la conversacion real",
+        "La transcripcion se hace en local y queda escrito el modelo usado, su tamano, su RAM y su latencia medida sobre un audio de ejemplo",
+        "El parte final se puede escuchar: el bot devuelve un audio ademas del texto, con el motor de TTS documentado y su latencia medida",
+        "Si la transcripcion o el TTS fallan o no estan instalados, el bot sigue funcionando en texto exactamente como hoy: se demuestra provocando el fallo",
+        "Los audios recibidos y generados se borran despues de procesarse y no aparecen en logs/, se demuestra listando el directorio temporal despues de una conversacion",
+        "Hay tests del camino de voz con un audio de ejemplo y del fallback sin motor de voz, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DATA-004",
+      "title": "Perfil horario en tramos de 15 minutos en vez de una hora",
+      "description": "Nota de la reunion del 06/08/2026: 'fraccionar las horas, en vez de cada hora cada 15 min o incluso en streaming'. Hoy el perfil horario da un punto por hora, y con eso la franja recomendada y el pico de riesgo se calculan a saltos de 60 minutos: una salida de 40 minutos cae entera dentro de un unico punto. Con 15 minutos la ventana deslizante de MCP-IMG-002 y la franja recomendada de BOT-012 ganan resolucion real. La parte de 'streaming' de la nota se deja fuera a proposito: no esta claro si se referia a datos meteorologicos en vivo o a la respuesta del LLM en streaming — hay que preguntarlo antes de meterlo. Depende de DATA-003 porque toca el mismo camino (la construccion del perfil horario) y arreglar el dia objetivo va primero.",
+      "acceptance_criteria": [
+        "El perfil horario se puede pedir con resolucion de 15 minutos y devuelve cuatro puntos por hora, y se pega la salida real para una ubicacion concreta",
+        "Queda escrito de donde salen los valores intermedios (interpolacion sobre el forecast horario o una fuente con esa resolucion) y cuanto se desvia del dato horario de referencia, con numeros",
+        "La franja recomendada y el pico de riesgo se recalculan sobre la nueva resolucion reutilizando recomendar_horario y pico_riesgo_actividad, sin duplicar la logica ni cambiar su contrato de salida",
+        "La resolucion es un parametro y el modo horario actual sigue siendo el de por defecto hasta que se demuestre con numeros que el de 15 minutos mejora la recomendacion",
+        "Hay tests con las dos resoluciones, incluido uno que comprueba que el modo horario da exactamente lo mismo que hoy, y make test pasa"
+      ],
+      "status": "blocked",
+      "depends_on": [
+        "DATA-003"
+      ],
+      "started": "2026-08-07",
+      "review_rounds": 0,
+      "blocked_reason": "Alcance malentendido por el lider/implementer: se hizo interpolacion a 15 min con res_min interno sin exponerlo. El usuario aclara: la resolucion debe ser ELEGIBLE por el usuario (en API/MCP/web/bot se pregunta o default 1h) y ampliable a futuro a 30s para relojes inteligentes. El motor de interpolacion ya esta en el working tree y se reutilizara en DATA-007."
+    },
+    {
+      "id": "DATA-005",
+      "title": "OPCIONAL (nice to have): integracion con relojes y APIs de wearables",
+      "description": "PRIORIDAD BAJA — la reunion del 06/08/2026 lo marco explicitamente como 'nice to have: integracion con relojes, apis'. No se coge antes que nada del resto del backlog. La idea: hoy el perfil se rellena a mano (edad, grasa, aclimatado) y el riesgo se calcula con datos declarados. Un reloj da frecuencia cardiaca, FC en reposo, sueno y actividad reciente, que son justo las variables que dirian si alguien esta aclimatado y como esta respondiendo. Empieza por el estudio: las APIs de wearables tienen procesos de alta, cuotas y en algunos casos coste, asi que 'integrar con relojes' puede ser inviable antes de escribir una linea.",
+      "acceptance_criteria": [
+        "Un estudio previo lista que APIs de wearables (Garmin, Fitbit, Apple Health, Google Fit, Samsung, Withings) dan acceso a FC, FC en reposo, sueno y actividad, con su proceso de alta, su cuota real y su coste",
+        "Queda decidido y escrito que variables del wearable entrarian en el modelo y cuales no aportan nada frente a los factores que ya existen, con el motivo",
+        "Si el estudio dice que es viable: un adaptador lee al menos una fuente real y sus datos se ven en el perfil, y se pega la salida",
+        "Si el estudio dice que no es viable: se escribe por que y la feature se cierra como descartada, sin codigo",
+        "Los datos del wearable son datos de salud y quedan sujetos a lo que decida SEC-001: no se guardan ni se loguean fuera de lo acordado alli",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "SEC-001"
+      ]
+    },
+    {
+      "id": "LLM-007",
+      "title": "Entender LoRA y aLoRA: como funcionan, que cuestan y si se pueden agrupar varios adaptadores",
+      "description": "SPIKE DE INVESTIGACION, no implementacion. Nota de la reunion del 06/08/2026: 'entender como van los loras y alora' y 'agrupar loras'. El proyecto ya entrena un LoRA (LLM-006 lo esta ejecutando en Colab) pero nadie ha escrito que hace por dentro ni por que se eligio QLoRA, y la palabra aLoRA (activated LoRA) salio en la reunion sin que este claro en que se diferencia. La decision practica que hay detras: si se puede tener un adaptador por tarea (redactar el parte, chat con RAG, extraer los datos del formulario) servidos a la vez sobre el mismo modelo base, o si hay que elegir uno solo. Eso condiciona LLM-002, LLM-006 y todo lo que venga despues, asi que se responde antes de entrenar mas cosas. Sin este documento, LLM-008 no se puede evaluar.",
+      "acceptance_criteria": [
+        "Un documento en documentacion/llm/ explica con las fuentes citadas que es un LoRA, que anade un aLoRA (activated LoRA) y en que se diferencian en coste de inferencia y en reutilizacion del KV cache",
+        "El documento responde si se pueden servir varios adaptadores a la vez sobre el mismo modelo base y como, con las limitaciones concretas de los runtimes que usa el proyecto (Ollama, llama.cpp) y de los que no usa (vLLM)",
+        "El documento responde, aplicado a ESTE proyecto, si conviene un adaptador por tarea (parte, chat con RAG, extraccion del formulario) o uno solo, con el motivo",
+        "Sale una recomendacion concreta para LLM-006 y LLM-002 y las features que se deriven quedan escritas como propuesta al backlog, no implementadas aqui",
+        "init.sh sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "LLM-008",
+      "title": "Evaluar el aLoRA de Granite para RAG con guardarrailes integrados",
+      "description": "Nota de la reunion del 06/08/2026: 'aLoRAs, los hay ya hechos, uno para rags, con guardarrailes integrados, granite active aLoRA rag'. O sea: en vez de entrenar todo desde cero, mirar los adaptadores que IBM ya publico para Granite, en concreto el de RAG con guardarrailes. Encaja con lo que hay: el RAG ya existe (RAG-001, RAG-002) y el filtro de relevancia del chat ya rechaza preguntas fuera de dominio (CHAT-003), asi que lo que hay que medir es si el adaptador publicado mejora esas dos cosas o si obliga a cambiar de modelo base para nada. Se evalua con el set de RAG-004, no con impresiones. Depende de LLM-007 (hay que entender que es un aLoRA antes de evaluarlo) y de RAG-004 (hace falta el set de evaluacion).",
+      "acceptance_criteria": [
+        "Queda identificado el adaptador concreto: nombre, repositorio, licencia, modelo base que exige y si se puede ejecutar con el hardware disponible o solo en Colab",
+        "Se ejecuta sobre el set de evaluacion de RAG-004 y se compara con el RAG actual: se pega la tabla de recall y precision de los dos",
+        "Queda escrito que aportan sus guardarrailes frente a lo que ya hace el filtro de relevancia del chat, probado con las mismas preguntas fuera de dominio",
+        "Se decide POR LOS NUMEROS si entra o no, y si entra queda claro que modelo base obliga a usar y que pasa con Qwen y con el fine-tuning de LLM-006",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "LLM-007",
+        "RAG-004"
+      ]
+    },
+    {
+      "id": "LLM-009",
+      "title": "Prueba de concepto: modelos de ~1B y modelos nativos de 1 bit o ternarios",
+      "description": "Nota de la reunion del 06/08/2026: 'nuevos modelos muy pequenos de 1b muy potentes', 'modelos de 1b?' y en el acta 'Recomendaciones de modelos eficientes de un bit y ternarios' con la accion pendiente 'Pruebas de concepto con modelos de un bit y ternarios'. Importa porque HOST-001 sigue abierto: si el bot ha de vivir sin el portatil encendido, un modelo de 1B que quepa en CPU cambia el problema entero. Hoy MODELO_LOCAL apunta a qwen2.5:1.5b y el 7B se eligio a ojo. AVISO: en las notas aparece un modelo como 'lmf 22.5 oneside' que nadie ha podido identificar (¿LFM2 de Liquid AI?) — hay que confirmarle al humano el nombre exacto antes de incluirlo en la comparacion. Reutiliza el banco de pruebas de LLM-003 en vez de montar otro: si cada evaluacion usa su propio metodo, las cifras no se pueden comparar.",
+      "acceptance_criteria": [
+        "Se prueban al menos dos modelos de en torno a 1B de parametros y al menos un modelo nativo de 1 bit o ternario (BitNet b1.58 o equivalente), con nombre, version y tamano exactos anotados",
+        "La evaluacion usa el MISMO script y el MISMO data/llm/val.jsonl que LLM-003: no se monta un banco de pruebas nuevo, y si el script necesita cambios se hacen alli",
+        "Se mide calidad del parte, cifras que el modelo se inventa y no estan en el resultado del pipeline, latencia por respuesta y memoria, y se pega la tabla completa",
+        "Se comprueba si alguno corre en CPU con una latencia usable para el bot, que es lo que decidiria si sirve para HOST-001, y se pega el numero",
+        "Queda escrito si alguno sustituye a qwen2.5 como modelo por defecto y si no, por que: una decision por los numeros, no por impresion",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "LLM-003"
+      ]
+    },
+    {
+      "id": "LLM-010",
+      "title": "Cuantizar el modelo propio: cuanta calidad se pierde por cada bit que se quita",
+      "description": "Nota de la reunion del 06/08/2026: 'cuantizacion de ternarios y binarios', y en el acta 'Explorar tecnicas de cuantizacion para mejorar la eficiencia de los modelos'. Distinto de LLM-009: alli se prueban modelos pequenos de terceros, aqui se coge el modelo fine-tuneado del proyecto y se mide que pasa al bajarle los bits. Hoy el Modelfile asume q4_k_m porque es lo que sale por defecto de la guia, sin ninguna medida detras. Necesita que LLM-006 haya producido el modelo, y el banco de pruebas de LLM-003 para que las cifras sean comparables con las de los demas modelos.",
+      "acceptance_criteria": [
+        "El modelo fine-tuneado se exporta en al menos tres cuantizaciones (por ejemplo q8_0, q4_k_m y una de 2 bits o ternaria) y se pega el tamano en disco de cada una",
+        "Cada cuantizacion se evalua con el mismo script de LLM-003 sobre val.jsonl: calidad del parte, cifras inventadas, latencia y memoria, y se pega la tabla",
+        "Queda escrito cuanta calidad se pierde por cada bit que se quita, con numeros y no con adjetivos",
+        "Se elige la cuantizacion por defecto POR LOS NUMEROS y se actualiza el Modelfile y la guia de despliegue en consecuencia, dejando escrito el porque",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "LLM-006",
+        "LLM-003"
+      ]
+    },
+    {
+      "id": "LLM-011",
+      "title": "OPCIONAL (ni fu ni fa): prunear el modelo y medir si reduce las alucinaciones",
+      "description": "PRIORIDAD BAJA — la reunion del 06/08/2026 lo marco textualmente como 'ni fu ni fa: prunear el modelo'. No se coge antes que nada del resto del backlog, y si al llegar a el la cuantizacion de LLM-010 ya ha resuelto el problema de tamano, se cierra como descartada sin hacer nada. El acta lo asocia a 'Reduccion de alucinaciones en modelos mediante tecnicas como pruning', y esa afirmacion es justo lo que hay que comprobar con numeros en vez de darla por buena: el criterio de 'cifras ausentes en el resultado del pipeline' de LLM-003 ya mide exactamente eso.",
+      "acceptance_criteria": [
+        "Se aplica pruning al modelo elegido y se pega el numero de parametros y el tamano en disco antes y despues",
+        "Se evalua con el mismo script de LLM-003 y queda escrito cuanta calidad se pierde, con numeros",
+        "Queda respondido si el pruning reduce las alucinaciones o no, medido con el criterio de cifras ausentes en el resultado del pipeline de LLM-003 y no por impresion",
+        "Se compara contra la cuantizacion de LLM-010 en tamano y calidad: si la cuantizacion gana, se dice y se descarta el pruning",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "LLM-003",
+        "LLM-010"
+      ]
+    },
+    {
+      "id": "FORECAST-003",
+      "title": "Estudio: predecir el volumen de gente a futuro y meterlo en el riesgo colectivo",
+      "description": "SPIKE DE INVESTIGACION, no implementacion. Nota de la reunion del 06/08/2026: 'predecir con forecasting a futuro por volumen de gente'. La pieza de riesgo colectivo ya esta pensada en CSV-001 (el factor de orgullo colectivo, que multiplica el riesgo individual en un evento deportivo) pero alli el numero de personas lo aporta el CSV que sube el usuario. Esto seria predecirlo: cuanta gente va a haber en un sitio y un momento dado. Se plantea como estudio porque el cuello de botella no es el modelo sino el dato: no esta claro que exista una fuente de aforo con cobertura para Espana, licencia usable y coste cero. Si no la hay, no hay feature.",
+      "acceptance_criteria": [
+        "Un documento identifica las fuentes reales de volumen de gente (aforos de eventos, datos abiertos municipales, mobility reports, conteo de moviles) con su cobertura para Espana, su licencia y su coste",
+        "El documento responde si con esas fuentes se puede predecir el volumen a futuro y con que horizonte, o si no se puede y por que",
+        "Queda escrito como se conectaria con el riesgo colectivo de CSV-001 sin duplicar el factor de orgullo colectivo que alli ya esta definido",
+        "Sale una decision explicita: se implementa (y se propone la feature al backlog con sus criterios), se aparca o se descarta, con el motivo escrito",
+        "init.sh sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DOC-004",
+      "title": "Que es un PRD, como se hace, y el PRD de ClimaSafeAI escrito",
+      "description": "Duda planteada en la reunion del 06/08/2026: 'prd, que es, como hacerlos?'. Es una pregunta, asi que la primera mitad de la feature es responderla por escrito y la segunda es aplicarla una vez a este proyecto. El riesgo evidente, y por eso esta en los criterios: el proyecto ya tiene un roadmap, un featureslist.json con 73 features y un AGENTS.md, asi que un PRD mal planteado seria una cuarta copia de lo mismo que se desincroniza sola — que es exactamente el problema que DOC-002 y DOC-003 intentan cerrar. Si al escribirlo resulta que no aporta nada que no este ya, se dice y se cierra sin PRD.",
+      "acceptance_criteria": [
+        "Un documento en documentacion/ explica que es un PRD, que secciones lleva y en que se diferencia del roadmap, del backlog y del README que este proyecto ya tiene",
+        "Existe el PRD de ClimaSafeAI redactado con ese formato: problema, a quien sirve, alcance, fuera de alcance y metricas de exito",
+        "El PRD no duplica lo que ya esta en featureslist.json ni en el roadmap: enlaza en vez de copiar, y se pegan las rutas de lo que enlaza",
+        "Queda escrito quien lo mantiene y cuando se actualiza, para que no se quede obsoleto como paso con el README",
+        "Si al redactarlo se concluye que no aporta nada sobre lo que ya hay, se escribe esa conclusion y se cierra sin PRD: es un resultado valido",
+        "init.sh sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-019",
+      "title": "Menos pasos para llegar a una prediccion, sin que el modelo pierda ni un campo",
+      "description": "Respuesta del humano (06/08/2026) a que queria decir con 'UI mas proactiva cara al usuario': 'que sea mas facil de usar... cuanto menos tenga que interactuar el usuario sin llegar a perder informacion el modelo mejor, en pocas palabras mejorar la experiencia de usuario'. El ejemplo que puso (preguntar si repite la actividad de ayer) ya es BOT-017 y no se duplica aqui: esto es el principio general. Linea base medida el 06/08/2026 sobre climasafeai/bot/telegram_bot.py: el formulario tiene 17 estados (SEXO, EDAD, GRASA, FOTOTIPO, ACLIMATADO, ACTIVIDAD, ENTRENADO, DURACION, HORA_INICIO, TRABAJO, TIPO_TRABAJO, DEPORTE, COMORBILIDADES, MEDICACION, ESTADO_PREVIO, SITUACION_SOCIAL, UBICACION) y ya hay un atajo: si el chat tiene perfil guardado, arranca en Estado.ACTIVIDAD y se salta los personales. O sea que el trabajo esta en las preguntas del dia, que hoy siguen siendo media docena. El criterio duro es el que puso el humano: si una pregunta se elimina hay que demostrar con la salida del pipeline que el campo se sigue rellenando. No solapa con BOT-012 ni BOT-014, que son sobre lo que el bot RESPONDE, no sobre lo que PREGUNTA.",
+      "acceptance_criteria": [
+        "Queda medido y escrito el numero de pasos que hace falta hoy para una prediccion en los dos casos, chat sin perfil guardado y chat con perfil, y esa es la linea base contra la que se compara",
+        "Cada pregunta que se elimina se justifica una a una: se deduce del perfil, se deriva de otra respuesta o tiene un valor por defecto documentado con su motivo",
+        "SIN PERDER INFORMACION: se demuestra con la salida de predict_ensemble que el pipeline recibe exactamente las mismas variables y los mismos valores que antes para un caso identico",
+        "El numero de pasos baja de forma medible respecto a la linea base y se pegan las dos conversaciones completas, la de antes y la de despues",
+        "Lo que se asuma por defecto es visible y corregible: el usuario ve que se ha dado por supuesto y puede cambiarlo sin reiniciar el /start",
+        "No se solapa con BOT-017: esta feature reduce las preguntas del formulario, BOT-017 ofrece repetir la ultima salida entera. Si BOT-017 ya esta hecha, se mide encima de ella",
+        "Hay tests que comprueban que el diccionario que llega al pipeline es identico al de hoy para el mismo caso, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DATA-006",
+      "title": "OPCIONAL (baja, detras de DATA-005): evaluacion continua del riesgo con los datos del reloj",
+      "description": "PRIORIDAD BAJA — hereda la de DATA-005, que la reunion marco como 'nice to have', y va DETRAS de ella: sin fuente de datos no hay nada que evaluar en continuo. Respuesta del humano (06/08/2026) a que queria decir con 'streaming': 'la idea es por ejemplo en un futuro exportarlo a relojes... en caso de ser relojes seria en streaming, coge tus pulsaciones, el sueno y cada x segundos verifica la peligrosidad'. La otra mitad de esa respuesta —el pronostico cada 5, 15, 30 o 60 minutos— NO va aqui: la cubre DATA-004, cuyo criterio dice que la resolucion es un parametro. Aviso para quien abra DATA-004: el humano ha pedido 5, 30 y 60 ademas de 15, asi que la resolucion tiene que ser de verdad configurable y no un 15 escrito a fuego. Pulsaciones y sueno son datos de salud y quedan sujetos a SEC-001.",
+      "acceptance_criteria": [
+        "Antes de escribir codigo: DATA-005 ha confirmado que existe una fuente real de pulsaciones y sueno. Si DATA-005 concluyo que no es viable, esta feature se cierra como descartada sin codigo y eso es un resultado valido",
+        "Un bucle de evaluacion recalcula la peligrosidad cada X segundos con los datos que van llegando del reloj, X es configurable, y se pega la traza de una sesion completa",
+        "El calculo lo hace SIEMPRE el pipeline (predict_ensemble mas personalizacion) y nunca un atajo distinto por ser en vivo: se demuestra comparando el resultado en continuo con la prediccion normal para los mismos datos",
+        "Queda escrito el coste de tenerlo encendido: llamadas por hora, consumo de red y que hace el sistema cuando el reloj pierde la conexion o deja de mandar datos",
+        "Cuando el riesgo cruza a PELIGRO durante la sesion el usuario recibe un aviso, y el mismo aviso no se repite en bucle mientras siga en esa clase",
+        "Las pulsaciones y el sueno se guardan y se loguean solo como decida SEC-001, y una sesion terminada no deja rastro fuera de lo acordado alli",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "DATA-005"
+      ]
+    },
+    {
+      "id": "LLM-012",
+      "title": "SPIKE: el metodo de difusion aplicado al fine-tuning casero, frente a la via LoRA/QLoRA",
+      "description": "SPIKE DE INVESTIGACION, SIN IMPLEMENTACION. Aclaracion del humano (06/08/2026) sobre la nota 'difusion al final?': 'me dijeron que al tunear modelos en casa hay veces que se usa el metodo de difusion, no me dijeron que lo implementara, me dijeron que investigara sobre ello'. Asi que el entregable es un documento y nada mas: no hay ningun criterio que pida implementar difusion. OJO para no confundir carpetas: documentacion/modelos/diffusion/ ya existe, pero son papers de modelos de difusion para SERIES TEMPORALES (forecasting probabilistico), que es otra cosa distinta de un modelo de lenguaje por difusion. Este documento va en documentacion/llm/ junto a LLM-007 y a los enlaces de la reunion, y se compara contra lo que el proyecto ya esta haciendo: QLoRA sobre Qwen 2.5 en una T4 gratuita de Colab (LLM-006).",
+      "acceptance_criteria": [
+        "Un documento en documentacion/llm/ explica que es el metodo de difusion aplicado a modelos de lenguaje y en que se diferencia del entrenamiento autorregresivo, con las fuentes citadas",
+        "El documento deja claro que NO es lo mismo que los modelos de difusion para series temporales que ya estan en documentacion/modelos/diffusion/, para que nadie mezcle las dos cosas",
+        "Responde si tiene sentido para fine-tuning casero con el hardware de este proyecto (CPU sin GPU en local, T4 gratuita de Colab) o si exige mas de lo que hay, con numeros de memoria y tiempo",
+        "Se compara con la via LoRA/QLoRA que ya se sigue en LLM-006: que aportaria, que costaria y si sustituye o convive",
+        "Sale una recomendacion explicita: se explora o se descarta, con el motivo escrito. Si se explora, las features que salgan se proponen al backlog, no se implementan aqui",
+        "init.sh sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "MCP-003",
+      "title": "Control de acceso por identidad en el MCP: cada llamante ve solo lo suyo, IDs opacos y multiusuario de verdad",
+      "description": "Aclaracion del humano (06/08/2026) sobre que le dijeron del MCP: 'como formas de evitar que un tercero acceda a datos que no deberia, poner como ids y no dejar ver ciertas cosas, mas usuarios etc'. El agujero esta en las tools de LECTURA, que son justo las que MCP-002 deja abiertas por diseno. En agents/tools/prediction_mcp_tool.py: listar_usuarios_mcp (1013) enumera TODOS los perfiles con alias, id, edad, sexo y provincia. cargar_perfil_mcp (1031) devuelve el perfil COMPLETO de cualquiera con solo saber su alias, comorbilidades y medicacion incluidas. cargar_perfil_por_chat_id_mcp (1045) hace lo mismo indexado por chat de Telegram. Ninguna sabe QUIEN llama: no existe el concepto de identidad del consumidor del MCP. Con el servidor en modo solo lectura de MCP-002 se sigue pudiendo leer la historia clinica de todos los usuarios.\\n\\nFRONTERA CON LO QUE YA HAY, para que nadie duplique ni contradiga:\\n- MCP-002 decide QUE OPERACIONES se permiten (interruptor lectura/escritura del servidor). MCP-003 decide DE QUIEN son los datos que devuelve cada operacion. Son capas distintas y las dos siguen teniendo sentido: MCP-002 no se toca ni se reescribe aqui.\\n- DEPENDENCIA: se declaran INDEPENDIENTES a proposito (sin depends_on) porque MCP-003 no necesita el interruptor para existir, y encadenarlas retrasaria el agujero mas grave, que es el de lectura. Pero las dos envuelven el mismo punto de entrada de las tools, asi que NO se hacen en paralelo: la que se abra en segundo lugar se apoya en el envoltorio de la primera en vez de crear otro. Si hay que elegir una, va antes MCP-003.\\n- MCP-001 es el precedente y el patron a reutilizar: resolver el sujeto y comprobar la propiedad antes de tocar el recurso. Ojo, _resolver_chat (linea 806) RESUELVE sobre que chat se opera pero se fia de lo que le pasen: no autentica al llamante. MCP-001 comprobo recurso-contra-sujeto. Lo que falta aqui es la pieza de arriba, llamante-contra-sujeto.\\n- SEC-001 cubre el dato en reposo: permisos del fichero, PII en los logs y backup. MCP-003 cubre el acceso al dato a traves del MCP. No se solapan y ninguna sustituye a la otra.\\n\\nEl 'mas usuarios' de la nota es el fondo del asunto: hoy el proyecto asume de facto un uso casi personal, y esto es lo que hace falta para que la BD sea multiusuario de verdad.",
+      "acceptance_criteria": [
+        "Cada tool del MCP recibe la identidad del llamante, y sin una identidad valida no devuelve datos de ningun perfil: se pega la traza de una llamada sin identidad, rechazada",
+        "Acceso cruzado denegado: con la identidad de A, pedir el perfil de B devuelve error y NO devuelve ni un campo. Se pegan las DOS trazas, la del acceso propio que funciona y la del ajeno que falla",
+        "listar_usuarios_mcp deja de enumerar a todo el mundo: o desaparece, o queda detras de un rol de administracion, y se demuestra que un llamante normal recibe error al invocarla",
+        "Los identificadores expuestos son opacos y no adivinables: alias y chat_id dejan de servir como llave de acceso, y se demuestra que enumerar o adivinar identificadores no da acceso a nada",
+        "Minimizacion de campos: queda escrito que campos ve un llamante legitimo y cuales no salen nunca de un perfil ajeno (al menos medicacion y comorbilidades), y se pega la respuesta recortada",
+        "La comprobacion vive en UNA sola funcion por la que pasan todas las tools, reutilizando el patron de MCP-001 en vez de inventar otro. Se demuestra que una tool que no pase por ella falla un test, no que se confie en que el proximo se acuerde",
+        "Dos identidades distintas conviven sin verse: se pega la sesion de las dos sobre la misma base de datos",
+        "Hay tests de acceso propio permitido y acceso ajeno denegado para CADA tool de lectura, y make test pasa"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "owner": "claude",
+      "review_rounds": 1
+    },
+    {
+      "id": "ARNES-012",
+      "title": "harness finish/gate hace timeout a los 900s pero la suite completa tarda ~25 min",
+      "description": "La puerta (init.sh) ejecuta pytest tests/ + agents/tests/ y hoy tarda ~1541s (25 min). harness_agent.py:329 usa timeout=900 en run_command para ./init.sh, asi que gate y finish mueren por timeout y ninguna feature se puede cerrar. Hay que subir el limite (p.ej. 3600s) o hacer que el timeout sea configurable.",
+      "acceptance_criteria": [
+        "harness gate y harness finish ejecutan ./init.sh sin morir por timeout con la suite actual (~25 min)"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "review_rounds": 0,
+      "closed": "2026-08-07"
+    },
+    {
+      "id": "ARNES-013",
+      "title": "El arnes solo admite una feature in_progress y no sabe de quien es: dos asistentes en paralelo se bloquean",
+      "description": "El arnes solo admite una feature in_progress y no sabe de quien es: dos asistentes en paralelo se bloquean",
+      "acceptance_criteria": [
+        "harness start acepta --owner <nombre> y lo persiste en la feature de featureslist.json y en progress/",
+        "Varias features pueden estar in_progress a la vez si tienen duenos distintos: se pega la salida de dos start consecutivos con duenos distintos, ambos con exito",
+        "Abrir una segunda feature con el MISMO dueno se sigue rechazando: se pega el error",
+        "progress/current.md deja de asumir una unica tarea en curso, o se documenta explicitamente como convive con varias",
+        "Hay tests del arnes que cubren los tres casos: duenos distintos OK, mismo dueno rechazado, y sin --owner compatible hacia atras",
+        "Compatibilidad hacia atras: harness start sin --owner sigue funcionando como hoy y las features ya abiertas sin dueno no rompen",
+        "make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-07"
+    },
+    {
+      "id": "BUG-004",
+      "title": "fine_tune.py falla con transformers 5.5.0: tokenizer.chat_template no está configurado",
+      "description": "fine_tune.py falla con transformers 5.5.0: tokenizer.chat_template no está configurado",
+      "acceptance_criteria": [
+        "el script aplica get_chat_template(tokenizer, chat_template=\"qwen-2.5\") justo tras cada from_pretrained que luego use apply_chat_template (entrenar y evaluar)",
+        "ninguna llamada a apply_chat_template queda sin template garantizado",
+        "sintaxis valida y tests que verifican la aplicacion del template sin GPU",
+        "make test pasa"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "review_rounds": 0
+    },
+    {
+      "id": "DATA-007",
+      "title": "La resolucion de la prediccion es elegible por el usuario: API/MCP/web/bot la piden o usan 1h por defecto, ampliable a 30s para wearables",
+      "description": "La resolucion de la prediccion es elegible por el usuario: API/MCP/web/bot la piden o usan 1h por defecto, ampliable a 30s para wearables",
+      "acceptance_criteria": [
+        "predict_ensemble acepta el parametro resolucion (min por punto) con default 60 y sin romper la salida actual",
+        "se pega la salida real a 60 y a 15",
+        "La API, el MCP y la web exponen el parametro resolucion y el bot lo pregunta o usa el default 1h",
+        "se pega la salida real de un endpoint con resolucion=15",
+        "Queda escrito como se ampliara a resoluciones de segundos (p.ej. 30s para relojes inteligentes) sin romper el contrato de prediccion",
+        "tests con las resoluciones horaria (identica a hoy) y sub-horaria, y make test pasa"
+      ],
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "owner": "opencode",
+      "review_rounds": 0,
+      "blocked_reason": "Bloqueada por prioridad: el usuario pide commit automatico al cerrar tickets (ARNES-014) y el candado de dueno impide abrirla con DATA-007 in_progress. Se retoma DATA-007 con 'harness start --id DATA-007 --owner opencode' cuando ARNES-014 cierre. Sin perdida de estado: los criterios viven en featureslist.json."
+    },
+    {
+      "id": "BOT-020",
+      "title": "El parte del bot tras la prediccion es facil de entender: clasificacion, probabilidad, factores con multiplicador, tabla horaria y recomendaciones",
+      "description": "El parte del bot tras la prediccion es facil de entender: clasificacion, probabilidad, factores con multiplicador, tabla horaria y recomendaciones",
+      "acceptance_criteria": [
+        "El parte abre con Clasificacion: NIVEL y la probabilidad de riesgo personalizada por calor en % (p.ej. 'Clasificacion: PELIGRO — probabilidad de riesgo personalizada por calor: 69%'), se pega la salida real del bot",
+        "El parte resume la jornada en una linea (actividad, horario, duracion, intensidad, aclimatado, falta de sueno) en lenguaje llano, se pega la salida real",
+        "Los factores que pesan se listan con su multiplicador (p.ej. 'trabajo de construccion al aire libre (factor x2.2)') ordenados de mayor a menor peso, se pega la salida real",
+        "El parte incluye una tabla horaria con Hora / Riesgo / Heat Index (inicio, pico y fin) y las recomendaciones de la herramienta tal cual sin suavizar, se pega la salida real",
+        "El bot compara con la salida anterior si la hay ('es un nivel mas alto que la simulacion anterior de...'), se pega la salida real",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ARNES-014",
+      "title": "Commit automatico al cerrar un ticket, solo cuando cierra el lider y acotado a las rutas del ticket",
+      "description": "Commit automatico al cerrar un ticket, solo cuando cierra el lider y acotado a las rutas del ticket",
+      "acceptance_criteria": [
+        "harness finish commitea automaticamente SOLO cuando recibe el flag explicito que pasa el lider: sin flag el comportamiento es el de hoy (propone el mensaje y NO commitea) y se demuestra con las dos salidas",
+        "El commit incluye SOLO las rutas pasadas en --changes mas los ficheros del propio cierre (featureslist.json, progress/, pyproject.toml, README.md): se pega el listado de ficheros del commit generado y no aparece ninguna ruta ajena al ticket",
+        "Si --changes viene vacio o trae rutas que no existen, NO se commitea nada y se avisa en warnings: se pega la traza",
+        "Si alguna ruta de --changes tiene cambios mezclados de otro dueno, se para y se avisa en vez de commitear a ciegas",
+        "El mensaje es Conventional Commits con el id de la feature como subject y SIN linea de co-autoria ni pie de ninguna herramienta de IA",
+        ".opencode/agents/lider.md documenta que el lider cierra con ese flag y make assistants-sync propaga el cambio a .claude/ sin deshacerlo",
+        "Ningun otro agente ni asistente commitea por su cuenta: un finish sin el flag (el caso de opencode) no genera commit y se demuestra",
+        "Hay tests del arnes de los casos con flag, sin flag, --changes vacio y rutas inexistentes, y make test pasa"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-07",
+      "owner": "opencode",
       "review_rounds": 0
     }
   ]
