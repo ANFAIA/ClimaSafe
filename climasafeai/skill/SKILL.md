@@ -96,14 +96,24 @@ IA (Claude Code, opencode, Flue, Cline, etc.) las use:
 
 ### Perfiles y predicción
 
-| Tool | Descripción |
-|------|-------------|
-| `crear_perfil_mcp` | Crea perfil con datos demográficos, clínicos y sociales |
-| `cargar_perfil_mcp` | Carga perfil por alias |
-| `cargar_perfil_por_chat_id_mcp` | Carga perfil vinculado a Telegram |
-| `listar_usuarios_mcp` | Lista todos los perfiles |
-| `vincular_chat_id_mcp` | Vincula chat Telegram a perfil |
-| `predict_risk_mcp` | Predice riesgo cardiovascular para una salida |
+Estas tools exigen **identidad del llamante** (MCP-003). El servidor se arranca
+con `CLIMASAFE_MCP_TOKEN=<token>` (o `--identidad <token>`) en stdio, o el
+cliente manda `Authorization: Bearer <token>` en HTTP. El token se emite con
+`make mcp-token ALIAS=<alias>` y se enseña una sola vez. Sin él, ninguna tool de
+perfil devuelve datos.
+
+Cada llamante ve **solo su propio perfil**. El identificador público es el `uid`
+opaco (`usr_…`): alias, `id` y `chat_id` ya no sirven como llave de acceso, y
+pedir el `uid` de otra persona devuelve error, no una versión recortada.
+
+| Tool | Descripción | Acceso |
+|------|-------------|--------|
+| `crear_perfil_mcp` | Crea perfil con datos demográficos, clínicos y sociales | identidad válida |
+| `cargar_perfil_mcp` | Carga **tu** perfil; sin `uid` usa el del token | perfil propio |
+| `cargar_perfil_por_chat_id_mcp` | Carga tu perfil por tu chat de Telegram | perfil propio |
+| `listar_usuarios_mcp` | Lista los perfiles — **solo rol admin**, un usuario normal recibe error | admin |
+| `vincular_chat_id_mcp` | Vincula un chat de Telegram a **tu** perfil | perfil propio |
+| `predict_risk_mcp` | Predice riesgo cardiovascular para una salida | público (no toca la BD) |
 
 ### RAG y LLM
 

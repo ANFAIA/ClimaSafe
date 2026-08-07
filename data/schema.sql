@@ -33,11 +33,17 @@ CREATE TABLE IF NOT EXISTS perfiles (
     lon             REAL,
     provincia       TEXT,
     tags            TEXT,                            -- coma-separadas: electricista,fontanero
-    telegram_chat_id TEXT UNIQUE                     -- chat_id de Telegram para vincular conversación
+    telegram_chat_id TEXT UNIQUE,                    -- chat_id de Telegram para vincular conversación
+
+    -- Control de acceso del MCP (MCP-003)
+    uid             TEXT,                            -- id público opaco 'usr_...'; unicidad vía idx_perfiles_uid
+    mcp_token_hash  TEXT,                            -- sha256 del secreto del llamante; NULL = sin acceso MCP
+    rol             TEXT NOT NULL DEFAULT 'usuario'  -- 'usuario' | 'admin'
 );
 CREATE INDEX IF NOT EXISTS idx_perfiles_alias ON perfiles(alias);
 CREATE INDEX IF NOT EXISTS idx_perfiles_created ON perfiles(created_at);
 -- El índice idx_perfiles_telegram se crea en _migrate() tras añadir la columna
+-- Los de uid y mcp_token_hash también, para que BD nuevas y migradas coincidan
 
 -- ── Relaciones muchos-a-muchos ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS perfil_comorbilidades (

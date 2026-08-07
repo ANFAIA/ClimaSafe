@@ -13,6 +13,9 @@ Uso:
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -21,6 +24,22 @@ from typing import Any, Iterator
 _DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "climasafe.db"
 _SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "schema.sql"
 _FACTORES_JSON = Path(__file__).resolve().parent.parent.parent / "data" / "factores_riesgo.json"
+
+
+def nuevo_uid() -> str:
+    """Identificador público opaco de un perfil: `usr_` + 16 bytes en base32.
+
+    Sustituye a `alias` y `telegram_chat_id` como llave de acceso (MCP-003): el
+    `id` autoincremental es secuencial y adivinable, y los otros dos los conoce
+    cualquiera que hable con el usuario.
+    """
+    crudo = base64.b32encode(secrets.token_bytes(16)).decode("ascii").rstrip("=")
+    return f"usr_{crudo.lower()}"
+
+
+def hash_token_mcp(token: str) -> str:
+    """sha256 del secreto del llamante. En BD solo se guarda el hash."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class CampoDesconocidoError(ValueError):
@@ -129,6 +148,28 @@ class DBManager:
             if "telegram_chat_id" not in cols:
                 c.execute("ALTER TABLE perfiles ADD COLUMN telegram_chat_id TEXT")
                 c.execute("CREATE INDEX IF NOT EXISTS idx_perfiles_telegram ON perfiles(telegram_chat_id)")
+            # MCP-003: identidad del llamante del MCP. `uid` no puede declararse
+            # UNIQUE en un ALTER (SQLite no lo permite), así que la unicidad la
+            # da el índice; se crea siempre porque en BD nuevas la columna ya
+            # viene de schema.sql y el ALTER no llega a ejecutarse.
+            if "uid" not in cols:
+                c.execute("ALTER TABLE perfiles ADD COLUMN uid TEXT")
+            if "mcp_token_hash" not in cols:
+                c.execute("ALTER TABLE perfiles ADD COLUMN mcp_token_hash TEXT")
+            if "rol" not in cols:
+                c.execute("ALTER TABLE perfiles ADD COLUMN rol TEXT NOT NULL DEFAULT 'usuario'")
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_perfiles_uid ON perfiles(uid)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_perfiles_mcp_token ON perfiles(mcp_token_hash)")
+            # Backfill obligatorio: NULL no colisiona con UNIQUE en SQLite, así
+            # que sin esto los perfiles previos quedarían indistinguibles por su
+            # llave. Es idempotente (solo toca los NULL) y va en la misma
+            # transacción que el ALTER.
+            huerfanos = [r["id"] for r in c.execute(
+                "SELECT id FROM perfiles WHERE uid IS NULL OR uid = ''"
+            ).fetchall()]
+            for pid in huerfanos:
+                c.execute("UPDATE perfiles SET uid = ? WHERE id = ?", (nuevo_uid(), pid))
+            c.execute("UPDATE perfiles SET rol = 'usuario' WHERE rol IS NULL OR rol = ''")
 
     def columnas_perfiles(self) -> set[str]:
         """Columnas reales de la tabla `perfiles`, leídas del esquema."""
@@ -171,6 +212,9 @@ class DBManager:
         escalares = {k: v for k, v in datos.items() if k not in array_fields}
 
         self._validar_campos_perfil(escalares)
+
+        # MCP-003: todo perfil nace con identificador público opaco.
+        escalares.setdefault("uid", nuevo_uid())
 
         # Booleans: convertir True/False a 1/0
         for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente", "fiesta"):
@@ -222,6 +266,9 @@ class DBManager:
                 return None
 
             perfil = dict(row)
+            # El hash del token MCP es una credencial: no sale del getter
+            # genérico, que alimenta la web, el bot y las tools (MCP-003).
+            perfil.pop("mcp_token_hash", None)
             # Booleans: convertir 1/0 a True/False
             for k in ("aclimatado", "falta_sueno", "enfermedad_reciente", "alcohol_reciente", "fiesta"):
                 if perfil.get(k) is not None:
@@ -249,7 +296,7 @@ class DBManager:
         """Todos los perfiles (sin arrays, solo cabecera)."""
         with self.conn() as c:
             rows = c.execute(
-                "SELECT id, alias, edad, sexo, lat, lon, provincia, tags, telegram_chat_id, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
+                "SELECT id, uid, rol, alias, edad, sexo, lat, lon, provincia, tags, telegram_chat_id, created_at, updated_at FROM perfiles ORDER BY updated_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -425,6 +472,53 @@ class DBManager:
                 return None
             return dict(row)
 
+    # ── Identidad MCP (MCP-003) ─────────────────────────────────────
+
+    def buscar_por_uid(self, uid: str) -> dict | None:
+        """Busca un perfil por su identificador público opaco."""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT id, uid, alias, rol FROM perfiles WHERE uid = ?", (uid,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def buscar_por_token_mcp(self, token: str) -> dict | None:
+        """Perfil completo del dueño de un token MCP, o None si no lo hay.
+
+        Único sitio que compara el secreto contra `mcp_token_hash`; el hash no
+        sale nunca de aquí.
+        """
+        if not token:
+            return None
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT id FROM perfiles WHERE mcp_token_hash = ?",
+                (hash_token_mcp(token),),
+            ).fetchone()
+        return self.obtener_perfil(row["id"]) if row else None
+
+    def emitir_token_mcp(self, perfil_id: int, rol: str | None = None) -> str:
+        """Emite un secreto MCP para un perfil y guarda solo su hash.
+
+        Devuelve el secreto en claro **una sola vez**: no hay forma de volver a
+        leerlo. Reemitir invalida el anterior.
+        """
+        token = secrets.token_urlsafe(32)
+        with self.conn() as c:
+            if rol:
+                cur = c.execute(
+                    "UPDATE perfiles SET mcp_token_hash = ?, rol = ? WHERE id = ?",
+                    (hash_token_mcp(token), rol, perfil_id),
+                )
+            else:
+                cur = c.execute(
+                    "UPDATE perfiles SET mcp_token_hash = ? WHERE id = ?",
+                    (hash_token_mcp(token), perfil_id),
+                )
+            if cur.rowcount == 0:
+                raise ValueError(f"No existe el perfil {perfil_id}")
+        return token
+
     def buscar_por_tag(self, tag: str) -> list[dict]:
         """Busca perfiles que contengan una etiqueta (tags separados por coma).
         Incluye arrays (comorbilidades, fármacos, etc.) y conversión de booleanos
@@ -436,6 +530,7 @@ class DBManager:
             result = []
             for r in rows:
                 r = dict(r)
+                r.pop("mcp_token_hash", None)  # credencial, nunca sale (MCP-003)
                 tags = [t.strip() for t in (r.get("tags") or "").split(",") if t.strip()]
                 if tag not in tags:
                     continue

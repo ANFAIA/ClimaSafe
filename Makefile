@@ -9,7 +9,7 @@
         docker-run docker-update docker-down \
         clean clean-models clean-figures clean-all \
         run info help web \
-        mcp mcp-factors install-mcp setup-claude \
+        mcp mcp-factors mcp-token install-mcp setup-claude \
         init harness-check backlog \
         agents-list agents-run agents-doctor agents-test agents-eval \
         prompts-sync assistants-sync prompts-check \
@@ -131,6 +131,7 @@ help:
 	@echo "    make mcp             MCP HTTPS autofirmado en :8101/mcp"
 	@echo "    make mcp-http        MCP HTTP plano en :8101/mcp"
 	@echo "    make mcp-stdio       MCP stdio (Claude Desktop local)"
+	@echo "    make mcp-token ALIAS=<a> [ROL=admin]   emite el token MCP de un perfil"
 	@echo "    make mcp-web         MCP + ngrok para Claude Web"
 	@echo "    make install-mcp     instala symlink en ~/.local/bin/"
 	@echo "    make setup-claude    genera claude_desktop_config.json"
@@ -229,6 +230,10 @@ mcp:
 mcp-http:
 	@echo "▶  MCP Server — HTTP plano en http://localhost:8101/mcp"
 	$(UVRUN) python -m agents.tools.prediction_mcp_tool --insecure
+
+mcp-token:
+	@test -n "$(ALIAS)" || (echo "Uso: make mcp-token ALIAS=<alias> [ROL=admin]"; exit 1)
+	$(UVRUN) python -m agents.tools.prediction_mcp_tool --emitir-token "$(ALIAS)" $(if $(ROL),--rol $(ROL),)
 
 mcp-web: mcp-http
 	@echo ""

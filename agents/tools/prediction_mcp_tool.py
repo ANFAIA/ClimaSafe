@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
+import inspect
 import io
 import json
 import logging
@@ -198,9 +200,11 @@ def _generar_resumen(
 def _try_prediction(
     lat: float, lon: float, provincia: str,
     perfil: dict, target_date: date_type | None = None,
+    resolucion: int = 60,
 ) -> dict:
     from climasafeai.models.ensemble import predict_ensemble
-    return predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=target_date)
+    return predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil,
+                            target_date=target_date, resolucion=resolucion)
 
 
 def _weather_for_date(lat: float, lon: float, provincia: str, target_date: date_type | None = None) -> dict:
@@ -284,6 +288,7 @@ def predict_risk(
     fecha: str | None = None,
     incluir_contrafactuales: bool = True,
     incluir_recomendaciones: bool = True,
+    resolucion: int = 60,
 ) -> dict:
     target_date = _parse_date(fecha)
     from climasafeai.features.personalizacion import (
@@ -324,7 +329,7 @@ def predict_risk(
 
     _aplicar_deporte_a_perfil(perfil)
 
-    result = _try_prediction(lat, lon, provincia, perfil, target_date)
+    result = _try_prediction(lat, lon, provincia, perfil, target_date, resolucion=resolucion)
 
     _ph = result.get("weather", {}).get("perfil_horario", [])
     if _ph:
@@ -946,6 +951,207 @@ def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[
     return [h["temp"] for h in perfil_horario if h.get("temp") is not None]
 
 
+# ── Control de acceso por identidad del llamante (MCP-003) ──────────
+#
+# Estos tres helpers se definen FUERA del try de importación de `mcp`: tienen
+# que existir aunque el servidor no esté instalado, y así se pueden testear sin
+# levantarlo. Toda tool registrada pasa por uno de ellos y queda marcada con
+# `__climasafe_acceso__`; la que no lo lleve rompe la suite (criterio 6).
+
+ENV_TOKEN_MCP = "CLIMASAFE_MCP_TOKEN"
+
+ERROR_SIN_IDENTIDAD = (
+    "Acceso denegado: este MCP no atiende llamantes anónimos. En stdio arranca "
+    f"el servidor con {ENV_TOKEN_MCP}=<token> o --identidad <token>; en HTTP manda "
+    "'Authorization: Bearer <token>'. El token se emite con `make mcp-token ALIAS=...`."
+)
+# Misma respuesta para «ese perfil no es tuyo» y para «ese perfil no existe»: si
+# se distinguieran, enumerar identificadores diría quién existe (criterio 4).
+ERROR_AJENO = "Acceso denegado: ese identificador no corresponde a tu perfil"
+ERROR_ADMIN = "Acceso denegado: esta operación requiere rol de administración"
+ERROR_SUJETO_AMBIGUO = (
+    "Nombra un solo sujeto: llegaron {claves}. Indica uid, perfil_id, alias o "
+    "chat_id, pero no varios a la vez; o ninguno, y se usa el perfil de tu token."
+)
+
+# Parámetros con los que una tool nombra al sujeto sobre el que opera.
+_CLAVES_SUJETO = ("uid", "perfil_id", "alias", "chat_id")
+# Con qué parámetro se rellena el sujeto cuando el llamante no nombra ninguno:
+# tener token ya es ser alguien, así que por defecto se opera sobre uno mismo.
+_ORDEN_INYECCION = ("perfil_id", "uid", "chat_id")
+
+
+def _token_del_transporte() -> str | None:
+    """El secreto del llamante, venga por HTTP o por proceso.
+
+    Único sitio del proyecto que sabe de dónde sale un token. En streamable-HTTP
+    llega en `Authorization: Bearer`; en stdio no hay cabeceras ni sesión, así
+    que la identidad es del proceso (un proceso = un llamante), que es como los
+    hosts configurados (`.mcp.json`, `opencode.json`) arrancan el servidor.
+    """
+    try:
+        from mcp.server.lowlevel.server import request_ctx
+
+        peticion = getattr(request_ctx.get(), "request", None)
+        cabecera = peticion.headers.get("authorization") if peticion is not None else None
+        if cabecera and cabecera.lower().startswith("bearer "):
+            bearer = cabecera[len("bearer "):].strip()
+            if bearer:
+                return bearer
+    except (ImportError, LookupError, AttributeError):
+        pass
+    return (os.environ.get(ENV_TOKEN_MCP) or "").strip() or None
+
+
+def _identidad_actual() -> tuple[dict | None, dict | None]:
+    """Perfil del llamante, o el error uniforme. Devuelve (perfil, error)."""
+    token = _token_del_transporte()
+    if not token:
+        return None, {"error": ERROR_SIN_IDENTIDAD}
+
+    from climasafeai.db.manager import DBManager
+
+    perfil = DBManager().buscar_por_token_mcp(token)
+    if not perfil:
+        return None, {"error": ERROR_SIN_IDENTIDAD}
+    return perfil, None
+
+
+def _es_el_mismo_perfil(clave: str, valor: Any, solicitante: dict) -> bool:
+    """¿El sujeto que nombra el llamante es él mismo?
+
+    Se compara contra el perfil del token, sin consultar la BD: así adivinar un
+    alias o un chat_id ajeno no distingue «existe» de «no existe».
+    """
+    if clave == "uid":
+        return bool(solicitante.get("uid")) and str(valor) == str(solicitante["uid"])
+    if clave == "perfil_id":
+        try:
+            return int(valor) == int(solicitante["id"])
+        except (TypeError, ValueError):
+            return False
+    if clave == "alias":
+        return bool(solicitante.get("alias")) and str(valor) == str(solicitante["alias"])
+    if clave == "chat_id":
+        chat = solicitante.get("telegram_chat_id")
+        return bool(chat) and str(valor) == str(chat)
+    return False
+
+
+def _requiere_identidad(nivel: str, sujeto: tuple[str, ...] = _CLAVES_SUJETO):
+    """Punto único de control de acceso de las tools MCP.
+
+    ``nivel``:
+      - ``"perfil_propio"``: exige token válido y que el sujeto nombrado
+        (uid/perfil_id/alias/chat_id) sea el propio llamante. **Se comprueban
+        todos los que vengan informados, y nombrar más de uno es error**: si
+        solo se validara el primero, la tool podría resolver por otro distinto.
+        Si no se nombra ninguno, se rellena con el del token.
+      - ``"identidad"``: basta con un token válido (no hay sujeto ajeno posible).
+      - ``"admin"``: además exige ``rol == 'admin'``.
+
+    ``sujeto`` acota qué parámetros nombran al sujeto, para las tools donde un
+    parámetro homónimo significa otra cosa (en ``vincular_chat_id_mcp``,
+    ``chat_id`` es el chat que se vincula, no quién llama).
+
+    Devuelve el error como JSON en un string, nunca lanza: es la convención del
+    fichero y los tests hacen ``_json(...)["error"]``.
+    """
+    def decorador(fn):
+        firma = inspect.signature(fn)
+        inyectables = [k for k in _ORDEN_INYECCION if k in sujeto and k in firma.parameters]
+
+        @functools.wraps(fn)
+        def envoltorio(*args, **kwargs):
+            solicitante, err = _identidad_actual()
+            if err:
+                return json.dumps(err, ensure_ascii=False)
+
+            if nivel == "admin":
+                if (solicitante.get("rol") or "usuario") != "admin":
+                    return json.dumps({"error": ERROR_ADMIN}, ensure_ascii=False)
+                return fn(*args, **kwargs)
+
+            if nivel == "identidad":
+                return fn(*args, **kwargs)
+
+            ligados = firma.bind(*args, **kwargs)
+            ligados.apply_defaults()
+            argumentos = dict(ligados.arguments)
+
+            nombrados = [
+                (clave, argumentos[clave]) for clave in sujeto
+                if argumentos.get(clave) is not None and argumentos.get(clave) != ""
+            ]
+
+            # Se validan TODOS los sujetos nombrados, no solo el primero. Cortar
+            # en el primero abría un bypass: el guardián aprobaba el sujeto que
+            # el llamante ponía delante y la tool usaba el de detrás, porque
+            # `_resolver_chat` mira `chat_id` primero y este bucle miraba `uid`
+            # primero. `alias=<propio>, chat_id=<ajeno>` leía y borraba rutinas
+            # ajenas. La seguridad no puede depender de en qué orden resuelva
+            # cada tool.
+            for clave, valor in nombrados:
+                if not _es_el_mismo_perfil(clave, valor, solicitante):
+                    return json.dumps({"error": ERROR_AJENO}, ensure_ascii=False)
+
+            # Y aunque todos sean propios, nombrar dos es ambiguo: deja abierta
+            # la posibilidad de que el guardián mire un parámetro y la tool otro.
+            # Un solo sujeto por llamada, y la pregunta desaparece.
+            if len(nombrados) > 1:
+                return json.dumps(
+                    {"error": ERROR_SUJETO_AMBIGUO.format(
+                        claves=", ".join(c for c, _ in nombrados))},
+                    ensure_ascii=False,
+                )
+
+            if nombrados:
+                return fn(*args, **kwargs)
+
+            for clave in inyectables:
+                propio = (
+                    solicitante["id"] if clave == "perfil_id"
+                    else solicitante.get("uid") if clave == "uid"
+                    else solicitante.get("telegram_chat_id")
+                )
+                if propio is None:
+                    continue
+                argumentos[clave] = propio
+                return fn(**argumentos)
+
+            return fn(*args, **kwargs)
+
+        envoltorio.__climasafe_acceso__ = nivel
+        # Qué parámetros cuentan como sujeto en ESTA tool. Lo consume el test
+        # que congela el invariante del caso mixto: sin esto habría que deducirlo
+        # de la firma, y `vincular_chat_id_mcp` tiene un `chat_id` que no es sujeto.
+        envoltorio.__climasafe_sujeto__ = tuple(k for k in sujeto if k in firma.parameters)
+        return envoltorio
+
+    return decorador
+
+
+def _acceso_publico(fn):
+    """Marca una tool que no toca la BD de perfiles: recibe todo por parámetro.
+
+    La exención es explícita y auditable; nunca implícita por omisión.
+    """
+    fn.__climasafe_acceso__ = "publico"
+    return fn
+
+
+# Campos que no salen nunca de una respuesta de perfil (criterio 5):
+# `mcp_token_hash` es la credencial y `telegram_chat_id` solo tiene sentido en
+# las tools de rutinas, donde es la clave de almacenamiento. `id` es secuencial
+# y lo sustituye `uid`.
+_CAMPOS_FUERA_DEL_PERFIL = ("mcp_token_hash", "telegram_chat_id", "id")
+
+
+def _perfil_publico(perfil: dict) -> dict:
+    """Vista minimizada de un perfil PROPIO. De uno ajeno no sale ni un campo."""
+    return {k: v for k, v in perfil.items() if k not in _CAMPOS_FUERA_DEL_PERFIL}
+
+
 # ── MCP Server ───────────────────────────────────────────────────────
 
 try:
@@ -954,6 +1160,7 @@ try:
     _mcp = FastMCP("ClimaSafeAI Predicción de Riesgo")
 
     @_mcp.tool()
+    @_acceso_publico
     def predict_risk_mcp(
         lat: float,
         lon: float,
@@ -976,6 +1183,7 @@ try:
         enfermedad_reciente: Optional[bool] = None,
         fiesta: Optional[bool] = None,
         fecha: Optional[str] = None,
+        resolucion: Optional[int] = 60,
     ) -> str:
         """Predice riesgo cardiovascular para 1 persona.
 
@@ -988,6 +1196,10 @@ trabajar (reparto, mantenimiento, construccion, campo; oficina si es bajo techo)
 Un peón de campo que sale a pasear el domingo NO lleva ocupacion — pesa hasta ×2.7.
 `entrenado` es si está acostumbrado a ESA actividad: reduce a la mitad el extra de
 esfuerzo. `deporte` es solo la etiqueta ("senderismo").
+
+`resolucion` es la resolución del perfil horario en minutos por punto (5, 15, 30
+o 60; por defecto 60 = 1 punto por hora). Con menos minutos se interpolan los
+puntos intermedios (DATA-007): mismo contrato de salida, más puntos.
 
 `situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
 vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
@@ -1005,21 +1217,27 @@ vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
             falta_sueno=falta_sueno, enfermedad_reciente=enfermedad_reciente,
             fiesta=fiesta,
             fecha=fecha,
+            resolucion=resolucion if resolucion is not None else 60,
         )
         _sanitize(result)
         return json.dumps(result, indent=2, default=str, ensure_ascii=False)
 
     @_mcp.tool()
+    @_requiere_identidad("admin")
     def listar_usuarios_mcp() -> str:
-        """Lista los perfiles guardados: alias, edad, sexo."""
+        """Lista los perfiles guardados: uid, alias, edad, sexo. SOLO ADMINISTRACIÓN.
+
+Un llamante con rol 'usuario' recibe error: enumerar perfiles es justo lo que el
+control de acceso impide. Para ver el tuyo usa `cargar_perfil_mcp` sin uid."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
         perfiles = db.listar_perfiles()
         datos = []
         for p in perfiles:
             datos.append({
-                "alias": p.get("alias") or f"ID {p['id']}",
-                "id": p["id"],
+                "uid": p.get("uid"),
+                "alias": p.get("alias") or f"(sin alias) {p.get('uid')}",
+                "rol": p.get("rol"),
                 "edad": p.get("edad"),
                 "sexo": p.get("sexo"),
                 "provincia": p.get("provincia"),
@@ -1028,22 +1246,32 @@ vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
         return json.dumps(datos, indent=2, ensure_ascii=False, default=str)
 
     @_mcp.tool()
-    def cargar_perfil_mcp(alias: str) -> str:
-        """Carga un perfil por su alias exacto. Su nivel_actividad, hora_inicio y duracion
-son genéricos: no valen para la predicción, pide los de esta salida."""
+    @_requiere_identidad("perfil_propio")
+    def cargar_perfil_mcp(uid: Optional[str] = None) -> str:
+        """Carga TU perfil. Sin `uid` carga el del token con el que llamas.
+
+El `uid` es el identificador público opaco ('usr_...'); alias y chat_id ya no
+sirven como llave. Pedir el uid de otra persona devuelve error, no datos.
+
+Su nivel_actividad, hora_inicio y duracion son genéricos: no valen para la
+predicción, pide los de esta salida."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
-        match = db.buscar_por_alias(alias)
+        match = db.buscar_por_uid(uid) if uid else None
         if not match:
-            return json.dumps({"error": f"No se encontró perfil con alias '{alias}'"}, ensure_ascii=False)
+            return json.dumps({"error": ERROR_AJENO}, ensure_ascii=False)
         perfil = db.obtener_perfil(match["id"])
         if not perfil:
-            return json.dumps({"error": f"Perfil ID {match['id']} no encontrado"}, ensure_ascii=False)
-        return json.dumps(perfil, indent=2, ensure_ascii=False, default=str)
+            return json.dumps({"error": ERROR_AJENO}, ensure_ascii=False)
+        return json.dumps(_perfil_publico(perfil), indent=2, ensure_ascii=False, default=str)
 
     @_mcp.tool()
+    @_requiere_identidad("perfil_propio")
     def cargar_perfil_por_chat_id_mcp(chat_id: str) -> str:
-        """Carga el perfil vinculado a un chat_id de Telegram, si lo hay."""
+        """Carga TU perfil a partir de tu chat_id de Telegram.
+
+Solo funciona con el chat vinculado a tu propio perfil: el chat_id dejó de ser
+llave de acceso."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
         match = db.buscar_por_telegram(chat_id)
@@ -1052,21 +1280,36 @@ son genéricos: no valen para la predicción, pide los de esta salida."""
         perfil = db.obtener_perfil(match["id"])
         if not perfil:
             return json.dumps({"encontrado": False, "mensaje": "Perfil no encontrado"}, ensure_ascii=False)
-        perfil["encontrado"] = True
-        return json.dumps(perfil, indent=2, ensure_ascii=False, default=str)
+        datos = _perfil_publico(perfil)
+        datos["encontrado"] = True
+        return json.dumps(datos, indent=2, ensure_ascii=False, default=str)
 
     @_mcp.tool()
-    def vincular_chat_id_mcp(alias: str, chat_id: str) -> str:
-        """Vincula un chat_id de Telegram a un perfil existente, buscado por alias."""
+    @_requiere_identidad("perfil_propio", sujeto=("uid",))
+    def vincular_chat_id_mcp(chat_id: str, uid: Optional[str] = None) -> str:
+        """Vincula un chat de Telegram a TU perfil (el del token con el que llamas).
+
+Antes aceptaba cualquier alias, y eso era escalada de privilegios en dos pasos:
+reasignabas el perfil ajeno a tu chat y luego lo leías como propio. Ahora solo
+se vincula el perfil propio, y nunca un chat que ya sea de otro."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
-        match = db.buscar_por_alias(alias)
+        match = db.buscar_por_uid(uid) if uid else None
         if not match:
-            return json.dumps({"success": False, "error": f"No se encontró perfil con alias '{alias}'"}, ensure_ascii=False)
+            return json.dumps({"success": False, "error": ERROR_AJENO}, ensure_ascii=False)
+        ocupado = db.buscar_por_telegram(str(chat_id))
+        if ocupado and ocupado["id"] != match["id"]:
+            # Las rutinas y los avisos cuelgan del chat_id: robarlo daría acceso
+            # a los de otro sin tocar su perfil.
+            return json.dumps(
+                {"success": False, "error": "Ese chat ya está vinculado a otro perfil"},
+                ensure_ascii=False,
+            )
         db.actualizar_perfil(match["id"], {"telegram_chat_id": chat_id})
-        return json.dumps({"success": True, "alias": alias, "chat_id": chat_id, "mensaje": f"Chat vinculado a '{alias}'"}, ensure_ascii=False)
+        return json.dumps({"success": True, "uid": match["uid"], "chat_id": chat_id, "mensaje": "Chat vinculado a tu perfil"}, ensure_ascii=False)
 
     @_mcp.tool()
+    @_requiere_identidad("identidad")
     def crear_perfil_mcp(alias: str, edad: int, sexo: str, grasa: Optional[float] = None, aclimatado: bool = False, comorbilidades: Optional[str] = None, medicacion: Optional[str] = None, nivel_actividad: Optional[str] = None, fototipo: Optional[str] = None, situacion_social: Optional[str] = None, chat_id: Optional[str] = None) -> str:
         """Crea un perfil y opcionalmente lo vincula a un chat de Telegram.
 
@@ -1081,6 +1324,8 @@ vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
         exist = db.buscar_por_alias(alias)
         if exist:
             return json.dumps({"success": False, "error": f"Ya existe un perfil con alias '{alias}'"}, ensure_ascii=False)
+        if chat_id and db.buscar_por_telegram(str(chat_id)):
+            return json.dumps({"success": False, "error": "Ese chat ya está vinculado a otro perfil"}, ensure_ascii=False)
         datos = {"alias": alias, "edad": edad, "sexo": sexo}
         # La tabla `perfiles` guarda porcentaje_grasa; no hay columna de peso ni altura.
         if grasa is not None:
@@ -1099,9 +1344,16 @@ vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
         if chat_id:
             datos["telegram_chat_id"] = chat_id
         pid = db.crear_perfil(datos)
-        return json.dumps({"success": True, "id": pid, "alias": alias, "mensaje": f"Perfil '{alias}' creado correctamente"}, indent=2, ensure_ascii=False)
+        creado = db.obtener_perfil(pid) or {}
+        return json.dumps(
+            {"success": True, "uid": creado.get("uid"), "alias": alias,
+             "mensaje": f"Perfil '{alias}' creado. Para que pueda usar el MCP hay que "
+                        f"emitirle un token: make mcp-token ALIAS='{alias}'"},
+            indent=2, ensure_ascii=False,
+        )
 
     @_mcp.tool()
+    @_requiere_identidad("perfil_propio")
     def listar_rutinas_mcp(
         alias: Optional[str] = None,
         perfil_id: Optional[int] = None,
@@ -1124,6 +1376,7 @@ opcionalmente ocupacion o deporte."""
         return json.dumps(rutinas, indent=2, ensure_ascii=False, default=str)
 
     @_mcp.tool()
+    @_requiere_identidad("perfil_propio")
     def crear_rutina_mcp(
         nombre: str,
         dias: str,
@@ -1164,6 +1417,7 @@ ciclismo, tenis...): su intensidad se deriva del MET del Compendium."""
         )
 
     @_mcp.tool()
+    @_requiere_identidad("perfil_propio")
     def borrar_rutina_mcp(
         rutina_id: int,
         alias: Optional[str] = None,
@@ -1190,6 +1444,7 @@ rutinas de ese perfil/chat."""
         return json.dumps({"success": True, "id": rid, "mensaje": "Rutina eliminada"}, ensure_ascii=False)
 
     @_mcp.tool()
+    @_requiere_identidad("perfil_propio")
     def configurar_hora_aviso_mcp(
         hora: Optional[str] = None,
         alias: Optional[str] = None,
@@ -1223,6 +1478,7 @@ si se omite, solo consulta la hora actual."""
         )
 
     @_mcp.tool()
+    @_requiere_identidad("perfil_propio")
     def riesgo_rutinas_dia_mcp(
         alias: Optional[str] = None,
         perfil_id: Optional[int] = None,
@@ -1293,9 +1549,9 @@ recomendación por ventana."""
 
         return json.dumps(
             {
-                "alias": perfil.get("alias"),
-                "perfil_id": perfil["id"],
-                "chat_id": chat,
+                # Solo el identificador opaco: alias, perfil_id y chat_id salían
+                # aquí y eran justo las llaves que dejaron de valer (MCP-003).
+                "uid": perfil.get("uid"),
                 "weekday": wd,
                 "fecha": target_date.isoformat() if target_date else "hoy",
                 "provincia": perfil.get("provincia") or "Madrid",
@@ -1306,6 +1562,7 @@ recomendación por ventana."""
         )
 
     @_mcp.tool(structured_output=False)
+    @_acceso_publico
     def grafica_riesgo_horario_mcp(
         lat: float,
         lon: float,
@@ -1328,6 +1585,7 @@ recomendación por ventana."""
         enfermedad_reciente: Optional[bool] = None,
         fiesta: Optional[bool] = None,
         fecha: Optional[str] = None,
+        resolucion: Optional[int] = 60,
     ) -> ImageContent | str:
         """Devuelve la curva de riesgo por hora como IMAGEN PNG, no como JSON.
 
@@ -1335,9 +1593,10 @@ Misma gráfica que enseña la web: eje izquierdo la peligrosidad ambiental 1-10
 derivada del Heat Index, eje derecho tu riesgo personal en % hora a hora, con la
 ventana de actividad sombreada, la franja recomendada en verde y el pico marcado.
 
-Los parámetros son los mismos que `predict_risk_mcp`: úsala cuando el usuario
-pida ver, dibujar o graficar el riesgo del día. Si quieres los números en vez
-del dibujo, usa `predict_risk_mcp`."""
+Los parámetros son los mismos que `predict_risk_mcp` (incluido `resolucion`, la
+resolución del perfil horario en minutos por punto: 5, 15, 30 o 60, default 60):
+úsala cuando el usuario pida ver, dibujar o graficar el riesgo del día. Si quieres
+los números en vez del dibujo, usa `predict_risk_mcp`."""
         comorb_list = [c.strip() for c in comorbilidades.split(",")] if comorbilidades else None
         med_list = [m.strip() for m in medicacion.split(",")] if medicacion else None
         sit_list = [s.strip() for s in situacion_social.split(",")] if situacion_social else None
@@ -1354,6 +1613,7 @@ del dibujo, usa `predict_risk_mcp`."""
             fecha=fecha,
             incluir_contrafactuales=False,
             incluir_recomendaciones=False,
+            resolucion=resolucion if resolucion is not None else 60,
         )
         png = grafica_riesgo_horario_png(
             result, hora_inicio=hora_inicio, duracion_h=duracion_h,
@@ -1431,6 +1691,24 @@ def run_mcp_server(
         print("\n   Servidor detenido.", file=sys.stderr, flush=True)
 
 
+def _emitir_token_cli(alias: str, rol: str | None = None) -> None:
+    """Emite el secreto MCP de un perfil y lo imprime UNA vez (MCP-003)."""
+    from climasafeai.db.manager import DBManager
+
+    db = DBManager()
+    db.initialize()
+    match = db.buscar_por_alias(alias)
+    if not match:
+        print(f"No existe ningún perfil con alias '{alias}'", file=sys.stderr)
+        raise SystemExit(1)
+    token = db.emitir_token_mcp(match["id"], rol=rol)
+    perfil = db.obtener_perfil(match["id"]) or {}
+    print(f"perfil : {alias} (uid {perfil.get('uid')}, rol {perfil.get('rol')})")
+    print(f"token  : {token}")
+    print(f"\nSe muestra una sola vez. Úsalo como {ENV_TOKEN_MCP}=<token> en stdio")
+    print("o como 'Authorization: Bearer <token>' en HTTP.")
+
+
 def main() -> None:
     import argparse
 
@@ -1441,7 +1719,17 @@ def main() -> None:
     parser.add_argument("--ssl-certfile", help="Ruta a certificado SSL")
     parser.add_argument("--insecure", action="store_true", help="HTTP plano en vez de HTTPS (SSE mode)")
     parser.add_argument("--stdio", action="store_true", help="Usar transporte stdio (para Claude Desktop)")
+    parser.add_argument("--identidad", help=f"Token del llamante en stdio (alternativa a {ENV_TOKEN_MCP})")
+    parser.add_argument("--emitir-token", metavar="ALIAS", help="Emite un token MCP para ese perfil y sale")
+    parser.add_argument("--rol", choices=("usuario", "admin"), help="Rol a fijar al emitir el token")
     args = parser.parse_args()
+
+    if args.emitir_token:
+        _emitir_token_cli(args.emitir_token, args.rol)
+        return
+
+    if args.identidad:
+        os.environ[ENV_TOKEN_MCP] = args.identidad
 
     if args.stdio:
         run_mcp_server(stdio=True)
