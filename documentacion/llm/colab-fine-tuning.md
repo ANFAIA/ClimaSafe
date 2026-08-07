@@ -94,7 +94,7 @@ Elige `data/llm/colab_dataset.zip` de tu máquina. La celda:
 | Celda | Qué hace |
 |-------|----------|
 | 1 | Comprueba que el runtime tiene GPU (`nvidia-smi` / `torch.cuda`) y aborta con mensaje claro si no |
-| 2 | Instala `torch==2.5.1` (cu121) + `unsloth[cu121-torch251]` — la receta de `climasafeai/llm/entrenar.sh` |
+| 2 | Desinstala el stack viejo y instala `unsloth[colab-new]` — la receta oficial de Unsloth para Colab. NO la de `entrenar.sh`: forzar `torch==2.5.1` rompe la importación de unsloth (el torchao de Colab 2026 usa `torch.int1`, que solo existe desde torch 2.6) |
 | 3 | Monta Google Drive (`/content/drive`) para persistir los artefactos |
 | 4 | Sube/descomprime `colab_dataset.zip` y verifica la versión (300/100 + marca + sha256) |
 | 5 | Copia `fine_tune.py` a `/content/` (desde Drive o subiéndolo) y entrena QLoRA con los hiperparámetros de `fine_tune.py`: rank 16, seq 1024, batch 2 × accum 4, 3 épocas, lr 2e-4 |

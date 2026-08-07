@@ -152,7 +152,7 @@ def entrenar(args: argparse.Namespace) -> None:
     """Entrena LoRA con Unsloth."""
     import torch
     from unsloth import FastLanguageModel, is_bfloat16_supported
-    from unsloth.chat_templates import train_on_responses_only
+    from unsloth.chat_templates import get_chat_template, train_on_responses_only
     from transformers import TrainingArguments, DataCollatorForSeq2Seq
     from datasets import Dataset as HFDataset
 
@@ -179,6 +179,9 @@ def entrenar(args: argparse.Namespace) -> None:
         load_in_4bit=True,  # QLoRA: modelo en 4 bits
         device_map="auto",
     )
+    # Unsloth no garantiza tokenizer.chat_template y transformers 5.5.0 lo
+    # exige para apply_chat_template: aplicamos el de Qwen 2.5.
+    tokenizer = get_chat_template(tokenizer, chat_template="qwen-2.5")
 
     # 2. Añadir LoRA
     print("[2/5] Añadiendo LoRA...")
@@ -384,6 +387,7 @@ def evaluar(args: argparse.Namespace) -> None:
 
     try:
         from unsloth import FastLanguageModel
+        from unsloth.chat_templates import get_chat_template
     except ImportError:
         print("ERROR: Unsloth no está instalado. Ejecuta en el entorno unsloth.", file=sys.stderr)
         sys.exit(1)
@@ -401,6 +405,9 @@ def evaluar(args: argparse.Namespace) -> None:
         load_in_4bit=True,
         device_map="auto",
     )
+    # Mismo requisito que en entrenar: apply_chat_template necesita
+    # chat_template configurado en el tokenizer (transformers 5.5.0).
+    tokenizer = get_chat_template(tokenizer, chat_template="qwen-2.5")
     FastLanguageModel.for_inference(model)
 
     # Cargar dataset de validación
