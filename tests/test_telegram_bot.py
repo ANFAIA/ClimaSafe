@@ -290,9 +290,13 @@ class TestTemplate:
         # BOT-013: la clase va anclada en su escala y el % como frecuencia
         assert "Sevilla — PELIGRO, el nivel más alto de tres" in texto
         assert "en unos 72 el calor te pasaría factura" in texto
+        # BOT-020: el parte abre con la clasificación y la probabilidad en %
+        assert texto.startswith(
+            "Clasificación: PELIGRO — probabilidad de riesgo personalizada por calor: 72% (0.7200)."
+        )
         assert "🌡️ Temperatura prevista: 38.0 °C" in texto
         assert "☀️ Índice UV (media): 8" in texto
-        assert "Recomendación:" in texto
+        assert "Recomendaciones de la herramienta (nivel PELIGRO, no las suavizo):" in texto
 
 
 class TestParteFinal:
@@ -1267,8 +1271,10 @@ class TestPartePorcentaje:
     def test_parte_porcentaje_plantilla_explica_el_porcentaje(self):
         texto = _format_template(self._resultado(prob=0.21), "Moaña, Pontevedra")
         assert "en unos 21 el calor te pasaría factura" in texto
-        # El porcentaje suelto y su coletilla ya no aparecen
-        assert "21%" not in texto
+        # BOT-020: la cifra aparece en la cabecera, con su etiqueta, no suelta
+        # como "Riesgo PRECAUCIÓN (21%)" que parecía explicar la clase.
+        assert "probabilidad de riesgo personalizada por calor: 21% (0.2100)" in texto
+        assert "Riesgo PRECAUCIÓN (21%)" not in texto
         assert "mayor cuanto más se acerque a 100%" not in texto
 
     def test_plantilla_separa_la_clase_del_porcentaje(self):
@@ -1323,6 +1329,103 @@ class TestPartePorcentaje:
         assert "mayor cuanto más se acerque a 100%" not in capturado["prompt"]
         # El parte devuelto conserva lo que escribió el LLM
         assert texto.startswith("Moaña — Riesgo PRECAUCIÓN")
+
+
+class TestParteBOT020:
+    """BOT-020: el parte tras la predicción se entiende de un vistazo.
+
+    Abre con la clasificación y la probabilidad en %, resume la jornada, lista
+    los factores con su multiplicador de mayor a menor, compara con la salida
+    anterior si la hay y cierra con la tabla horaria y las recomendaciones de
+    la herramienta sin suavizar.
+    """
+
+    def _resultado(self, prob=0.69, clase=2):
+        return {
+            "clase_final": clase,
+            "clase_final_label": "PELIGRO" if clase >= 2 else "PRECAUCIÓN",
+            "perfil": {"calor": {"prob_personalizada": prob, "factores": [
+                {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
+                 "categoria": "ocupacional", "factor": 2.2},
+                {"nombre": "duración 8.0 h", "categoria": "fisiologico", "factor": 1.4},
+                {"nombre": "hora inicio 8:00 (solapa pico calor)", "categoria": "fisiologico", "factor": 1.2},
+                {"nombre": "falta de sueño / mala noche", "categoria": "fisiologico", "factor": 1.2},
+            ]}},
+            "perfil_usuario": {
+                "hora_inicio": 8, "duracion_actividad_h": 8,
+                "nivel_actividad": "moderada", "aclimatado": False,
+                "ocupacion": "construccion", "falta_sueno": True,
+            },
+            "weather": {
+                "provincia": "Madrid",
+                "current": {"t2m_c": 36.0, "rh": 40},
+                "uv_index": 8,
+                # Campana: el HI sube hasta las 13 y baja, para que el pico de
+                # la curva quede en medio de la ventana y haya inicio/pico/fin.
+                "perfil_horario": [
+                    {"hora": h, "HI": {8: 25, 9: 28, 10: 31, 11: 33, 12: 35, 13: 37, 14: 34, 15: 31, 16: 29}[h],
+                     "temp": 20 + h}
+                    for h in range(8, 17)
+                ],
+            },
+            "recomendaciones": [
+                "Evita la actividad al aire libre entre las 12:00 y las 17:00",
+                "Mantente hidratado y en un lugar fresco",
+            ],
+        }
+
+    def test_cabecera_abre_con_clasificacion_y_probabilidad(self):
+        """Criterio 1: el parte abre con la clase y la probabilidad en %."""
+        texto = _format_template(self._resultado(prob=0.6909), "Madrid")
+        assert texto.startswith(
+            "Clasificación: PELIGRO — probabilidad de riesgo personalizada por calor: 69% (0.6909)."
+        )
+
+    def test_resumen_jornada_en_una_linea(self):
+        """Criterio 2: actividad, horario, duración, intensidad, aclimatado, sueño."""
+        texto = _format_template(self._resultado(), "Madrid")
+        assert (
+            "Con esta jornada (trabajo de construcción, 8:00-16:00, 8h, "
+            "actividad moderada, no aclimatado, con falta de sueño)" in texto
+        )
+
+    def test_factores_con_multiplicador_ordenados_de_mayor_a_menor(self):
+        """Criterio 3: cada factor con su x y ordenados por peso."""
+        texto = _format_template(self._resultado(), "Madrid")
+        x22 = texto.index("• trabajo de construcción al aire libre (factor x2.2)")
+        x14 = texto.index("• la duración de 8h (factor x1.4)")
+        x12 = texto.index("• el horario que solapa con el pico de calor (factor x1.2)")
+        sueno = texto.index("• la falta de sueño (factor x1.2)")
+        assert x22 < x14 < x12 < sueno
+
+    def test_tabla_horaria_inicio_pico_fin_con_heat_index(self):
+        """Criterio 4: tabla Hora / Riesgo / Heat Index con inicio, pico y fin."""
+        texto = _format_template(self._resultado(), "Madrid")
+        assert "Hora | Riesgo | Heat Index" in texto
+        assert "8:00 (inicio) |" in texto
+        assert "13:00 (pico) |" in texto
+        assert "15:00 (fin) |" in texto
+        assert "°C" in texto
+
+    def test_recomendaciones_tal_cual_sin_suavizar(self):
+        """Criterio 4: las recomendaciones de la herramienta, línea por línea."""
+        texto = _format_template(self._resultado(), "Madrid")
+        assert "Recomendaciones de la herramienta (nivel PELIGRO, no las suavizo):" in texto
+        assert "1. Evita la actividad al aire libre entre las 12:00 y las 17:00" in texto
+        assert "2. Mantente hidratado y en un lugar fresco" in texto
+
+    def test_comparacion_con_salida_anterior(self):
+        """Criterio 5: si hay salida previa y el nivel sube, se dice."""
+        texto = _format_template(
+            self._resultado(), "Madrid",
+            salida_anterior={"clase_final": 0, "actividad": "correr por la tarde"},
+        )
+        assert "Es un nivel más alto que la simulación anterior de correr por la tarde." in texto
+
+    def test_sin_salida_anterior_no_se_inventa_comparacion(self):
+        """Criterio 5: hoy no hay salida guardada (BOT-017): no se compara."""
+        texto = _format_template(self._resultado(), "Madrid")
+        assert "simulación anterior" not in texto
 
 
 class TestChatParteConcisa:

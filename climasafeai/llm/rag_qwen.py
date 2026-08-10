@@ -393,6 +393,25 @@ _CLASES_LLANAS = {
     "PELIGRO": "PELIGRO, el nivel más alto de tres: seguro / precaución / peligro",
 }
 
+
+def _cabecera_parte(resultado_prediccion: dict) -> str:
+    """BOT-020: el parte abre con la clasificación y la probabilidad en %.
+
+    La clase y su cifra juntas, sí — pero la coletilla de `LINEA_CLASE_VS_PORCENTAJE`
+    va justo después: el nivel NO se deduce del porcentaje (BOT-013).
+    """
+    label = resultado_prediccion.get("clase_final_label") or "?"
+    # El ensemble escribe "PRECAUCION" (CLASES); en el parte va con tilde.
+    clase = "PRECAUCIÓN" if str(label).strip().upper() == "PRECAUCION" else label
+    p = (resultado_prediccion.get("perfil") or {}).get("calor") or {}
+    prob = p.get("prob_personalizada")
+    if isinstance(prob, (int, float)):
+        return (
+            f"Clasificación: {clase} — probabilidad de riesgo personalizada por "
+            f"calor: {prob:.0%} ({prob:.4f})."
+        )
+    return f"Clasificación: {clase} — probabilidad de riesgo personalizada por calor: n/d."
+
 # El nivel NO se deduce del porcentaje: sale de `apply_class_thresholds` con los
 # umbrales de la provincia y de los overrides físicos de `predict_ensemble`
 # (HI>=39 → PELIGRO, HI>=27 + UV>3 → PRECAUCION). Enseñar los dos números
@@ -513,6 +532,7 @@ def lineas_parte(resultado_prediccion: dict, lugar: str | None = None) -> list[s
     ubicacion = lugar or w.get("provincia") or "?"
 
     lineas = [
+        _cabecera_parte(resultado_prediccion),
         f"{ubicacion} — {_clase_llana(resultado_prediccion.get('clase_final_label'))}.",
         _frecuencia_natural(p.get("prob_personalizada") or 0),
         LINEA_CLASE_VS_PORCENTAJE,
@@ -532,6 +552,7 @@ def lineas_parte(resultado_prediccion: dict, lugar: str | None = None) -> list[s
 # si el LLM la copió: comparar la frase entera no vale porque los modelos
 # pequeños cambian una palabra ("como hoy" por "como el de hoy") al copiar.
 _MARCAS_REPONIBLES = (
+    "probabilidad de riesgo personalizada por calor",  # la cabecera (BOT-020)
     "te pasaría factura",           # la frecuencia natural: es LA cifra del parte
     "no es lo que decide tu nivel",  # el nivel no sale del porcentaje
     "Lo que más pesa",              # el factor dominante con su línea base
@@ -590,10 +611,17 @@ def ask_con_perfil(
     resumen = recomendacion_resumen(resultado_prediccion)
 
     # Factores con su coeficiente ("construcción (x2.2)"), no solo el nombre:
-    # sin el multiplicador el LLM se inventa cuánto pesa cada factor.
+    # sin el multiplicador el LLM se inventa cuánto pesa cada factor. Ordenados
+    # de mayor a menor, igual que los lista el parte determinista (BOT-020).
+    ordenados = sorted(
+        (f for f in factores if isinstance(f, dict) and isinstance(f.get("factor"), (int, float))),
+        key=lambda f: f["factor"],
+        reverse=True,
+    )
+    resto = [f for f in factores if f not in ordenados]
     factores_ctx = ", ".join(
         f"{f['nombre']} (x{f['factor']})" if isinstance(f, dict) else str(f)
-        for f in factores
+        for f in [*ordenados, *resto]
     ) or "ninguno"
 
     # Ocupación del perfil con su etiqueta y coeficiente (si está en la tabla

@@ -1177,8 +1177,10 @@
         "Un host que solo lee (Claude Desktop, opencode) sigue funcionando igual sin configurar nada",
         "Hay tests de los tres casos (lectura sin token, escritura sin token rechazada, escritura con token) y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-10",
+      "review_rounds": 1
     },
     {
       "id": "SEC-001",
@@ -1522,8 +1524,9 @@
         "El bot compara con la salida anterior si la hay ('es un nivel mas alto que la simulacion anterior de...'), se pega la salida real",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-10"
     },
     {
       "id": "ARNES-014",

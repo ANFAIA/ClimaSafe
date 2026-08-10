@@ -18,12 +18,15 @@ import os
 import re
 import signal
 import sys
-import textwrap
 from datetime import date, datetime
 from enum import Enum, auto
 
 from climasafeai.bot.geocoding import buscar_lugar, provincia_desde_coords
-from climasafeai.features.personalizacion import _OCUPACION_NIVELES, nivel_actividad_de_deporte
+from climasafeai.features.personalizacion import (
+    _OCUPACION_NIVELES,
+    nivel_actividad_de_deporte,
+    riesgo_horario_acumulado,
+)
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -472,16 +475,167 @@ FIELD_LABELS: dict[Estado, tuple[str, str, Any]] = {
 # ── Formateo de respuesta ─────────────────────────────────────────────────
 
 # BOT-013: la cabecera y las frases de riesgo salen de `lineas_parte`, las
-# mismas que se le dan al LLM. Antes esta plantilla ponía "Riesgo PRECAUCIÓN
-# (19%)" y el 19% parecía explicar la clase cuando ni siquiera sale de ahí.
-RESPONSE_TEMPLATE = textwrap.dedent("""\
-    {cabecera}
+# mismas que se le dan al LLM. BOT-020: esa cabecera abre con la clasificación
+# y la probabilidad en %, y el resto del parte (jornada, factores, tabla
+# horaria, recomendaciones) se monta aquí, en la plantilla determinista.
 
-    {explicacion}
-    🌡️ Temperatura prevista: {temp:.1f} °C
-    ☀️ Índice UV (media): {uv}
-    ❗ Recomendación: {recomendacion}
-""")
+
+def _linea_comparacion_salida_anterior(
+    result: dict, salida_anterior: dict | None
+) -> str | None:
+    """Criterio 5 (BOT-020): 'es un nivel más alto que la simulación anterior de...'.
+
+    Punto de extensión de BOT-017: hoy el perfil no guarda la última salida, así
+    que nadie llama con `salida_anterior`; cuando exista el dato, se pasará aquí
+    con {'clase_final': int, 'actividad': str} y la comparación sale sola.
+    """
+    if not salida_anterior:
+        return None
+    actual = result.get("clase_final") or 0
+    previa = salida_anterior.get("clase_final") or 0
+    actividad = salida_anterior.get("actividad")
+    if not actividad:
+        return None
+    if actual > previa:
+        return f"Es un nivel más alto que la simulación anterior de {actividad}."
+    if actual < previa:
+        return f"Es un nivel más bajo que la simulación anterior de {actividad}."
+    return None
+
+
+def _resumen_jornada(perfil_u: dict) -> str | None:
+    """Criterio 2 (BOT-020): la jornada en una línea, en lenguaje llano.
+
+    '(actividad, horario, duración, intensidad, aclimatado, falta de sueño)'
+    con los campos de los que haya dato. La ocupa quien la llama.
+    """
+    inicio = perfil_u.get("hora_inicio")
+    duracion = perfil_u.get("duracion_actividad_h")
+    if inicio is None or duracion is None:
+        return None
+    bits: list[str] = []
+    ocp = perfil_u.get("ocupacion")
+    if ocp in _OCUPACION_NIVELES:
+        # "Construcción / albañilería (carga pesada, PPE, sol directo)" → "construcción"
+        oficio = _OCUPACION_NIVELES[ocp][1].split("/")[0].split("(")[0].strip().lower()
+        bits.append(f"trabajo de {oficio}")
+    elif perfil_u.get("deporte"):
+        bits.append(str(perfil_u["deporte"]))
+    bits.append(f"{inicio:.0f}:00-{inicio + duracion:.0f}:00")
+    bits.append(f"{duracion:g}h")
+    if perfil_u.get("nivel_actividad"):
+        bits.append(f"actividad {perfil_u['nivel_actividad']}")
+    if perfil_u.get("aclimatado") is True:
+        bits.append("aclimatado")
+    elif perfil_u.get("aclimatado") is False:
+        bits.append("no aclimatado")
+    if "falta_sueno" in perfil_u:
+        bits.append("con falta de sueño" if perfil_u["falta_sueno"] else "sin falta de sueño")
+    return ", ".join(bits) or None
+
+
+def _nombre_factor_llano(nombre: str) -> str:
+    """El nombre técnico del pipeline a lenguaje llano para el parte (BOT-020)."""
+    n = nombre.strip()
+    low = n.lower()
+    if low.startswith("trabajo "):
+        # "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)"
+        oficio = n[len("trabajo "):].split("/")[0].split("(")[0].strip().lower()
+        return f"trabajo de {oficio} al aire libre"
+    if low.startswith("duración"):
+        return f"la duración de {float(n.split()[1]):g}h"
+    if low.startswith("hora inicio"):
+        return "el horario que solapa con el pico de calor"
+    if low == "no aclimatado":
+        return "no estar aclimatado"
+    if low.startswith("falta de sueño"):
+        return "la falta de sueño"
+    if low.startswith("edad "):
+        return f"la edad de {n.split()[1]} años"
+    if low.startswith("actividad "):
+        return f"la actividad {n.split('actividad ', 1)[1]}"
+    if low.startswith("sexo "):
+        return "el sexo"
+    if low.startswith("fiesta"):
+        return "el consumo de alcohol reciente"
+    if low.startswith("enfermedad reciente"):
+        return "una enfermedad reciente"
+    if low.startswith("grasa corporal"):
+        return "la grasa corporal"
+    if low.startswith("fatiga acumulada"):
+        return "la fatiga acumulada"
+    if low.startswith("uv "):
+        return "la radiación UV"
+    if low.startswith("aislamiento"):
+        return "el aislamiento"
+    return n
+
+
+def _lineas_factores(result: dict) -> list[str]:
+    """Criterio 3 (BOT-020): los factores con su multiplicador, de mayor a menor.
+
+    Solo los que suben el riesgo (>1): los protectores (<1) no "pesan" y los
+    neutros no aportan nada al parte.
+    """
+    calor = (result.get("perfil") or {}).get("calor") or {}
+    candidatos = [
+        f for f in calor.get("factores") or []
+        if isinstance(f, dict) and isinstance(f.get("factor"), (int, float)) and f["factor"] > 1.0
+    ]
+    if not candidatos:
+        return []
+    ordenados = sorted(candidatos, key=lambda f: f["factor"], reverse=True)
+    return [
+        f"• {_nombre_factor_llano(f['nombre'])} (factor x{f['factor']})"
+        for f in ordenados
+    ]
+
+
+def _formato_hora(hora) -> str:
+    """8 → '8:00'; 8.5 → '8:30' (la curva puede traer puntos sub-horarios)."""
+    h = float(hora)
+    return f"{int(h)}:{int(round((h - int(h)) * 60)):02d}"
+
+
+def _tabla_horaria(perfil_h: list[dict], perfil_u: dict) -> list[str]:
+    """Criterio 4 (BOT-020): riesgo por hora de la jornada, inicio-pico-fin.
+
+    La curva sale de `riesgo_horario_acumulado` (contrato intacto); aquí solo
+    se eligen las filas: la primera de la ventana, la de riesgo máximo y la
+    última.
+    """
+    inicio = perfil_u.get("hora_inicio")
+    duracion = perfil_u.get("duracion_actividad_h")
+    if not perfil_h or inicio is None or duracion is None:
+        return []
+    curva = riesgo_horario_acumulado(perfil_h, perfil_u)
+    ventana = [c for c in curva if inicio <= c["hora"] < inicio + duracion]
+    if not ventana:
+        return []
+    pico = max(ventana, key=lambda c: c["riesgo"])
+    filas: list[tuple] = [(ventana[0], "inicio")]
+    if pico["hora"] != ventana[0]["hora"]:
+        filas.append((pico, "pico"))
+    ultima = ventana[-1]
+    if ultima["hora"] != pico["hora"] and ultima["hora"] != ventana[0]["hora"]:
+        filas.append((ultima, "fin"))
+    lineas = ["El riesgo por horas de la jornada:", "Hora | Riesgo | Heat Index"]
+    for c, etiqueta in filas:
+        lineas.append(f"{_formato_hora(c['hora'])} ({etiqueta}) | {c['riesgo']:.2f} | {c['hi']:.1f}°C")
+    return lineas
+
+
+def _linea_recomendaciones(result: dict) -> str:
+    """Criterio 4 (BOT-020): las recomendaciones de la herramienta tal cual."""
+    nivel = result.get("clase_final_label") or ""
+    cabecera = (
+        f"Recomendaciones de la herramienta (nivel {nivel}, no las suavizo):"
+        if nivel else "Recomendaciones de la herramienta (no las suavizo):"
+    )
+    recs = result.get("recomendaciones") or []
+    if not recs:
+        return f"{cabecera}\n{recomendacion_resumen(result)}"
+    return cabecera + "\n" + "\n".join(f"{i}. {r}" for i, r in enumerate(recs, 1))
 
 
 def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[float]:
@@ -505,12 +659,15 @@ def _format_uv(uv) -> str:
     return f"{uv:.1f}".rstrip("0").rstrip(".")
 
 
-def _format_template(result: dict, lugar: str | None = None) -> str:
+def _format_template(result: dict, lugar: str | None = None, salida_anterior: dict | None = None) -> str:
     """Respuesta sin LLM: plantilla fija con el parte completo.
 
-    Incluye la ubicación del usuario, el nivel de riesgo con su porcentaje, la
-    temperatura prevista (media en las horas de actividad), el índice UV medio
-    y una recomendación adaptada al contexto (frío/calor/UV), no solo la clase.
+    BOT-020: el parte abre con la clasificación y su probabilidad (criterio 1),
+    compara con la salida anterior si la hay (criterio 5), resume la jornada
+    (criterio 2), lista los factores con su multiplicador de mayor a menor
+    (criterio 3) y cierra con la tabla horaria y las recomendaciones tal cual
+    (criterio 4). Las frases BOT-013 vienen de `lineas_parte`, las mismas que
+    ve el modo LLM.
     """
     w = result.get("weather", {})
     cur = w.get("current", {})
@@ -522,14 +679,36 @@ def _format_template(result: dict, lugar: str | None = None) -> str:
     if uv is None:
         uv = cur.get("uv_index")
 
+    # Cabecera (criterio 1) + frases BOT-013: compartidas con la vía LLM.
     cabecera, *explicacion = lineas_parte(result, lugar)
-    return RESPONSE_TEMPLATE.format(
-        cabecera=cabecera,
-        explicacion="\n".join(f"🔎 {linea}" for linea in explicacion),
-        temp=temp,
-        uv=_format_uv(uv),
-        recomendacion=recomendacion_resumen(result),
-    )
+    bloque = [cabecera]
+
+    # Criterio 5: comparación con la salida anterior, si la hay (BOT-017).
+    comparacion = _linea_comparacion_salida_anterior(result, salida_anterior)
+    if comparacion:
+        bloque.append(comparacion)
+
+    bloque.extend(explicacion)
+
+    # Criterio 2: la jornada en una línea. Criterio 3: factores por peso.
+    jornada = _resumen_jornada(perfil_u)
+    factores = _lineas_factores(result)
+    if jornada and factores:
+        bloque.append(f"Con esta jornada ({jornada}), el riesgo lo marcan estos factores, de mayor a menor:")
+        bloque.extend(factores)
+    elif jornada:
+        bloque.append(f"Con esta jornada ({jornada}).")
+    elif factores:
+        bloque.append("Factores que pesan, de mayor a menor:")
+        bloque.extend(factores)
+
+    # Criterio 4: tabla horaria y recomendaciones de la herramienta.
+    bloque.extend(_tabla_horaria(perfil_h, perfil_u))
+    bloque.append(_linea_recomendaciones(result))
+
+    bloque.append(f"🌡️ Temperatura prevista: {temp:.1f} °C")
+    bloque.append(f"☀️ Índice UV (media): {_format_uv(uv)}")
+    return "\n".join(bloque)
 
 
 # ── Lógica del bot (stateless por conversación) ───────────────────────────

@@ -531,6 +531,11 @@ class TestParteLlano:
         prompt = self._prompt(mock_chat, self._resultado())
 
         assert "FRASES OBLIGATORIAS" in prompt
+        # 0. BOT-020: el parte abre con la clasificación y la probabilidad en %
+        assert (
+            "Clasificación: PRECAUCIÓN — probabilidad de riesgo personalizada por "
+            "calor: 19% (0.1900)." in prompt
+        )
         # 1. la clase anclada en su escala
         assert "Vigo, Pontevedra — PRECAUCIÓN, el nivel intermedio de tres" in prompt
         # 2. el porcentaje como frecuencia natural
