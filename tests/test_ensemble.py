@@ -5,7 +5,7 @@ Regresión DATA-003: el perfil horario debe construirse SOLO con el día
 objetivo, no con el máximo por hora de todos los días del df_hora (que mezcla
 14 días de histórico + el día objetivo para alimentar el LSTM).
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import pytest
@@ -148,3 +148,129 @@ def test_perfil_horario_15min_desviacion_frente_al_horario_acotada():
         desv.append(hi_max15 - hi_horario)
     assert max(desv) == pytest.approx(1.575, abs=0.01)
     assert max(desv) <= 1.6
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FORECAST-001: tendencia semanal con banda de confianza conformal
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _resultado_semanal(prob: float, set_size: int, clase: str = "PRECAUCION") -> dict:
+    """Resultado mínimo de predict_ensemble que consume prediccion_semanal."""
+    return {
+        "clase_final_label": clase,
+        "perfil": {
+            "calor": {"prob_personalizada": prob},
+            "frio": {"prob_personalizada": 0.01},
+        },
+        "modelos": {
+            "XGBoost_calor": {"conformal_set_size": set_size},
+            "RandomForest_frio": {"conformal_set_size": set_size},
+        },
+    }
+
+
+def _fake_predict_semanal(monkeypatch, ens, dias_hasta: int, prob, set_size):
+    """Fake de predict_ensemble: sube la prob con el día y lanza
+    ForecastHorizonError a partir de `dias_hasta`."""
+    from climasafeai.data.weather_fetcher import ForecastHorizonError
+
+    llamadas: list[date] = []
+
+    def _fake(lat=None, lon=None, provincia="Madrid", perfil=None,
+              target_date=None, weather=None, resolucion=60):
+        llamadas.append(target_date)
+        delta = (target_date - date.today()).days
+        if delta >= dias_hasta:
+            raise ForecastHorizonError("El forecast meteorológico llega hasta ...")
+        return _resultado_semanal(prob + 0.02 * delta, set_size)
+
+    monkeypatch.setattr(ens, "predict_ensemble", _fake)
+    return llamadas
+
+
+class TestPrediccionSemanal:
+    def test_serie_completa_de_7_dias_con_banda_conformal(self, monkeypatch):
+        import climasafeai.models.ensemble as ens
+
+        _fake_predict_semanal(monkeypatch, ens, dias_hasta=7, prob=0.2, set_size=1)
+        res = ens.prediccion_semanal(lat=40.4, lon=-3.7, perfil={"edad": 40})
+
+        assert res["completo"] is True
+        assert res["horizonte_dias"] == 7
+        assert res["forecast_hasta"] == (date.today() + timedelta(days=6)).isoformat()
+        assert len(res["dias"]) == 7
+        assert [d["fecha"] for d in res["dias"]] == [
+            (date.today() + timedelta(days=i)).isoformat() for i in range(7)
+        ]
+
+        d0 = res["dias"][0]
+        assert d0["prob"] == pytest.approx(0.2)
+        # set_size=1 → confianza alta y banda ±5 puntos
+        assert d0["confianza_conformal"] == "alta"
+        assert d0["set_size_conformal"] == 1
+        assert d0["banda"] == [pytest.approx(0.15), pytest.approx(0.25)]
+
+        d6 = res["dias"][6]
+        assert d6["prob"] == pytest.approx(0.2 + 0.02 * 6)
+        assert d6["banda"][0] == pytest.approx(d6["prob"] - 0.05)
+
+    def test_corta_la_serie_cuando_se_acaba_el_forecast(self, monkeypatch):
+        """Criterio 3: si el forecast no cubre los 7 días, se avisa hasta dónde."""
+        import climasafeai.models.ensemble as ens
+
+        _fake_predict_semanal(monkeypatch, ens, dias_hasta=3, prob=0.3, set_size=2)
+        res = ens.prediccion_semanal(lat=40.4, lon=-3.7)
+
+        assert res["completo"] is False
+        assert len(res["dias"]) == 3
+        assert res["forecast_hasta"] == (date.today() + timedelta(days=2)).isoformat()
+        # los días que sí se predijeron llevan su banda
+        assert all(d["banda"] is not None for d in res["dias"])
+
+    def test_set_size_medio_entre_modelos(self, monkeypatch):
+        """XGBoost dice 1 y RF dice 3 → set medio 2 (media) → banda ±15 pts."""
+        import climasafeai.models.ensemble as ens
+
+        def _fake(lat=None, lon=None, provincia="Madrid", perfil=None,
+                  target_date=None, weather=None, resolucion=60):
+            return {
+                "clase_final_label": "SEGURO",
+                "perfil": {"calor": {"prob_personalizada": 0.3}, "frio": {"prob_personalizada": 0.01}},
+                "modelos": {
+                    "XGBoost_calor": {"conformal_set_size": 1},
+                    "RandomForest_frio": {"conformal_set_size": 3},
+                },
+            }
+
+        monkeypatch.setattr(ens, "predict_ensemble", _fake)
+        res = ens.prediccion_semanal(lat=40.4, lon=-3.7)
+        d0 = res["dias"][0]
+        assert d0["set_size_conformal"] == 2
+        assert d0["confianza_conformal"] == "media"
+        assert d0["banda"] == [pytest.approx(0.15), pytest.approx(0.45)]
+
+    def test_sin_senal_conformal_usa_media(self, monkeypatch):
+        """Modelos sin conformal_set_size → set 2 (media), no rompe."""
+        import climasafeai.models.ensemble as ens
+
+        def _fake(lat=None, lon=None, provincia="Madrid", perfil=None,
+                  target_date=None, weather=None, resolucion=60):
+            return {
+                "clase_final_label": "SEGURO",
+                "perfil": {"calor": {"prob_personalizada": 0.5}, "frio": {"prob_personalizada": 0.01}},
+                "modelos": {"LSTM": {"error": "no disponible"}, "Formula": {}},
+            }
+
+        monkeypatch.setattr(ens, "predict_ensemble", _fake)
+        res = ens.prediccion_semanal(lat=40.4, lon=-3.7)
+        assert res["dias"][0]["set_size_conformal"] == 2
+        assert res["dias"][0]["banda"] == [pytest.approx(0.35), pytest.approx(0.65)]
+
+    def test_banda_nunca_sale_del_rango_0_1(self, monkeypatch):
+        import climasafeai.models.ensemble as ens
+
+        _fake_predict_semanal(monkeypatch, ens, dias_hasta=7, prob=0.99, set_size=3)
+        res = ens.prediccion_semanal(lat=40.4, lon=-3.7)
+        for d in res["dias"]:
+            assert d["banda"][0] >= 0.0
+            assert d["banda"][1] <= 1.0

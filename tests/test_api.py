@@ -85,6 +85,7 @@ def test_api_predict_con_fecha_pasada_devuelve_error(client):
 
 
 def test_api_predict_con_fecha_lejana_devuelve_error(client):
+    """FORECAST-001: el horizonte de la web pasó de 2 a 7 días (el del forecast)."""
     response = client.post("/api/predict", json={
         "provincia": "Madrid",
         "lat": 40.4168,
@@ -94,7 +95,7 @@ def test_api_predict_con_fecha_lejana_devuelve_error(client):
     assert response.status_code == 200
     data = response.json()
     assert "error" in data
-    assert "2 días" in data["error"]
+    assert "7 días" in data["error"]
 
 
 class _DBEspia:

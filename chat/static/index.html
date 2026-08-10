@@ -192,6 +192,7 @@
 
   #map { height: 260px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--border); cursor: crosshair; }
   #risk-chart { width: 100% !important; height: 280px !important; }
+  #weekly-chart { width: 100% !important; height: 280px !important; }
   .btn-mode { transition: all 0.2s; font-size: 0.9rem; }
   .btn-mode.active { background: var(--accent) !important; color: #fff !important; }
 
@@ -654,6 +655,15 @@
         <canvas id="risk-chart"></canvas>
       </div>
       <div id="graph-age-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;font-size:0.8rem"></div>
+    </div>
+
+    <div class="card" id="weekly-card" style="display:none">
+      <div class="card-title">Tendencia semanal</div>
+      <p id="weekly-status" style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px"></p>
+      <div id="weekly-legend" style="display:flex;flex-wrap:wrap;gap:8px;font-size:0.8rem;margin-bottom:4px"></div>
+      <div style="position:relative">
+        <canvas id="weekly-chart"></canvas>
+      </div>
     </div>
 
     <div class="card" id="group-detail-card" style="display:none">
@@ -2066,6 +2076,9 @@ function nuevaConsulta() {
   document.getElementById('group-explain-card').style.display = 'none';
   document.getElementById('group-demografico-card').style.display = 'none';
   document.getElementById('group-contrafactual-card').style.display = 'none';
+  document.getElementById('weekly-card').style.display = 'none';
+  document.getElementById('weekly-status').textContent = '';
+  if (_weeklyChart) { _weeklyChart.destroy(); _weeklyChart = null; }
   document.getElementById('dot3').classList.remove('active');
   document.getElementById('dot3').classList.remove('done');
   document.getElementById('dot2').classList.remove('active');
@@ -2228,6 +2241,8 @@ function mostrarResultados(d) {
   if (d.recomendaciones && d.recomendaciones.length) mostrarRecomendaciones(d.recomendaciones);
   document.getElementById('opt-card').style.display = 'block';
   window._ultimoResultado = d;
+  // Tendencia semanal en segundo plano, como las comparativas por edad
+  setTimeout(() => verTendenciaSemanal(), 50);
   // Mostrar mapa de riesgo de la zona
   if (w && w.lat != null && w.lon != null) {
     document.getElementById('results-map-card').style.display = 'block';
@@ -2633,6 +2648,108 @@ function mostrarGraficaRiesgo(d, perfilesExtra, umbrales) {
   });
 
   document.getElementById('graph-age-legend').innerHTML = legHtml.join('');
+}
+
+// ── Tendencia semanal con banda de confianza (FORECAST-001) ────────────────
+
+let _weeklyChart = null;
+
+async function verTendenciaSemanal() {
+  const d = window._ultimoResultado;
+  if (!d || !d.weather) return;
+  const card = document.getElementById('weekly-card');
+  const status = document.getElementById('weekly-status');
+  const legend = document.getElementById('weekly-legend');
+  card.style.display = 'block';
+  legend.innerHTML = '';
+  status.textContent = 'Calculando la tendencia de los próximos 7 días…';
+  try {
+    const res = await fetch('/api/predict/semanal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provincia: document.getElementById('provincia').value.trim() || 'Madrid',
+        lat: d.weather.lat,
+        lon: d.weather.lon,
+        perfil: d.perfil_usuario || getPerfil(),
+      }),
+    });
+    const data = await res.json();
+    if (data.error) { status.textContent = 'No se pudo calcular: ' + data.error; return; }
+    if (!data.dias || !data.dias.length) {
+      status.textContent = 'No hay forecast meteorológico para los próximos días.';
+      return;
+    }
+    // Criterio FORECAST-001: cuando el forecast no cubre los 7 días se indica
+    // explícitamente hasta dónde llega; nunca se extrapola en silencio.
+    if (data.completo) {
+      status.textContent = 'Forecast completo: ' + data.horizonte_dias + ' días cubiertos. '
+        + 'La banda sale del prediction set conformal (α=0.1) de cada día.';
+    } else {
+      status.textContent = 'Aviso: el forecast meteorológico llega hasta ' + data.forecast_hasta
+        + ' (' + data.dias.length + ' de ' + data.horizonte_dias + ' días). '
+        + 'No se extrapola más allá de lo que cubre el forecast.';
+    }
+    _pintarSemanal(data.dias);
+  } catch (e) {
+    status.textContent = 'Error al calcular la tendencia semanal: ' + e.message;
+  }
+}
+
+function _pintarSemanal(dias) {
+  const ctx = document.getElementById('weekly-chart');
+  const legend = document.getElementById('weekly-legend');
+  if (!ctx) return;
+  if (_weeklyChart) _weeklyChart.destroy();
+  const labels = dias.map(x => x.fecha.slice(5));
+  const probs = dias.map(x => (x.prob != null ? x.prob * 100 : null));
+  const lower = dias.map(x => (x.banda ? x.banda[0] * 100 : null));
+  const upper = dias.map(x => (x.banda ? x.banda[1] * 100 : null));
+  const conf = dias.map(x => x.confianza_conformal || 'media');
+
+  // Banda = semianchura derivada del prediction set conformal de cada día
+  // (set_size 1/2/3 → ±5/15/25 pts), pintada como relleno entre lower y upper.
+  _weeklyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Banda baja', data: lower, borderColor: 'transparent', pointRadius: 0, fill: false },
+        { label: 'Banda de confianza', data: upper, borderColor: 'transparent', backgroundColor: 'rgba(41,128,185,0.18)', pointRadius: 0, fill: '-1' },
+        { label: 'Riesgo', data: probs, borderColor: '#2980b9', borderWidth: 2.5, pointRadius: 4, backgroundColor: '#2980b9', tension: 0.3, fill: false },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(c) {
+              if (c.dataset.label !== 'Riesgo') return null;
+              const confLabel = { alta: 'confianza alta', media: 'confianza media', baja: 'confianza baja' }[conf[c.dataIndex]] || 'sin confianza';
+              const b = dias[c.dataIndex].banda;
+              const banda = b ? ' · banda ' + Math.round(b[0] * 100) + '-' + Math.round(b[1] * 100) + '%' : '';
+              return 'Riesgo ' + c.parsed.y.toFixed(0) + '% (' + confLabel + ')' + banda;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, title: { display: true, text: 'Día', font: { size: 11 } } },
+        y: { min: 0, max: 100, title: { display: true, text: 'Riesgo personal (%)', font: { size: 11 } }, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+      },
+    },
+  });
+
+  const confColor = { alta: 'var(--seguro)', media: 'var(--precaucion)', baja: 'var(--peligro)' };
+  const confLabel = { alta: 'confianza alta', media: 'confianza media', baja: 'confianza baja' };
+  const confSet = [...new Set(conf)];
+  legend.innerHTML = confSet.map(c =>
+    '<span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:' + (confColor[c] || '#999') + '"></span> ' + (confLabel[c] || c) + '</span>'
+  ).join('') + '<span style="margin-left:auto">▬ riesgo · ▒ banda conformal</span>';
 }
 
 function mostrarOverride(d) {

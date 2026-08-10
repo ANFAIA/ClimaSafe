@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import io
+from datetime import date, timedelta
 
 import pytest
 
@@ -119,6 +120,62 @@ class TestGraficaPNG:
         assert mcp._hi_a_nivel(100) == 10.0
 
 
+# ── Guarda de horizonte del MCP (FORECAST-001) ──────────────────────────────
+
+
+class TestHorizonteFecha:
+    """_parse_date rechaza fechas que el forecast no cubre (antes: datos falsos)."""
+
+    def test_sin_fecha_devuelve_none(self):
+        assert mcp._parse_date(None) is None
+        assert mcp._parse_date("") is None
+
+    def test_fecha_dentro_de_horizonte_se_acepta(self):
+        hoy = date.today()
+        assert mcp._parse_date(hoy.isoformat()) == hoy
+        assert mcp._parse_date((hoy + timedelta(days=7)).isoformat()) == hoy + timedelta(days=7)
+
+    def test_mas_de_7_dias_se_rechaza_con_mensaje_claro(self):
+        hoy = date.today()
+        con = hoy + timedelta(days=8)
+        with pytest.raises(ValueError) as exc:
+            mcp._parse_date(con.isoformat())
+        assert "7 días" in str(exc.value)
+        assert con.isoformat() in str(exc.value)
+
+    def test_fecha_pasada_se_rechaza(self):
+        with pytest.raises(ValueError) as exc:
+            mcp._parse_date((date.today() - timedelta(days=1)).isoformat())
+        assert "ya pasó" in str(exc.value)
+
+    def test_formato_invalido_se_rechaza(self):
+        with pytest.raises(ValueError) as exc:
+            mcp._parse_date("no-es-una-fecha")
+        assert "ISO" in str(exc.value)
+
+    def test_predict_risk_con_fecha_fuera_devuelve_error_sin_predecir(self, monkeypatch):
+        """La guarda corta antes de tocar red/modelos: error JSON, no predicción."""
+        llamadas: list = []
+        monkeypatch.setattr(mcp, "_try_prediction",
+                            lambda *a, **k: llamadas.append(1) or {})
+        out = mcp.predict_risk(
+            lat=40.4, lon=-3.7,
+            fecha=(date.today() + timedelta(days=8)).isoformat(),
+        )
+        assert "error" in out
+        assert "7 días" in out["error"]
+        assert llamadas == []
+
+    def test_predict_risk_con_fecha_invalida_devuelve_error(self, monkeypatch):
+        llamadas: list = []
+        monkeypatch.setattr(mcp, "_try_prediction",
+                            lambda *a, **k: llamadas.append(1) or {})
+        out = mcp.predict_risk(lat=40.4, lon=-3.7, fecha="garbage")
+        assert "error" in out
+        assert "ISO" in out["error"]
+        assert llamadas == []
+
+
 # ── La tool MCP ────────────────────────────────────────────────────────────
 
 
@@ -149,6 +206,19 @@ class TestGraficaRiesgoHorarioMCP:
         assert isinstance(out, str)
         assert "no hay" in out.lower()
         assert "predict_risk_mcp" in out
+
+    def test_fecha_fuera_de_horizonte_devuelve_texto_claro(self, monkeypatch):
+        """La guarda de fecha corta antes de predecir y la gráfica lo dice claro."""
+        monkeypatch.setattr(mcp, "_try_prediction",
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                AssertionError("no debe predecir con fecha fuera de rango")))
+        out = mcp.grafica_riesgo_horario_mcp(
+            lat=42.29, lon=-8.81, provincia="Pontevedra",
+            fecha=(date.today() + timedelta(days=8)).isoformat(),
+        )
+        assert isinstance(out, str)
+        assert "No se pudo calcular" in out
+        assert "7 días" in out
 
     def test_las_11_tools_previas_siguen_registradas(self):
         import asyncio

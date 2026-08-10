@@ -10,6 +10,20 @@ from datetime import datetime, date, timedelta
 OPENMETEO_BASE = "https://api.open-meteo.com/v1/forecast"
 OPENMETEO_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 
+# Horizonte del forecast en días (FORECAST-001): Open-Meteo llega a 16 días en
+# modo horario, pero el producto promete una tendencia semanal. El fetch pide
+# exactamente estas horas; cualquier fecha más allá queda fuera y NO se predice.
+FORECAST_HORIZON_DAYS = 7
+
+
+class ForecastHorizonError(Exception):
+    """La fecha pedida queda fuera del forecast meteorológico descargado.
+
+    Antes el sistema devolvía una predicción con datos inventados (20 °C /
+    50 % RH / 1013 hPa) o con el último día observado como si fuera el objetivo.
+    FORECAST-001: nunca datos falsos — error claro y propagado al llamante.
+    """
+
 _CURRENT_PARAMS = {
     "temperature_2m": "t2m_c",
     "relative_humidity_2m": "rh",
@@ -42,13 +56,21 @@ def fetch_current_weather(lat: float, lon: float) -> dict:
             out[proj_key] = val
     return out
 
-def fetch_hourly_forecast(lat: float, lon: float, hours: int = 48) -> pd.DataFrame:
+def fetch_hourly_forecast(lat: float, lon: float, days: int | None = None) -> pd.DataFrame:
+    """Forecast horario de los próximos `days` días (calendario completos).
+
+    Usa ``forecast_days`` de Open-Meteo, no ``forecast_hours``: con horas desde
+    el momento actual, el último día sale a medias (hoy a las 10:00 + 168 h
+    deja el día +6 con 14 h). Con ``forecast_days`` cada día trae sus 24 h.
+    """
+    if days is None:
+        days = FORECAST_HORIZON_DAYS
     params = {
         "latitude": lat,
         "longitude": lon,
         "hourly": ",".join(_HOURLY_PARAMS),
         "timezone": "auto",
-        "forecast_hours": hours,
+        "forecast_days": days,
     }
     data = _openmeteo_request(OPENMETEO_BASE, params)
     hourly = data.get("hourly", {})
@@ -241,7 +263,7 @@ def fetch_weather_data(
         current = {}
 
     try:
-        df_hora_forecast = fetch_hourly_forecast(lat, lon, hours=48)
+        df_hora_forecast = fetch_hourly_forecast(lat, lon, days=FORECAST_HORIZON_DAYS)
     except Exception:
         df_hora_forecast = pd.DataFrame()
 
@@ -274,15 +296,37 @@ def fetch_weather_data(
         df_hora_target = pd.DataFrame()
 
     if len(df_hora_target) == 0:
-        if current:
+        if is_today and current:
+            # Solo hoy: si el forecast aún no cubre el día, se usa la observación
+            # actual de la API (dato real, no inventado). Los campos que falten
+            # quedan como NaN, nunca rellenos con constantes.
             now = datetime.now()
             df_hora_target = pd.DataFrame([{
                 "datetime": now,
-                "t2m_c": current.get("t2m_c", 20.0),
-                "rh": current.get("rh", 50.0),
-                "wind_speed_kmh": current.get("wind_speed_kmh", 10.0),
-                "sp": current.get("sp", 1013.0),
+                "t2m_c": current.get("t2m_c"),
+                "rh": current.get("rh"),
+                "wind_speed_kmh": current.get("wind_speed_kmh"),
+                "sp": current.get("sp"),
             }])
+        else:
+            # Fecha fuera del forecast: error claro, NUNCA datos fabricados ni el
+            # último día observado como si fuera el objetivo (FORECAST-001).
+            if target_date < today:
+                raise ForecastHorizonError(
+                    f"La fecha {target_date.isoformat()} ya pasó. Solo se predice "
+                    "hoy o el futuro cubierto por el forecast meteorológico."
+                )
+            if len(df_hora_forecast) > 0:
+                ultima_fc = pd.to_datetime(df_hora_forecast["datetime"]).dt.date.max()
+                raise ForecastHorizonError(
+                    f"El forecast meteorológico llega hasta {ultima_fc.isoformat()} y "
+                    f"{target_date.isoformat()} queda fuera de ese horizonte. No se "
+                    "puede predecir una fecha que el forecast no cubre."
+                )
+            raise ForecastHorizonError(
+                "No hay forecast meteorológico descargado para la fecha pedida "
+                f"({target_date.isoformat()}). No se puede predecir sin datos."
+            )
 
     if is_today:
         try:

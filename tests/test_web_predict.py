@@ -91,3 +91,38 @@ def test_endpoint_perfil_tambien_valida(db, monkeypatch):
         asyncio.run(web.api_save_perfil({"alias": "y", "peso": 80}))
     assert exc.value.status_code == 400
     assert "peso" in exc.value.detail
+
+
+def test_api_predict_semanal_devuelve_la_serie(monkeypatch):
+    """FORECAST-001: el endpoint /api/predict/semanal devuelve la serie con banda.
+
+    Se mockea `climasafeai.models.ensemble.prediccion_semanal` (el endpoint la
+    importa dentro de la función): lo que se prueba es el contrato del endpoint,
+    no el cálculo (que cubren tests/test_ensemble.py).
+    """
+    import asyncio
+
+    import chat.app as web
+    import climasafeai.models.ensemble as ens
+
+    def _fake(lat=None, lon=None, provincia="Madrid", perfil=None, resolucion=60):
+        assert lat == 40.4 and lon == -3.7
+        return {
+            "horizonte_dias": 7,
+            "completo": True,
+            "forecast_hasta": "2026-08-16",
+            "dias": [
+                {"fecha": "2026-08-10", "prob": 0.54, "clase": "PRECAUCION",
+                 "confianza_conformal": "alta", "set_size_conformal": 1,
+                 "banda": [0.49, 0.59]},
+            ],
+            "banda_origen": "conformal",
+        }
+
+    monkeypatch.setattr(ens, "prediccion_semanal", _fake)
+    out = asyncio.run(web.api_predict_semanal(
+        {"lat": 40.4, "lon": -3.7, "provincia": "Madrid", "perfil": {"edad": 57}}
+    ))
+    assert out["horizonte_dias"] == 7
+    assert out["completo"] is True
+    assert out["dias"][0]["banda"] == [0.49, 0.59]

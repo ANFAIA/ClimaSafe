@@ -644,12 +644,14 @@ async def api_predict(body: dict, date: str | None = None):
     if date:
         try:
             from datetime import date as date_type, timedelta
+            # Mismo horizonte que el forecast meteorológico (FORECAST-001): 7 días.
+            from climasafeai.data.weather_fetcher import FORECAST_HORIZON_DAYS
             target_date = date_type.fromisoformat(date)
             today = date_type.today()
             if target_date < today:
                 return {"error": f"La fecha {date} ya pasó. Solo se aceptan hoy o el futuro."}
-            if (target_date - today).days > 2:
-                return {"error": f"Fecha {date} está a más de 2 días vista. Horizonte máximo: 2 días."}
+            if (target_date - today).days > FORECAST_HORIZON_DAYS:
+                return {"error": f"Fecha {date} está a más de {FORECAST_HORIZON_DAYS} días vista. El forecast meteorológico cubre hasta {FORECAST_HORIZON_DAYS} días."}
         except ValueError:
             return {"error": f"Fecha inválida: '{date}'. Usa formato ISO: YYYY-MM-DD"}
 
@@ -741,6 +743,33 @@ async def api_predict(body: dict, date: str | None = None):
         pass
 
     return result
+
+
+@app.post("/api/predict/semanal")
+async def api_predict_semanal(body: dict):
+    """Tendencia semanal de riesgo con banda de confianza (FORECAST-001).
+
+    Devuelve la serie día a día (hoy + 6) con la banda procedente del prediction
+    set conformal de cada día, y `completo=False` + `forecast_hasta` cuando el
+    forecast meteorológico no cubre los 7 días. No persiste nada: es una vista.
+    """
+    from climasafeai.models.ensemble import prediccion_semanal
+
+    provincia = body.get("provincia", "Madrid")
+    lat = body.get("lat")
+    lon = body.get("lon")
+    resolucion = body.get("resolucion", 60)
+    raw_perfil = body.get("perfil") or {}
+    perfil = _normalize_perfil(raw_perfil)
+    _aplicar_deporte_a_nivel(perfil)
+
+    try:
+        return prediccion_semanal(
+            lat=lat, lon=lon, provincia=provincia, perfil=perfil,
+            resolucion=resolucion,
+        )
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 EDADES_COMPARATIVA = (25, 55, 65, 75, 85)

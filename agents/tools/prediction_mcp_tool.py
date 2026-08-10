@@ -137,6 +137,11 @@ _FACTORES_COEF = {
 
 # ── Helpers in-line (evitan importar chat.app, que arrastra FastAPI) ─
 
+# Horizonte máximo de una fecha pedida al MCP (FORECAST-001): mismo horizonte
+# semanal del producto. Más allá, el forecast meteorológico no cubre y antes el
+# sistema devolvía una predicción con datos inventados.
+MAX_FORECAST_HORIZON_DAYS = 7
+
 
 def _prevalencia(edad: float) -> dict[str, float]:
     e = max(18, min(90, edad))
@@ -243,12 +248,29 @@ def _hi_peak_from_weather(
 
 
 def _parse_date(fecha: str | None) -> date_type | None:
+    """Parsea una fecha ISO y la acota al horizonte del forecast.
+
+    Devuelve ``None`` si no llega fecha. Lanza ``ValueError`` con mensaje claro
+    si la fecha es inválida, pasada o a más de ``MAX_FORECAST_HORIZON_DAYS``
+    vista: pedirlas devolvía antes una predicción con weather inventado
+    (FORECAST-001). Los llamantes la convierten en ``{"error": ...}``.
+    """
     if not fecha:
         return None
     try:
-        return date_type.fromisoformat(fecha)
+        d = date_type.fromisoformat(fecha)
     except ValueError:
-        return None
+        raise ValueError(f"Fecha inválida: '{fecha}'. Usa formato ISO: YYYY-MM-DD") from None
+    hoy = date_type.today()
+    if d < hoy:
+        raise ValueError(f"La fecha {fecha} ya pasó. Solo se aceptan hoy o el futuro.")
+    if (d - hoy).days > MAX_FORECAST_HORIZON_DAYS:
+        raise ValueError(
+            f"La fecha {fecha} está a más de {MAX_FORECAST_HORIZON_DAYS} días vista. "
+            f"El forecast meteorológico cubre hasta {MAX_FORECAST_HORIZON_DAYS} días; "
+            "no se puede predecir más allá."
+        )
+    return d
 
 
 def _aplicar_deporte_a_perfil(perfil: dict) -> dict:
@@ -290,7 +312,10 @@ def predict_risk(
     incluir_recomendaciones: bool = True,
     resolucion: int = 60,
 ) -> dict:
-    target_date = _parse_date(fecha)
+    try:
+        target_date = _parse_date(fecha)
+    except ValueError as exc:
+        return {"error": str(exc)}
     from climasafeai.features.personalizacion import (
         riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad,
     )
@@ -369,7 +394,10 @@ def predict_volume_risk(
 ) -> dict:
     from climasafeai.models.volumen import estimar_afectados
 
-    target_date = _parse_date(fecha)
+    try:
+        target_date = _parse_date(fecha)
+    except ValueError as exc:
+        return {"error": str(exc)}
     weather = _weather_for_date(lat, lon, provincia, target_date)
     hi_peak = _hi_peak_from_weather(weather, hora_inicio, duracion_h)
 
@@ -392,7 +420,10 @@ def predict_zone_risk(
 ) -> dict:
     from climasafeai.data.grid_risk import riesgo_zona_grid
 
-    target_date = _parse_date(fecha)
+    try:
+        target_date = _parse_date(fecha)
+    except ValueError as exc:
+        return {"error": str(exc)}
     if perfil:
         _aplicar_deporte_a_perfil(perfil)
     return riesgo_zona_grid(
@@ -422,7 +453,10 @@ def predict_group_risk(
 ) -> dict:
     from climasafeai.db.manager import DBManager
 
-    target_date = _parse_date(fecha)
+    try:
+        target_date = _parse_date(fecha)
+    except ValueError as exc:
+        return {"error": str(exc)}
     db = DBManager()
 
     if tipo == "etiqueta":
@@ -588,7 +622,10 @@ def predict_age_curves(
     fecha: str | None = None,
     edades: list[int] | None = None,
 ) -> dict:
-    target_date = _parse_date(fecha)
+    try:
+        target_date = _parse_date(fecha)
+    except ValueError as exc:
+        return {"error": str(exc)}
 
     perfil: dict[str, Any] = {
         "edad": edad,
@@ -1566,7 +1603,10 @@ recomendación por ventana."""
         if weekday is not None and int(weekday) not in range(1, 8):
             return json.dumps({"error": f"weekday inválido {weekday}: usa 1=lunes ... 7=domingo"}, ensure_ascii=False)
         wd = int(weekday) if weekday is not None else date_type.today().isoweekday()
-        target_date = _parse_date(fecha)
+        try:
+            target_date = _parse_date(fecha)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
         from climasafeai.db.manager import DBManager
         from climasafeai.models.recomendaciones import recomendacion_resumen
@@ -1675,6 +1715,10 @@ los números en vez del dibujo, usa `predict_risk_mcp`."""
             incluir_recomendaciones=False,
             resolucion=resolucion if resolucion is not None else 60,
         )
+        if isinstance(result, dict) and "error" in result:
+            # La guarda de horizonte cortó antes de predecir: mensaje claro, no
+            # el genérico "no hay perfil horario" (FORECAST-001).
+            return "No se pudo calcular la curva: " + result["error"]
         png = grafica_riesgo_horario_png(
             result, hora_inicio=hora_inicio, duracion_h=duracion_h,
             edad=edad, fecha=fecha,

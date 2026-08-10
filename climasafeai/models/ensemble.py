@@ -30,6 +30,8 @@ from climasafeai.data.weather_fetcher import (
     get_province_idx,
     get_ine_features,
     escalar_para_lstm,
+    FORECAST_HORIZON_DAYS,
+    ForecastHorizonError,
 )
 from climasafeai.utils.paths import MODELS_DIR, ARTIFACTS_DIR
 from climasafeai.models.explicabilidad import explicar_ensemble
@@ -810,4 +812,104 @@ def predict_ensemble(
         "explicacion": explicacion,
         "recomendaciones": recomendaciones,
         "override_fisico": override_fisico,
+    }
+
+
+# ── Tendencia semanal con banda de confianza (FORECAST-001) ─────────────────
+#
+# La banda NO es un intervalo inventado: sale del prediction set conformal que
+# ya calcula cada modelo ML en cada predicción (`SplitConformalCalibrator`,
+# alpha=0.1 — documentacion/conformal_prediction.md). Ese set tiene tamaño 1
+# (confianza alta), 2 (media) o 3 (baja); la semianchura de la banda es una
+# función monótona documentada de ese tamaño. El punto de extensión para una
+# banda calibrada numéricamente (en vez de la heurística sobre el set size)
+# está documentado en documentacion/conformal_prediction.md.
+
+BANDA_CONFIANZA_SEMIANCHURA = {1: 0.05, 2: 0.15, 3: 0.25}
+_CONFIANZA_ETIQUETA = {1: "alta", 2: "media", 3: "baja"}
+
+
+def _set_size_conformal_del_dia(resultado: dict) -> int:
+    """Tamaño medio del prediction set conformal de los modelos ML del día.
+
+    XGBoost_calor y RandomForest_frio llevan `conformal_set_size` (1/2/3) en
+    cada predicción; el ensemble ya pondera por ese mismo set size. Si no hay
+    señal conformal (modelos sin artefacto) se usa 2 (media), el valor neutro.
+    """
+    sizes = []
+    for mod in ("XGBoost_calor", "RandomForest_frio"):
+        m = (resultado.get("modelos") or {}).get(mod) or {}
+        ss = m.get("conformal_set_size")
+        if isinstance(ss, (int, float)) and 1 <= ss <= 3:
+            sizes.append(int(ss))
+    if not sizes:
+        return 2
+    return int(round(sum(sizes) / len(sizes)))
+
+
+def prediccion_semanal(
+    lat: float | None = None,
+    lon: float | None = None,
+    provincia: str = "Madrid",
+    perfil: dict | None = None,
+    resolucion: int = 60,
+    dias: int | None = None,
+) -> dict:
+    """Serie diaria de riesgo a `dias` vista con su banda de confianza.
+
+    Para cada día llama a ``predict_ensemble``; la banda sale del prediction
+    set conformal que ya computan los modelos ML ese mismo día, no de un
+    intervalo arbitrario. Si el forecast meteorológico no cubre un día, la
+    serie se corta ahí y ``completo=False`` avisa explícitamente hasta dónde
+    llega (FORECAST-001 criterio 3): nunca extrapola con datos inventados.
+    """
+    if dias is None:
+        dias = FORECAST_HORIZON_DAYS
+
+    from datetime import date as _date, timedelta
+
+    hoy = _date.today()
+    serie: list[dict] = []
+    for i in range(dias):
+        dia = hoy + timedelta(days=i)
+        try:
+            r = predict_ensemble(
+                lat=lat, lon=lon, provincia=provincia, perfil=perfil,
+                target_date=dia, resolucion=resolucion,
+            )
+        except ForecastHorizonError:
+            # El forecast no cubre este día: cortar y avisar, no extrapolar.
+            break
+
+        prob = None
+        for canal in ("calor", "frio"):
+            prob = (r.get("perfil") or {}).get(canal, {}).get("prob_personalizada")
+            if prob is not None:
+                break
+
+        set_size = _set_size_conformal_del_dia(r)
+        semianchura = BANDA_CONFIANZA_SEMIANCHURA[set_size]
+        serie.append({
+            "fecha": dia.isoformat(),
+            "prob": round(float(prob), 4) if prob is not None else None,
+            "clase": r.get("clase_final_label"),
+            "confianza_conformal": _CONFIANZA_ETIQUETA[set_size],
+            "set_size_conformal": set_size,
+            "banda": (
+                [round(max(0.0, float(prob) - semianchura), 4),
+                 round(min(1.0, float(prob) + semianchura), 4)]
+                if prob is not None else None
+            ),
+        })
+
+    return {
+        "horizonte_dias": dias,
+        "completo": len(serie) == dias,
+        "forecast_hasta": serie[-1]["fecha"] if serie else None,
+        "dias": serie,
+        "banda_origen": (
+            "prediction set conformal (SplitConformalCalibrator alpha=0.1) de "
+            "los modelos ML de cada día: set_size 1/2/3 → semianchura ±5/15/25 "
+            "puntos. documentacion/conformal_prediction.md"
+        ),
     }
