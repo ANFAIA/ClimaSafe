@@ -1484,10 +1484,11 @@
         "sintaxis valida y tests que verifican la aplicacion del template sin GPU",
         "make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-07",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-10"
     },
     {
       "id": "DATA-007",
@@ -1501,12 +1502,13 @@
         "Queda escrito como se ampliara a resoluciones de segundos (p.ej. 30s para relojes inteligentes) sin romper el contrato de prediccion",
         "tests con las resoluciones horaria (identica a hoy) y sub-horaria, y make test pasa"
       ],
-      "status": "blocked",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-07",
       "owner": "opencode",
       "review_rounds": 0,
-      "blocked_reason": "Bloqueada por prioridad: el usuario pide commit automatico al cerrar tickets (ARNES-014) y el candado de dueno impide abrirla con DATA-007 in_progress. Se retoma DATA-007 con 'harness start --id DATA-007 --owner opencode' cuando ARNES-014 cierre. Sin perdida de estado: los criterios viven en featureslist.json."
+      "blocked_reason": "Bloqueada por prioridad: el usuario pide commit automatico al cerrar tickets (ARNES-014) y el candado de dueno impide abrirla con DATA-007 in_progress. Se retoma DATA-007 con 'harness start --id DATA-007 --owner opencode' cuando ARNES-014 cierre. Sin perdida de estado: los criterios viven en featureslist.json.",
+      "closed": "2026-08-10"
     },
     {
       "id": "BOT-020",
@@ -1537,12 +1539,11 @@
         "Ningun otro agente ni asistente commitea por su cuenta: un finish sin el flag (el caso de opencode) no genera commit y se demuestra",
         "Hay tests del arnes de los casos con flag, sin flag, --changes vacio y rutas inexistentes, y make test pasa"
       ],
-      "status": "done",
+      "status": "in_progress",
       "depends_on": [],
       "started": "2026-08-07",
       "owner": "opencode",
-      "review_rounds": 1,
-      "closed": "2026-08-10"
+      "review_rounds": 1
     }
   ]
 }
