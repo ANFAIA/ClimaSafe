@@ -1011,8 +1011,9 @@
         "Si no hay perfil horario disponible el bot lo dice en vez de callarse o inventar una franja",
         "Hay tests del caso con perfil horario y del caso sin el, y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-10"
     },
     {
       "id": "BOT-013",
@@ -1041,8 +1042,11 @@
         "Al preguntar por los factores de riesgo, la respuesta nombra el que mas pesa y su valor. Se pega la conversacion real",
         "Hay test de que un resultado con dominancia de calor no mete datos de frio en el contexto, y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-10",
+      "review_rounds": 0,
+      "closed": "2026-08-10"
     },
     {
       "id": "MCP-IMG-001",

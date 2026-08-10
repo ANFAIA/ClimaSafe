@@ -25,6 +25,8 @@ from climasafeai.bot.geocoding import buscar_lugar, provincia_desde_coords
 from climasafeai.features.personalizacion import (
     _OCUPACION_NIVELES,
     nivel_actividad_de_deporte,
+    pico_riesgo_actividad,
+    recomendar_horario,
     riesgo_horario_acumulado,
 )
 from logging.handlers import RotatingFileHandler
@@ -42,7 +44,7 @@ from climasafeai.llm.rag_qwen import (
     lineas_parte,
 )
 from climasafeai.models.ensemble import predict_ensemble
-from climasafeai.models.recomendaciones import recomendacion_resumen
+from climasafeai.models.recomendaciones import _canal_dominante, recomendacion_resumen
 
 logger = logging.getLogger(__name__)
 
@@ -625,6 +627,37 @@ def _tabla_horaria(perfil_h: list[dict], perfil_u: dict) -> list[str]:
     return lineas
 
 
+def _lineas_franjas(perfil_h: list[dict], perfil_u: dict) -> list[str]:
+    """BOT-012: franja de mayor riesgo del día y franja recomendada para la actividad.
+
+    Criterio 2: reutiliza `riesgo_horario_acumulado`, `pico_riesgo_actividad`
+    y `recomendar_horario` de personalizacion (los mismos que la web y el MCP);
+    aquí solo se eligen las frases, no se recalcula el riesgo. Criterio 3: sin
+    perfil horario se dice en vez de callarse o inventar una franja.
+    """
+    if not perfil_h:
+        return ["No hay datos horarios para hoy: no puedo decir la franja de mayor riesgo ni la recomendada."]
+    curva = riesgo_horario_acumulado(perfil_h, perfil_u)
+    if not curva:
+        return ["No hay datos horarios para hoy: no puedo decir la franja de mayor riesgo ni la recomendada."]
+    lineas = []
+    # Franja de mayor riesgo: la hora de la curva con más riesgo del día, con
+    # el valor que ya da pico_riesgo_actividad para este perfil.
+    pico_dia = max(curva, key=lambda c: c["riesgo"])
+    riesgo_pico = pico_riesgo_actividad(curva, perfil_u) or pico_dia["riesgo"]
+    lineas.append(
+        f"⚠️ Franja de mayor riesgo del día: en torno a las "
+        f"{_formato_hora(pico_dia['hora'])} (riesgo {riesgo_pico:.2f} de 1)"
+    )
+    rec = recomendar_horario(perfil_h, perfil_u)
+    if rec and rec.get("hora_inicio") is not None:
+        lineas.append(
+            f"✅ Franja recomendada para la actividad: "
+            f"{_formato_hora(rec['hora_inicio'])}-{_formato_hora(rec['hora_fin'])}"
+        )
+    return lineas
+
+
 def _linea_recomendaciones(result: dict) -> str:
     """Criterio 4 (BOT-020): las recomendaciones de la herramienta tal cual."""
     nivel = result.get("clase_final_label") or ""
@@ -666,8 +699,9 @@ def _format_template(result: dict, lugar: str | None = None, salida_anterior: di
     compara con la salida anterior si la hay (criterio 5), resume la jornada
     (criterio 2), lista los factores con su multiplicador de mayor a menor
     (criterio 3) y cierra con la tabla horaria y las recomendaciones tal cual
-    (criterio 4). Las frases BOT-013 vienen de `lineas_parte`, las mismas que
-    ve el modo LLM.
+    (criterio 4). BOT-012: tras la tabla añade la franja de mayor riesgo del
+    día y la franja recomendada para la actividad. Las frases BOT-013 vienen
+    de `lineas_parte`, las mismas que ve el modo LLM.
     """
     w = result.get("weather", {})
     cur = w.get("current", {})
@@ -704,6 +738,9 @@ def _format_template(result: dict, lugar: str | None = None, salida_anterior: di
 
     # Criterio 4: tabla horaria y recomendaciones de la herramienta.
     bloque.extend(_tabla_horaria(perfil_h, perfil_u))
+    # BOT-012: la franja de mayor riesgo del día y la recomendada para la
+    # actividad (o el aviso de que no hay datos horarios).
+    bloque.extend(_lineas_franjas(perfil_h, perfil_u))
     bloque.append(_linea_recomendaciones(result))
 
     bloque.append(f"🌡️ Temperatura prevista: {temp:.1f} °C")
@@ -1638,7 +1675,7 @@ def _contexto_parte_conversacion(conv: dict) -> str:
     """Contexto del chat abierto tras el parte (BOT-011).
 
     Lleva el parte entregado más los datos REALES de esa predicción
-    (probabilidad de cada canal, factores, ubicación) y pide al LLM una
+    (probabilidad y factores del canal dominante, ubicación) y pide al LLM una
     respuesta concisa y personalizada, no un texto genérico de tres párrafos.
     `ultimo_resultado` puede faltar (dicts mínimos de test): entonces solo se
     pasa el parte, como antes.
@@ -1651,25 +1688,42 @@ def _contexto_parte_conversacion(conv: dict) -> str:
         perfil = result.get("perfil") or {}
         calor = perfil.get("calor") or {}
         frio = perfil.get("frio") or {}
-        prob_calor = calor.get("prob_personalizada")
-        prob_frio = frio.get("prob_personalizada")
-        factores = calor.get("factores") or frio.get("factores") or []
+        # BOT-014: el contexto solo lleva el canal dominante (el de mayor
+        # probabilidad personalizada), no los dos: un parte de calor no mete
+        # la probabilidad de frío ni sus factores, para que el LLM no mezcle
+        # canales al responder. Reutiliza _canal_dominante de recomendaciones.
+        canal = _canal_dominante(result)
+        if canal is None:
+            # Sin probabilidades de canal (dicts mínimos de test): se degrada
+            # al canal que trae factores, como antes de BOT-014.
+            canal = "calor" if calor.get("factores") else "frio"
+        elif canal == "ninguno":
+            # Ambos canales por debajo del umbral de relevancia: se muestra el
+            # de mayor probabilidad, el que más se acerca a contar algo.
+            canal = "calor" if (calor.get("prob_personalizada") or 0) >= (frio.get("prob_personalizada") or 0) else "frio"
+        canal_data = calor if canal == "calor" else frio
+        prob_canal = canal_data.get("prob_personalizada")
+        factores = canal_data.get("factores") or []
         lineas = [
             f"Ubicación: {w.get('provincia') or '?'}",
             f"Clase de riesgo: {result.get('clase_final_label') or '?'}",
         ]
-        if prob_calor is not None:
-            lineas.append(f"Probabilidad personalizada (calor): {prob_calor:.0%}")
-        if prob_frio is not None:
-            lineas.append(f"Probabilidad personalizada (frío): {prob_frio:.0%}")
+        if prob_canal is not None:
+            lineas.append(f"Probabilidad personalizada ({canal}): {prob_canal:.0%}")
         if factores:
             nombres = []
-            for f in factores:
+            # BOT-014: ordenados por su coeficiente, de mayor a menor, y CON el
+            # coeficiente (xN), para que el LLM pueda decir cuál pesa más.
+            for f in sorted(
+                factores,
+                key=lambda f: f.get("factor")
+                if isinstance(f, dict) and isinstance(f.get("factor"), (int, float))
+                else -1.0,
+                reverse=True,
+            ):
                 if isinstance(f, dict):
                     nombre = f.get("nombre", str(f))
                     coef = f.get("factor")
-                    # Coeficiente real del pipeline (xN), no solo el nombre:
-                    # sin él el LLM se inventa cuánto pesa cada factor.
                     nombres.append(f"{nombre} (x{coef})" if coef is not None else nombre)
                 else:
                     nombres.append(str(f))

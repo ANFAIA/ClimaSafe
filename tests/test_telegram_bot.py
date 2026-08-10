@@ -1428,6 +1428,65 @@ class TestParteBOT020:
         assert "simulación anterior" not in texto
 
 
+class TestFranjasBOT012:
+    """BOT-012: el parte dice la franja de mayor riesgo del día y la recomendada.
+
+    Criterio 1: ambas franjas salen en el parte. Criterio 2: los valores son
+    los que ya calculan riesgo_horario_acumulado, pico_riesgo_actividad y
+    recomendar_horario (se comparan contra esas funciones, no contra un
+    número a mano). Criterio 3: sin perfil horario el parte lo dice.
+    """
+
+    def _resultado(self):
+        return TestParteBOT020()._resultado()
+
+    def test_parte_dice_franja_de_mayor_riesgo_y_recomendada(self):
+        """Criterio 1: el parte indica ambas franjas, con la de riesgo primero."""
+        texto = _format_template(self._resultado(), "Madrid")
+        assert "Franja de mayor riesgo del día: en torno a las 13:00" in texto, texto
+        assert "Franja recomendada para la actividad:" in texto, texto
+        # La franja de riesgo aparece antes que la recomendada.
+        assert texto.index("Franja de mayor riesgo") < texto.index("Franja recomendada")
+
+    def test_franja_recomendada_coincide_con_recomendar_horario(self):
+        """Criterio 2: la franja recomendada es la de recomendar_horario, no se recalcula."""
+        from climasafeai.features.personalizacion import recomendar_horario
+
+        result = self._resultado()
+        ph = result["weather"]["perfil_horario"]
+        pu = result["perfil_usuario"]
+        rec = recomendar_horario(ph, pu)
+        assert rec is not None and rec.get("hora_inicio") is not None
+        texto = _format_template(result, "Madrid")
+        esperado = (
+            f"Franja recomendada para la actividad: "
+            f"{rec['hora_inicio']:.0f}:00-{rec['hora_fin']:.0f}:00"
+        )
+        assert esperado in texto, texto
+
+    def test_pico_de_riesgo_viene_de_pico_riesgo_actividad(self):
+        """Criterio 2: la cifra de riesgo de la franja sale de pico_riesgo_actividad."""
+        from climasafeai.features.personalizacion import pico_riesgo_actividad, riesgo_horario_acumulado
+
+        result = self._resultado()
+        ph = result["weather"]["perfil_horario"]
+        pu = result["perfil_usuario"]
+        curva = riesgo_horario_acumulado(ph, pu)
+        pico = pico_riesgo_actividad(curva, pu)
+        assert pico is not None
+        texto = _format_template(result, "Madrid")
+        assert f"riesgo {pico:.2f} de 1" in texto, texto
+
+    def test_sin_perfil_horario_lo_dice_en_vez_de_inventar(self):
+        """Criterio 3: sin perfil horario el parte avisa, no inventa ninguna franja."""
+        result = self._resultado()
+        result["weather"].pop("perfil_horario")
+        texto = _format_template(result, "Madrid")
+        assert "No hay datos horarios para hoy" in texto, texto
+        assert "Franja de mayor riesgo" not in texto
+        assert "Franja recomendada" not in texto
+
+
 class TestChatParteConcisa:
     """BOT-011: el chat abierto explica el parte con datos reales, en 2-3 frases.
 
@@ -1507,3 +1566,74 @@ class TestChatParteConcisa:
         assert "21%" in recibido["contexto"]
         assert "Pontevedra" in recibido["contexto"]
         assert "2-3 frases" in recibido["contexto"]
+
+
+class TestChatBOT014:
+    """BOT-014: el contexto del chat solo lleva el canal dominante y los
+    factores con su coeficiente, de mayor a menor.
+
+    Criterio 1: un parte de calor no mete la probabilidad ni los factores de
+    frío en el contexto (y al revés). Criterio 2: los factores se mandan
+    ordenados por su coeficiente y con el coeficiente (xN), para que el LLM
+    pueda decir cuál pesa más. Criterio 4: la dominancia se decide con
+    `_canal_dominante` de recomendaciones, no a mano.
+    """
+
+    @staticmethod
+    def _conv(prob_calor=0.21, prob_frio=0.02, factores_calor=None, factores_frio=None):
+        result = TestRecomendacionCanalDominante._resultado(
+            prob_calor=prob_calor, prob_frio=prob_frio, t=35.3, uv=7.6, wc=5, hi=38, clase=1,
+        )
+        result["perfil"]["calor"]["factores"] = factores_calor or [
+            {"nombre": "trabajo", "factor": 2.2},
+            {"nombre": "no aclimatado", "factor": 1.3},
+        ]
+        result["perfil"]["frio"]["factores"] = factores_frio or [
+            {"nombre": "edad", "factor": 1.1},
+        ]
+        return {
+            "modelo": "ollama/qwen2.5:7b",
+            "estado": Estado.DONE,
+            "ultima_prediccion": "O Casal, Pontevedra — Riesgo PRECAUCIÓN (21%).",
+            "ultimo_resultado": result,
+            "data": {"_prediccion_hecha": True},
+        }
+
+    def test_contexto_calor_no_muestra_el_canal_frio(self):
+        from climasafeai.bot.telegram_bot import _contexto_parte_conversacion
+
+        ctx = _contexto_parte_conversacion(self._conv())
+
+        # Solo el canal dominante: la probabilidad de calor y sus factores...
+        assert "Probabilidad personalizada (calor): 21%" in ctx
+        assert "trabajo (x2.2)" in ctx
+        assert "no aclimatado (x1.3)" in ctx
+        # ...y ni la probabilidad ni los factores del canal frío.
+        assert "Probabilidad personalizada (frio" not in ctx
+        assert "Probabilidad personalizada (frío" not in ctx
+        assert "edad" not in ctx
+
+    def test_contexto_frio_no_muestra_el_canal_calor(self):
+        from climasafeai.bot.telegram_bot import _contexto_parte_conversacion
+
+        ctx = _contexto_parte_conversacion(self._conv(prob_calor=0.03, prob_frio=0.45))
+
+        assert "Probabilidad personalizada (frio): 45%" in ctx
+        assert "Probabilidad personalizada (calor" not in ctx
+        assert "no aclimatado" not in ctx
+
+    def test_factores_ordenados_por_coeficiente_con_su_peso(self):
+        from climasafeai.bot.telegram_bot import _contexto_parte_conversacion
+
+        conv = self._conv(factores_calor=[
+            {"nombre": "menor", "factor": 1.1},
+            {"nombre": "mayor", "factor": 2.2},
+            {"nombre": "medio", "factor": 1.5},
+        ])
+        ctx = _contexto_parte_conversacion(conv)
+
+        assert "mayor (x2.2)" in ctx
+        assert "medio (x1.5)" in ctx
+        assert "menor (x1.1)" in ctx
+        # De mayor a menor coeficiente, no en el orden del diccionario.
+        assert ctx.index("mayor (x2.2)") < ctx.index("medio (x1.5)") < ctx.index("menor (x1.1)")

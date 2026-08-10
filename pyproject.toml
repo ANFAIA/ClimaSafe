@@ -1,6 +1,6 @@
 [project]
 name = "climasafeai"
-version = "0.0.31"
+version = "0.0.33"
 description = "Prediccion de riesgo climatico personalizado (calor/frio/uv) con ML"
 authors = [
   { name = "Alejandro Cancelas Chapela" }
