@@ -1537,11 +1537,12 @@
         "Ningun otro agente ni asistente commitea por su cuenta: un finish sin el flag (el caso de opencode) no genera commit y se demuestra",
         "Hay tests del arnes de los casos con flag, sin flag, --changes vacio y rutas inexistentes, y make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-07",
       "owner": "opencode",
-      "review_rounds": 0
+      "review_rounds": 1,
+      "closed": "2026-08-10"
     }
   ]
 }

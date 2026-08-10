@@ -475,19 +475,25 @@ class HarnessAgent(BaseAgent):
         )
 
     def finish(self, *, id: str = "", evidence: str = "", changes: str = "",
-               decisions: str = "", pending: str = "") -> AgentResult:
+               decisions: str = "", pending: str = "", commit: bool = False) -> AgentResult:
         """
         Cierra una feature. REHÚSA si ./init.sh no pasa en verde: es la regla
         del arnés, y aquí es código, no una instrucción que se pueda ignorar.
 
         Al cerrar, encadena el flujo de release ligero de GIT-001: sube un
         punto de versión patch en pyproject.toml/README.md (delegando en
-        `DocumentationAgent.bump_version`) y commitea automáticamente el cierre
-        (ARNES-014) acotado a las rutas de `--changes` más los ficheros del
-        propio cierre, con mensaje Conventional Commits sin línea de co-autoría
-        (delegando en `GitAgent`). El commit automático no depende de ningún
-        flag: se intenta SIEMPRE; el único caso en que no se commitea es que no
-        quede nada que commitear (y entonces se avisa en `warnings`). Ninguno de
+        `DocumentationAgent.bump_version`) y propone el mensaje de commit del
+        cierre (delegando en `GitAgent`).
+
+        El commit automático (ARNES-014) SOLO se intenta cuando el lider pasa
+        el flag explícito `commit=True` (CLI: `--commit`). Sin el flag, `finish`
+        se comporta como antes de ARNES-014: propone el mensaje en
+        `data.commit_suggestion` y NO commitea — ningún otro agente ni asistente
+        commitea por su cuenta. Con el flag, commitea acotado a las rutas de
+        `--changes` más los ficheros del propio cierre, con mensaje Conventional
+        Commits sin línea de co-autoría; si no queda nada que commitear, si
+        `--changes` viene vacío o trae rutas inexistentes, o si el árbol trae
+        cambios ajenos al ticket, avisa en `warnings` y NO commitea. Ninguno de
         los encadenados bloquea el cierre: si fallan, se avisa en `warnings` y
         la feature queda cerrada igualmente.
         """
@@ -552,7 +558,7 @@ class HarnessAgent(BaseAgent):
         self._release_detail_file(feat)
         self._refresh_current(doc)
 
-        release = self._release_on_close(feat, changes=changes)
+        release = self._release_on_close(feat, changes=changes, commit=commit)
         message = f"{id} cerrada. Histórico actualizado y current.md regenerado."
         if "version_bump" in release["data"]:
             message += f" README bumped a {release['data']['version_bump']['new_version']}."
@@ -578,13 +584,16 @@ class HarnessAgent(BaseAgent):
         major, minor, patch = (int(g) for g in match.groups())
         return f"{major}.{minor}.{patch + 1}"
 
-    def _release_on_close(self, feat: dict, changes: str = "") -> dict:
+    def _release_on_close(self, feat: dict, changes: str = "", commit: bool = False) -> dict:
         """
         Flujo de cierre de GIT-001: bump de versión patch (README incluido,
-        vía `DocumentationAgent.bump_version`) y commit automático del cierre
-        (vía `GitAgent`, con el id de la feature como subject). El commit
-        automático de ARNES-014 se intenta SIEMPRE al cerrar, sin flag: si no
-        queda nada que commitear se avisa en `warnings` y el cierre sigue.
+        vía `DocumentationAgent.bump_version`) y propuesta de mensaje de
+        commit (vía `GitAgent`, con el id de la feature como subject). El
+        commit automático de ARNES-014 solo se intenta con el flag explícito
+        `commit=True` (el que pasa el lider): sin flag se propone el mensaje
+        y no se commitea. Si no queda nada que commitear, si `--changes` viene
+        vacío o trae rutas inexistentes, o si el árbol trae cambios ajenos al
+        ticket, se avisa en `warnings` y no se commitea.
 
         Nunca bloquea el cierre: si algo falla (sin versión parseable, sin
         cambios que resumir, sin repo git) se avisa en `warnings` y se
@@ -629,9 +638,10 @@ class HarnessAgent(BaseAgent):
         else:
             warnings.append(f"No se generó propuesta de commit: {suggestion.message}")
 
-        auto = self._auto_commit(feat, changes)
-        warnings.extend(auto["warnings"])
-        data.update(auto["data"])
+        if commit:
+            auto = self._auto_commit(feat, changes)
+            warnings.extend(auto["warnings"])
+            data.update(auto["data"])
 
         return {"warnings": warnings, "data": data}
 
@@ -650,18 +660,16 @@ class HarnessAgent(BaseAgent):
 
     def _auto_commit(self, feat: dict, changes: str) -> dict:
         """
-        ARNES-014 — commit automático del cierre. Se intenta SIEMPRE al cerrar
-        una feature, sin flag (decisión del usuario): el único caso en que no
-        se commitea es que no quede nada que commitear, y entonces se avisa en
-        `warnings` y la feature se cierra igualmente.
+        ARNES-014 — commit automático del cierre. Solo se llama cuando el
+        lider cierra con el flag explícito (`finish(..., commit=True)`): sin
+        ese flag el cierre propone el mensaje y NO commitea.
 
         El commit se acota a las rutas de `--changes` (separadas por ';') más
         los ficheros del propio cierre (`featureslist.json`, `progress/`,
         `pyproject.toml`, `README.md`). Si `--changes` viene vacío o trae
         rutas que no existen, no se commitea nada y se avisa. Si el árbol trae
-        cambios ajenos al ticket (trabajo de otro dueño o de otro ticket), NO
-        se para: se commitea solo lo del ticket, el resto se queda sin
-        commitear (acumulado para el siguiente) y se avisa de qué se deja
+        cambios ajenos al ticket (trabajo de otro dueño o de otro ticket), el
+        commit se PARA: no se commitea nada a ciegas y se avisa de qué se deja
         fuera. Si tras el filtrado no queda nada staged, no se commitea y se
         avisa.
 
@@ -721,17 +729,20 @@ class HarnessAgent(BaseAgent):
                     return True
             return False
 
-        # Cambios ajenos al ticket: no paran el cierre (decisión del usuario).
-        # Se quedan sin commitear, acumulados para el siguiente ticket, y se
-        # avisa de qué se deja fuera.
+        # Cambios ajenos al ticket: con el flag de commit, el commit se PARA.
+        # `git commit -- <paths>` no se llevaría nada ajeno, pero un árbol con
+        # trabajo de otro dueño o de otro ticket es señal de que el cierre no
+        # está listo: mejor avisar y no commitear a ciegas.
         ajenas = [p for _, p in git_agent.git.status_porcelain(all_untracked=True) if not _in_allowed(p)]
         if ajenas:
             warnings.append(
                 f"Cambios fuera del ticket ({', '.join(ajenas[:5])}"
-                f"{'…' if len(ajenas) > 5 else ''}) se quedan sin commitear — "
-                "trabajo de otro dueño o de otro ticket, acumulado para el "
-                "siguiente cierre."
+                f"{'…' if len(ajenas) > 5 else ''}) — trabajo de otro dueño o "
+                "de otro ticket: el commit del cierre se PARA para no "
+                "llevárselo. Revísalos y cierra de nuevo con --commit cuando "
+                "el árbol solo tenga las rutas de este ticket."
             )
+            return {"warnings": warnings, "data": data}
 
         stage = git_agent.git.add(*stage_paths)
         if not stage.ok:
