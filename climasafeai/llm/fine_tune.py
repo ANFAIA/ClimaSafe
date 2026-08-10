@@ -242,10 +242,13 @@ def entrenar(args: argparse.Namespace) -> None:
         lr_scheduler_type="cosine",
         seed=42,
         report_to="wandb" if args.use_wandb else "none",
-        save_strategy="epoch",
-        save_total_limit=2,
-        load_best_model_at_end=bool(val_dataset),
-        metric_for_best_model="eval_loss" if val_dataset else None,
+        # BUG-005: sin checkpoints intermedios. Unsloth compila el trainer y el
+        # SFTConfig de trl duplicado no se puede picklear; save_strategy="epoch"
+        # dispara _save_checkpoint → torch.save(self.args) y peta. El LoRA final
+        # se guarda con model.save_pretrained tras entrenar (sin pickle).
+        save_strategy="no",
+        load_best_model_at_end=False,
+        # Eval por epoch sigue activo: solo evalúa, no guarda nada.
         eval_strategy="epoch" if val_dataset else "no",
     )
 

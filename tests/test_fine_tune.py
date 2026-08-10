@@ -172,6 +172,54 @@ class TestEntrenarChatTemplate:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# BUG-005 criterios 2-4: sin checkpoints intermedios
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestEntrenarTrainingArguments:
+    def _args(self, tmp_path):
+        val_file = tmp_path / "val.jsonl"
+        val_file.write_text('{"instruction": "i", "input": "", "output": "o"}\n')
+        return argparse.Namespace(
+            model="qwen2.5-1.5b",
+            train_file=str(tmp_path / "train.jsonl"),
+            val_file=str(val_file),
+            output_dir=str(tmp_path / "out"),
+            lora_rank=16,
+            max_seq_len=1024,
+            batch_size=2,
+            gradient_accum=4,
+            epochs=1,
+            lr=2e-4,
+            use_wandb=False,
+        )
+
+    def test_sin_checkpoints_intermedios(self, env_llm, tmp_path):
+        """Criterios 2-4 (BUG-005): TrainingArguments no dispara el guardado de
+        checkpoints intermedios — save_strategy="no", load_best_model_at_end=False
+        y sin save_total_limit/metric_for_best_model — pero eval_strategy sigue en
+        "epoch" con val_dataset. El LoRA final se guarda con model.save_pretrained."""
+        args = self._args(tmp_path)
+        with (
+            patch.dict(sys.modules, env_llm["mods"]),
+            patch.object(
+                ft,
+                "cargar_dataset",
+                return_value=[{"instruction": "i", "input": "", "output": "o"}],
+            ),
+        ):
+            ft.entrenar(args)
+
+        kwargs = env_llm["mods"]["transformers"].TrainingArguments.call_args.kwargs
+        assert kwargs["save_strategy"] == "no"
+        assert kwargs["load_best_model_at_end"] is False
+        assert kwargs["eval_strategy"] == "epoch"  # sigue evaluando por epoch
+        assert "save_total_limit" not in kwargs
+        assert "metric_for_best_model" not in kwargs
+        env_llm["model"].save_pretrained.assert_called_once_with(str(Path(args.output_dir)))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # evaluar
 # ─────────────────────────────────────────────────────────────────────────────
 
