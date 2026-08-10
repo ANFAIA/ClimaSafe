@@ -1568,8 +1568,9 @@
         "test sin GPU que verifica la config del TrainingArguments (save_strategy=no, load_best_model_at_end=False)",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-10"
     }
   ]
 }
