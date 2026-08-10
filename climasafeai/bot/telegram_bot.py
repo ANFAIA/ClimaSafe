@@ -247,6 +247,7 @@ class Estado(Enum):
     TRABAJO = auto()
     TIPO_TRABAJO = auto()
     DEPORTE = auto()
+    CONFIRMAR_DIA = auto()  # BOT-019: resumen de la salida deducida de la rutina
     COMORBILIDADES = auto()
     MEDICACION = auto()
     ESTADO_PREVIO = auto()
@@ -438,6 +439,13 @@ FIELD_LABELS: dict[Estado, tuple[str, str, Any]] = {
         "¿Qué deporte o actividad vas a hacer?",
         "deporte",
         _kb_deporte(),
+    ),
+    Estado.CONFIRMAR_DIA: (
+        # Placeholder: el texto real se construye en `_mensaje_confirmar_dia`
+        # con la salida deducida de la rutina (BOT-019).
+        "He dado por supuesto la salida de hoy. ¿Es correcto?",
+        "_confirmar_dia",
+        None,  # se monta aparte: botones Sí / Cambiar
     ),
     Estado.COMORBILIDADES: (
         "¿Tienes alguna de estas condiciones? (pulsa todas las que apliquen, "
@@ -801,6 +809,12 @@ def _perfil_a_data(perfil: dict) -> dict:
     data["comorbilidades"] = set(perfil.get("comorbilidades") or [])
     data["farmacos"] = set(perfil.get("farmacos") or [])
     data["situacion_social"] = set(perfil.get("situacion_social") or [])
+    # BOT-019: la ubicación guardada del perfil permite darla por supuesta en
+    # la salida deducida de la rutina (visible en la confirmación).
+    if perfil.get("lat") is not None and perfil.get("lon") is not None:
+        data["lat"] = perfil["lat"]
+        data["lon"] = perfil["lon"]
+        data["provincia"] = perfil.get("provincia") or "Madrid"
     return data
 
 
@@ -823,6 +837,12 @@ def _data_a_perfil(data: dict, alias: str, chat_id: str) -> dict:
         p["farmacos"] = list(data["farmacos"])
     if data.get("situacion_social"):
         p["situacion_social"] = list(data["situacion_social"])
+    # BOT-019: la ubicación de la salida se guarda en el perfil para no tener
+    # que volver a preguntarla en salidas posteriores con rutina.
+    if data.get("lat") is not None and data.get("lon") is not None:
+        p["lat"] = data["lat"]
+        p["lon"] = data["lon"]
+        p["provincia"] = data.get("provincia")
     return p
 
 
@@ -1160,6 +1180,109 @@ def _validar_hora(texto: str) -> str | None:
         return None
 
 
+# ── BOT-019: salida del día deducida de la rutina ──────────────────────────
+
+
+def _rutina_de_hoy(chat_id: int) -> dict | None:
+    """La única rutina del chat para hoy; None si no hay o hay varias.
+
+    Con varias rutinas en el mismo día no se deduce nada: /start pregunta
+    por UNA salida y elegir la primera sería arbitrario.
+    """
+    rutinas = _db.rutinas_por_dia(str(chat_id), datetime.now().isoweekday())
+    return rutinas[0] if len(rutinas) == 1 else None
+
+
+def _prefill_desde_rutina(data: dict, rutina: dict) -> None:
+    """Rellena los datos del día desde una rutina (BOT-019).
+
+    Mismo criterio que `_perfil_prediccion_desde_rutina` (aviso diario):
+    - deporte → intensidad por su MET (el número del Compendium vale más que
+      el adjetivo del usuario, como ya hace el formulario en DEPORTE);
+    - trabajo → intensidad "ligera" (el peso lo pone la ocupación, hasta x2.7);
+    - rutina genérica ("entreno") → "ligera" por defecto.
+    `entrenado=True` porque una rutina semanal es, por definición, una
+    actividad a la que se está acostumbrado.
+    """
+    data["hora_inicio"] = rutina["hora_inicio"]
+    data["duracion_h"] = rutina["hora_fin"] - rutina["hora_inicio"]
+    data["entrenado"] = True
+    if rutina.get("deporte"):
+        data["_por_trabajo"] = False
+        data["ocupacion"] = None
+        data["deporte"] = DEPORTES.get(rutina["deporte"], rutina["deporte"])
+        nivel = nivel_actividad_de_deporte(rutina["deporte"])
+        if nivel:
+            data["nivel_actividad"] = nivel
+    elif rutina.get("ocupacion"):
+        data["_por_trabajo"] = True
+        data["ocupacion"] = rutina["ocupacion"]
+        data["deporte"] = None
+        data["nivel_actividad"] = "ligera"
+    else:
+        data["_por_trabajo"] = False
+        data["ocupacion"] = None
+        data["deporte"] = None
+        data["nivel_actividad"] = "ligera"
+
+
+_DIA_DERIVADO = {
+    "hora_inicio", "duracion_h", "nivel_actividad", "entrenado",
+    "deporte", "ocupacion", "_por_trabajo", "_confirmar_dia_msg",
+}
+
+
+def _limpiar_dia_derivado(data: dict) -> None:
+    """Quita lo deducido de la rutina para volver a preguntar el día completo."""
+    for k in _DIA_DERIVADO:
+        data.pop(k, None)
+
+
+def _kb_confirmar_dia() -> list[list[dict]]:
+    return [
+        [{"text": "Sí, es correcto", "callback_data": "confirmar_si"}],
+        [{"text": "Cambiar algo", "callback_data": "confirmar_no"}],
+    ]
+
+
+def _mensaje_confirmar_dia(data: dict, rutina: dict) -> str:
+    """Resumen de lo dado por supuesto: visible y corregible (criterio BOT-019)."""
+    lineas = [f"*Hoy toca*: {_etiqueta_rutina(rutina)}", "", "He dado por supuesto:"]
+    if data.get("nivel_actividad"):
+        lineas.append(f"• Intensidad: {data['nivel_actividad'].replace('_', ' ')}")
+    if data.get("entrenado") is not None:
+        lineas.append("• Estás acostumbrado: sí (viene de tu rutina semanal)")
+    if data.get("duracion_h") is not None:
+        lineas.append(f"• Duración: {data['duracion_h']:g} h")
+    if data.get("hora_inicio") is not None:
+        lineas.append(f"• Empieza: {_formato_hora(data['hora_inicio'])}")
+    if data.get("deporte"):
+        lineas.append(f"• Actividad: {data['deporte']}")
+    if data.get("ocupacion"):
+        etiqueta = _etiqueta_ocupacion(data["ocupacion"])
+        lineas.append(f"• Salida de trabajo: {etiqueta or OCUPACIONES.get(data['ocupacion'], data['ocupacion'])}")
+    if data.get("lat") is not None and data.get("lon") is not None:
+        lineas.append(f"• Ubicación: {data.get('provincia') or f'{data['lat']:.2f}, {data['lon']:.2f}'}")
+    lineas.append("")
+    lineas.append("¿Es lo que vas a hacer?")
+    return "\n".join(lineas)
+
+
+def _guardar_ubicacion_perfil(chat_id: int, lat: float, lon: float, provincia: str) -> None:
+    """Guarda la ubicación de la salida como ubicación del perfil (BOT-019).
+
+    Así una salida posterior con rutina puede darla por supuesta (se muestra
+    en la confirmación y se cambia con "Cambiar algo"). No crítico: si falla
+    solo se pierde el atajo, nunca la predicción.
+    """
+    try:
+        match = _db.buscar_por_telegram(str(chat_id))
+        if match:
+            _db.actualizar_perfil(match["id"], {"lat": lat, "lon": lon, "provincia": provincia})
+    except Exception:
+        logger.exception("No se pudo guardar la ubicación en el perfil de %s", chat_id)
+
+
 async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
     """Procesa un mensaje de texto del usuario. Devuelve texto a enviar."""
     conv = _conversaciones.setdefault(chat_id, {"estado": Estado.IDLE, "data": {}})
@@ -1186,6 +1309,15 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         if match:
             perfil = _db.obtener_perfil(match["id"])
             conv["data"].update(_perfil_a_data(perfil))
+            # BOT-019: si hay una única rutina hoy, la salida del día se deduce
+            # (hora, duración, intensidad, trabajo/deporte) y solo se confirma.
+            # El resto de casos sigue preguntando como siempre.
+            rutina_hoy = _rutina_de_hoy(chat_id)
+            if rutina_hoy:
+                _prefill_desde_rutina(conv["data"], rutina_hoy)
+                conv["estado"] = Estado.CONFIRMAR_DIA
+                conv["data"]["_confirmar_dia_msg"] = _mensaje_confirmar_dia(conv["data"], rutina_hoy)
+                return None  # el resumen + botones lo envía enviar_siguiente_pregunta
             conv["estado"] = Estado.ACTIVIDAD  # saltar personales
             alias = perfil.get("alias") or match.get("alias", "")
             return f"Hola de nuevo, {alias}! Se cargaron tus datos previos. Solo las preguntas del dia:"
@@ -1380,6 +1512,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         data["lon"] = lugar["lon"]
         data["provincia"] = lugar["provincia"] or "Madrid"
         data["lugar"] = lugar["nombre"]
+        _guardar_ubicacion_perfil(chat_id, data["lat"], data["lon"], data["provincia"])
         conv["estado"] = _siguiente(estado, data)
         return None
 
@@ -1438,6 +1571,10 @@ def _siguiente(actual: Estado, data: dict | None = None) -> Estado:
             return _siguiente(sig, data)
         if sig == Estado.DEPORTE and por_trabajo:
             return _siguiente(sig, data)
+    # BOT-019: CONFIRMAR_DIA solo se alcanza por asignación directa desde
+    # /start (hay rutina hoy). El resto de flujos lo saltan sin tocar.
+    if sig == Estado.CONFIRMAR_DIA:
+        return _siguiente(sig, data)
     return sig
 
 
@@ -1510,6 +1647,18 @@ async def procesar_callback(chat_id: int, callback_data: str) -> tuple[str | Non
             elegidos.add(callback_data)
         # No avanzamos, esperamos más clics o "Terminé"
         return None, False
+
+    # BOT-019: confirmar la salida deducida de la rutina. "Cambiar algo"
+    # limpia lo deducido y vuelve a preguntar el día completo desde ACTIVIDAD,
+    # sin reiniciar /start.
+    if estado == Estado.CONFIRMAR_DIA:
+        if callback_data == "confirmar_no":
+            _limpiar_dia_derivado(data)
+            conv["estado"] = Estado.ACTIVIDAD
+            return None, False
+        sig = _siguiente(estado, data)
+        conv["estado"] = sig
+        return None, sig == Estado.DONE
 
     if estado == Estado.FOTOTIPO:
         data["fototipo"] = callback_data
@@ -1865,6 +2014,18 @@ def _saltar_si_prellenado(conv: dict) -> None:
     if campo and campo in conv["data"]:
         conv["estado"] = _siguiente(estado, conv["data"])
         _saltar_si_prellenado(conv)  # recursivo: puede haber varios seguidos
+        return
+    # BOT-019: con la salida deducida de la rutina, la ubicación del perfil se
+    # da por supuesta (se mostró en la confirmación y se cambia con "Cambiar
+    # algo"). Sin rutina la ubicación se sigue preguntando siempre.
+    if (
+        estado == Estado.UBICACION
+        and conv["data"].get("_confirmar_dia_msg")
+        and conv["data"].get("lat") is not None
+        and conv["data"].get("lon") is not None
+    ):
+        conv["estado"] = _siguiente(estado, conv["data"])
+        _saltar_si_prellenado(conv)
 
 
 async def enviar_siguiente_pregunta(chat_id: int) -> None:
@@ -1880,6 +2041,11 @@ async def enviar_siguiente_pregunta(chat_id: int) -> None:
     estado = conv["estado"]
     if estado == Estado.DONE:
         await _finalizar_parte(chat_id)
+        return
+
+    if estado == Estado.CONFIRMAR_DIA:
+        msg = conv["data"].get("_confirmar_dia_msg") or FIELD_LABELS[estado][0]
+        await enviar_mensaje(chat_id, msg, kb=_kb_confirmar_dia())
         return
 
     if estado == Estado.GUARDAR_PERFIL:
@@ -2117,6 +2283,7 @@ async def _recibir_ubicacion(chat_id: int, location: dict) -> None:
     conv["data"]["lon"] = lon
     conv["data"]["provincia"] = sitio.get("provincia") or "Madrid"
     conv["data"]["lugar"] = sitio.get("nombre") or f"{lat:.4f}, {lon:.4f}"
+    _guardar_ubicacion_perfil(chat_id, lat, lon, conv["data"]["provincia"])
     conv["estado"] = _siguiente(Estado.UBICACION, conv["data"])
     await enviar_siguiente_pregunta(chat_id)
 

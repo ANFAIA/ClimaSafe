@@ -65,8 +65,9 @@
         "Cuando el forecast meteorológico no cubre los 7 días, se indica explícitamente hasta dónde llega en vez de extrapolar en silencio",
         "Hay tests del cálculo de la serie semanal y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-10"
     },
     {
       "id": "ENS-001",
@@ -1392,8 +1393,11 @@
         "No se solapa con BOT-017: esta feature reduce las preguntas del formulario, BOT-017 ofrece repetir la ultima salida entera. Si BOT-017 ya esta hecha, se mide encima de ella",
         "Hay tests que comprueban que el diccionario que llega al pipeline es identico al de hoy para el mismo caso, y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-10",
+      "review_rounds": 0,
+      "closed": "2026-08-10"
     },
     {
       "id": "DATA-006",
