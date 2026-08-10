@@ -1177,10 +1177,11 @@
         "Un host que solo lee (Claude Desktop, opencode) sigue funcionando igual sin configurar nada",
         "Hay tests de los tres casos (lectura sin token, escritura sin token rechazada, escritura con token) y make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-10",
-      "review_rounds": 1
+      "review_rounds": 1,
+      "closed": "2026-08-10"
     },
     {
       "id": "SEC-001",
@@ -1547,6 +1548,20 @@
       "started": "2026-08-07",
       "owner": "opencode",
       "review_rounds": 1
+    },
+    {
+      "id": "BUG-005",
+      "title": "fine_tune.py peta al guardar checkpoint: SFTConfig de trl 0.24 no se puede picklear (unsloth compila el trainer)",
+      "description": "fine_tune.py peta al guardar checkpoint: SFTConfig de trl 0.24 no se puede picklear (unsloth compila el trainer)",
+      "acceptance_criteria": [
+        "el script ya no usa save_strategy=epoch ni load_best_model_at_end (los checkpoints intermedios petan el pickle de SFTConfig con unsloth+trl 0.24+transformers 5.5)",
+        "el LoRA final se guarda igual con model.save_pretrained tras entrenar",
+        "eval_strategy sigue en epoch para ver el eval_loss por epoch",
+        "test sin GPU que verifica la config del TrainingArguments (save_strategy=no, load_best_model_at_end=False)",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }

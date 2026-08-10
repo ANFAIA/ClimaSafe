@@ -102,17 +102,24 @@ cliente manda `Authorization: Bearer <token>` en HTTP. El token se emite con
 `make mcp-token ALIAS=<alias>` y se enseña una sola vez. Sin él, ninguna tool de
 perfil devuelve datos.
 
+Además, desde MCP-002 el servidor arranca en **solo lectura**: las tools que
+escriben (`crear_perfil_mcp`, `crear_rutina_mcp`, `borrar_rutina_mcp`,
+`vincular_chat_id_mcp`, `configurar_hora_aviso_mcp`) devuelven error hasta que
+el proceso se arranca con `CLIMASAFE_MCP_WRITE_TOKEN=<secreto>` (o
+`--token-escritura <secreto>`). El host que no lo lleve puede leer y predecir
+igual que siempre; el que lo lleve, además puede escribir.
+
 Cada llamante ve **solo su propio perfil**. El identificador público es el `uid`
 opaco (`usr_…`): alias, `id` y `chat_id` ya no sirven como llave de acceso, y
 pedir el `uid` de otra persona devuelve error, no una versión recortada.
 
 | Tool | Descripción | Acceso |
 |------|-------------|--------|
-| `crear_perfil_mcp` | Crea perfil con datos demográficos, clínicos y sociales | identidad válida |
+| `crear_perfil_mcp` | Crea perfil con datos demográficos, clínicos y sociales | identidad válida + token de escritura |
 | `cargar_perfil_mcp` | Carga **tu** perfil; sin `uid` usa el del token | perfil propio |
 | `cargar_perfil_por_chat_id_mcp` | Carga tu perfil por tu chat de Telegram | perfil propio |
 | `listar_usuarios_mcp` | Lista los perfiles — **solo rol admin**, un usuario normal recibe error | admin |
-| `vincular_chat_id_mcp` | Vincula un chat de Telegram a **tu** perfil | perfil propio |
+| `vincular_chat_id_mcp` | Vincula un chat de Telegram a **tu** perfil | perfil propio + token de escritura |
 | `predict_risk_mcp` | Predice riesgo cardiovascular para una salida | público (no toca la BD) |
 
 ### RAG y LLM

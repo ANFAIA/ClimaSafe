@@ -351,3 +351,59 @@ MCP-003 **no obliga a tocar** `climasafeai/models/ensemble.py`,
    rechaza_propio_mas_ajeno`, que recorre las tools registradas, se queda con
    las que declaran más de un sujeto (`__climasafe_sujeto__`) y prueba cada par
    propio+ajeno. Una tool nueva con dos sujetos entra sola en el test.
+
+---
+
+## 9. MCP-002: solo lectura por defecto, escritura por token
+
+**Estado:** implementado. El check es `_requiere_token_escritura` en
+`agents/tools/prediction_mcp_tool.py`; los tests están en
+`tests/test_mcp_escritura.py`. **Fecha:** 2026-08-10.
+
+MCP-003 decidió *quién* llama; MCP-002 decide *qué* operaciones están abiertas.
+Por defecto el servidor es de **solo lectura**: las cinco tools que escriben en
+la BD de perfiles — `crear_perfil_mcp`, `crear_rutina_mcp`,
+`borrar_rutina_mcp`, `vincular_chat_id_mcp`, `configurar_hora_aviso_mcp` —
+responden `{"error": …}` y **no tocan nada** si el proceso no arrancó con el
+token de escritura. Las siete de lectura (predicciones, perfil propio, rutinas,
+riesgo por rutinas) no cambian y no piden nada nuevo.
+
+### Cómo se habilita la escritura
+
+```bash
+CLIMASAFE_MCP_WRITE_TOKEN=<secreto> uv run python -m agents.tools.prediction_mcp_tool --stdio --identidad <token-identidad>
+# equivalente, como parámetro de arranque:
+uv run python -m agents.tools.prediction_mcp_tool --stdio --identidad <token-identidad> --token-escritura <secreto>
+```
+
+El token es una credencial de **arranque** del proceso, igual que la identidad
+en stdio (un proceso = un llamante, §2.1). El operador del host decide quién
+escribe: el host cuyo comando lleva la variable puede escribir; el que no, solo
+lee. En HTTP la variable vive en el entorno del servidor y decide globalmente.
+
+### Decisiones de diseño
+
+1. **El token NO entra en la firma de ninguna tool.** §2.1 descartó pasar la
+   credencial como parámetro porque aparece en el `inputSchema`, en el contexto
+   del LLM y en los logs del host (lección BOT-004). El token de escritura se
+   comporta igual: solo existe en el entorno del proceso, nunca como argumento.
+2. **La capa va DEBAJO de `_requiere_identidad`.** Orden de decoradores:
+   `@_mcp.tool()` → `@_requiere_identidad(...)` → `@_requiere_token_escritura`
+   → la función. Identidad y propiedad se comprueban antes: un llamante anónimo
+   o que nombra un sujeto ajeno recibe exactamente el mismo error que antes de
+   MCP-002; solo después se decide si la operación puede escribir. Por eso los
+   tests de MCP-003 no cambian de semántica: el fixture del llamante legítimo
+   pone también el token de escritura.
+3. **Clasificación explícita con `__climasafe_escritura__`**, igual que
+   `__climasafe_acceso__` para la identidad. La lista congelada está en
+   `TestClasificacion` de `tests/test_mcp_escritura.py`; una tool de escritura
+   nueva sin marcar (o mal clasificada) rompe la suite.
+4. **Sin token no hay ninguna ruta que escriba.** El check es el punto único:
+   toda tool de escritura pasa por `_requiere_token_escritura` o no está
+   marcada como tal.
+5. **El token nunca se devuelve ni se loguea.** Ni siquiera se lee como dato:
+   el check solo comprueba su presencia. El error de solo lectura nombra la
+   variable (`CLIMASAFE_MCP_WRITE_TOKEN`), nunca un valor real.
+6. **`configurar_hora_aviso_mcp` se capa entera**, incluida su consulta con
+   `hora=None`: es una tool que *puede* escribir, y distinguir dentro de la
+   misma tool añadiría una excepción por caso sin ganancia de seguridad.

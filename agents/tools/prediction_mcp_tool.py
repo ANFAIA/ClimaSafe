@@ -1140,6 +1140,45 @@ def _acceso_publico(fn):
     return fn
 
 
+# ── Capa de solo lectura (MCP-002) ────────────────────────────────────
+#
+# MCP-003 decidió QUIÉN llama (identidad); MCP-002 decide QUÉ operaciones
+# están abiertas. Por defecto el servidor es de SOLO LECTURA: las tools que
+# escriben en la BD de perfiles exigen que el proceso arrancara con el token
+# de escritura. En stdio un proceso = un llamante (MCP-003), así que el
+# operador del host decide quién escribe poniendo la variable en el comando
+# de arranque; en HTTP la decide el operador del servidor, globalmente. El
+# token es una credencial de ARRANQUE: no entra en la firma de ninguna tool
+# ni en ninguna respuesta (decisión de MCP-003 §2.1, lección BOT-004).
+
+ENV_TOKEN_ESCRITURA = "CLIMASAFE_MCP_WRITE_TOKEN"
+
+ERROR_SOLO_LECTURA = (
+    "Tool de escritura: el servidor está en modo SOLO LECTURA. Para habilitar "
+    f"la escritura, arráncalo con {ENV_TOKEN_ESCRITURA}=<secreto> (o "
+    "--token-escritura <secreto>): el proceso que lo lleve queda autorizado a "
+    "escribir. Sin ese token, ninguna llamada modifica la base de datos."
+)
+
+
+def _requiere_token_escritura(fn):
+    """Capa de solo lectura sobre la identidad (MCP-002).
+
+    Toda tool que escriba en la BD de perfiles se marca con esto. Sin el token
+    de escritura configurado al arrancar, responde error y NO llega a tocar la
+    BD. La marca ``__climasafe_escritura__`` deja la clasificación
+    lectura/escritura explícita y auditable, igual que ``__climasafe_acceso__``.
+    """
+    @functools.wraps(fn)
+    def envoltorio(*args, **kwargs):
+        if not (os.environ.get(ENV_TOKEN_ESCRITURA) or "").strip():
+            return json.dumps({"error": ERROR_SOLO_LECTURA}, ensure_ascii=False)
+        return fn(*args, **kwargs)
+
+    envoltorio.__climasafe_escritura__ = True
+    return envoltorio
+
+
 # Campos que no salen nunca de una respuesta de perfil (criterio 5):
 # `mcp_token_hash` es la credencial y `telegram_chat_id` solo tiene sentido en
 # las tools de rutinas, donde es la clave de almacenamiento. `id` es secuencial
@@ -1286,12 +1325,16 @@ llave de acceso."""
 
     @_mcp.tool()
     @_requiere_identidad("perfil_propio", sujeto=("uid",))
+    @_requiere_token_escritura
     def vincular_chat_id_mcp(chat_id: str, uid: Optional[str] = None) -> str:
         """Vincula un chat de Telegram a TU perfil (el del token con el que llamas).
 
 Antes aceptaba cualquier alias, y eso era escalada de privilegios en dos pasos:
 reasignabas el perfil ajeno a tu chat y luego lo leías como propio. Ahora solo
-se vincula el perfil propio, y nunca un chat que ya sea de otro."""
+se vincula el perfil propio, y nunca un chat que ya sea de otro.
+
+Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+servidor está en modo solo lectura y esta llamada no modifica nada."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
         match = db.buscar_por_uid(uid) if uid else None
@@ -1310,6 +1353,7 @@ se vincula el perfil propio, y nunca un chat que ya sea de otro."""
 
     @_mcp.tool()
     @_requiere_identidad("identidad")
+    @_requiere_token_escritura
     def crear_perfil_mcp(alias: str, edad: int, sexo: str, grasa: Optional[float] = None, aclimatado: bool = False, comorbilidades: Optional[str] = None, medicacion: Optional[str] = None, nivel_actividad: Optional[str] = None, fototipo: Optional[str] = None, situacion_social: Optional[str] = None, chat_id: Optional[str] = None) -> str:
         """Crea un perfil y opcionalmente lo vincula a un chat de Telegram.
 
@@ -1318,7 +1362,10 @@ separadas por comas, p. ej.
 "cardiovascular,diabetes" y "diureticos_asa,antipsicoticos".
 
 `situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
-vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
+vivienda_fria. `fototipo` escala Fitzpatrick 1-6.
+
+Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+servidor está en modo solo lectura y esta llamada no modifica nada."""
         from climasafeai.db.manager import DBManager
         db = DBManager()
         exist = db.buscar_por_alias(alias)
@@ -1377,6 +1424,7 @@ opcionalmente ocupacion o deporte."""
 
     @_mcp.tool()
     @_requiere_identidad("perfil_propio")
+    @_requiere_token_escritura
     def crear_rutina_mcp(
         nombre: str,
         dias: str,
@@ -1393,7 +1441,10 @@ opcionalmente ocupacion o deporte."""
 `dias` es una cadena con los días 1-7 separados por coma (1=lunes, 7=domingo),
 p. ej. "1,2,3,4,5". `hora_inicio` y `hora_fin` en formato 24h (8.5 = 8:30).
 `deporte` solo si la rutina es un deporte conocido (correr, senderismo, futbol,
-ciclismo, tenis...): su intensidad se deriva del MET del Compendium."""
+ciclismo, tenis...): su intensidad se deriva del MET del Compendium.
+
+Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+servidor está en modo solo lectura y esta llamada no modifica nada."""
         chat, err = _resolver_chat(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
@@ -1418,6 +1469,7 @@ ciclismo, tenis...): su intensidad se deriva del MET del Compendium."""
 
     @_mcp.tool()
     @_requiere_identidad("perfil_propio")
+    @_requiere_token_escritura
     def borrar_rutina_mcp(
         rutina_id: int,
         alias: Optional[str] = None,
@@ -1427,7 +1479,10 @@ ciclismo, tenis...): su intensidad se deriva del MET del Compendium."""
         """Borra una rutina propia por su id (los ids salen en listar_rutinas_mcp).
 
 Hay que identificar al dueño con alias, perfil_id o chat_id: solo se borran
-rutinas de ese perfil/chat."""
+rutinas de ese perfil/chat.
+
+Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+servidor está en modo solo lectura y esta llamada no modifica nada."""
         chat, err = _resolver_chat(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
@@ -1445,6 +1500,7 @@ rutinas de ese perfil/chat."""
 
     @_mcp.tool()
     @_requiere_identidad("perfil_propio")
+    @_requiere_token_escritura
     def configurar_hora_aviso_mcp(
         hora: Optional[str] = None,
         alias: Optional[str] = None,
@@ -1454,7 +1510,11 @@ rutinas de ese perfil/chat."""
         """Configura o consulta la hora de aviso diario de un perfil/chat.
 
 `hora` en formato HH:MM (p. ej. "08:00") configura el aviso; "off" lo desactiva;
-si se omite, solo consulta la hora actual."""
+si se omite, solo consulta la hora actual.
+
+Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar) para
+configurar o desactivar el aviso: sin él el servidor está en modo solo lectura y
+esta llamada no modifica nada."""
         chat, err = _resolver_chat(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
@@ -1720,6 +1780,7 @@ def main() -> None:
     parser.add_argument("--insecure", action="store_true", help="HTTP plano en vez de HTTPS (SSE mode)")
     parser.add_argument("--stdio", action="store_true", help="Usar transporte stdio (para Claude Desktop)")
     parser.add_argument("--identidad", help=f"Token del llamante en stdio (alternativa a {ENV_TOKEN_MCP})")
+    parser.add_argument("--token-escritura", help=f"Token que habilita las tools de escritura (alternativa a {ENV_TOKEN_ESCRITURA})")
     parser.add_argument("--emitir-token", metavar="ALIAS", help="Emite un token MCP para ese perfil y sale")
     parser.add_argument("--rol", choices=("usuario", "admin"), help="Rol a fijar al emitir el token")
     args = parser.parse_args()
@@ -1730,6 +1791,9 @@ def main() -> None:
 
     if args.identidad:
         os.environ[ENV_TOKEN_MCP] = args.identidad
+
+    if args.token_escritura:
+        os.environ[ENV_TOKEN_ESCRITURA] = args.token_escritura
 
     if args.stdio:
         run_mcp_server(stdio=True)

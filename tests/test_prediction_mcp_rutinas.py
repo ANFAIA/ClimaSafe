@@ -33,8 +33,9 @@ import climasafeai.db.manager as dbm
 
 @pytest.fixture(autouse=True)
 def sin_token_ambiental(monkeypatch):
-    """Ningún test hereda el token MCP del entorno del desarrollador."""
+    """Ningún test hereda los tokens MCP del entorno del desarrollador."""
     monkeypatch.delenv(mcp.ENV_TOKEN_MCP, raising=False)
+    monkeypatch.delenv(mcp.ENV_TOKEN_ESCRITURA, raising=False)
 
 
 @pytest.fixture
@@ -54,12 +55,19 @@ def db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def como(db, monkeypatch):
-    """Cambia la identidad del llamante del MCP emitiendo un token real."""
+    """Cambia la identidad del llamante del MCP emitiendo un token real.
+
+    El llamante legítimo lleva también el token de escritura (MCP-002): estos
+    tests ejercitan la escritura permitida, y desde MCP-002 escribir exige
+    que el proceso arrancara con `CLIMASAFE_MCP_WRITE_TOKEN`. Los tests de
+    rechazo no se ven afectados: identidad se comprueba antes.
+    """
 
     def _como(alias: str) -> dict:
         match = db.buscar_por_alias(alias)
         assert match, f"no existe el perfil '{alias}'"
         monkeypatch.setenv(mcp.ENV_TOKEN_MCP, db.emitir_token_mcp(match["id"]))
+        monkeypatch.setenv(mcp.ENV_TOKEN_ESCRITURA, "token-escritura-de-test")
         return db.obtener_perfil(match["id"])
 
     return _como
