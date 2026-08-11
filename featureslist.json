@@ -1599,8 +1599,9 @@
         "el conflicto timm/fastai de la celda 2 del notebook queda documentado como ruido benigno en colab-fine-tuning.md o se anade timm fastai al uninstall, con la decision escrita",
         "make test pasa y los tests existentes de test_fine_tune.py siguen verdes"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-11"
     },
     {
       "id": "META-001",

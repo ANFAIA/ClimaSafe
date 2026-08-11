@@ -328,7 +328,7 @@ def exportar_gguf(args: argparse.Namespace) -> None:
 
         print("[1/3] Cargando modelo base con LoRA...")
         model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=lora_path,  # Unsloth carga base + LoRA si el path tiene adapter_config
+            model_name=str(lora_path),  # str: Unsloth hace model_name.lower() y Path no lo tiene (BUG-006). Carga base + LoRA si el path tiene adapter_config
             max_seq_length=4096,
             dtype=None,
             load_in_4bit=False,  # Necesitamos precisión completa para export
@@ -402,7 +402,7 @@ def evaluar(args: argparse.Namespace) -> None:
 
     # Cargar modelo + LoRA
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=lora_path,
+        model_name=str(lora_path),  # str: Unsloth hace model_name.lower() y Path no lo tiene (BUG-006)
         max_seq_length=4096,
         dtype=None,
         load_in_4bit=True,

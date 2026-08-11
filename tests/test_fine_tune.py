@@ -286,3 +286,63 @@ class TestEvaluarChatTemplate:
 
         tok_sin.apply_chat_template.assert_not_called()
         assert tok_con.apply_chat_template.call_count == 2
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUG-006: model_name str (no Path) en exportar_gguf y evaluar
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestBug006ModelNameStr:
+    def test_exportar_gguf_pasa_model_name_str(self, env_llm, tmp_path):
+        """Criterio 1 (BUG-006): exportar_gguf pasa model_name como str a
+        FastLanguageModel.from_pretrained, no como Path — Unsloth hace
+        internamente model_name.lower() y PosixPath revienta."""
+        lora = tmp_path / "lora"
+        lora.mkdir()
+        gguf = tmp_path / "out" / "model.gguf"
+        gguf.parent.mkdir(parents=True, exist_ok=True)
+        gguf.write_bytes(b"\x00" * 1024)  # simula el fichero que deja el mock de save_pretrained_gguf
+        args = argparse.Namespace(lora_path=str(lora), gguf_path=str(gguf))
+        capturado = {}
+
+        def _from_pretrained(**kwargs):
+            capturado["model_name"] = kwargs["model_name"]
+            return env_llm["model"], env_llm["tok_sin_template"]
+
+        env_llm["unsloth"].FastLanguageModel.from_pretrained.side_effect = _from_pretrained
+        env_llm["model"].merge_and_unload.return_value = env_llm["model"]
+
+        with patch.dict(sys.modules, env_llm["mods"]):
+            ft.exportar_gguf(args)
+
+        assert isinstance(capturado["model_name"], str)
+        assert not isinstance(capturado["model_name"], Path)
+
+    def test_evaluar_pasa_model_name_str(self, env_llm, tmp_path):
+        """Criterio 2 (BUG-006): evaluar pasa model_name como str (mismo bug)."""
+        lora = tmp_path / "lora"
+        lora.mkdir()
+        val = tmp_path / "val.jsonl"
+        val.write_text('{"instruction": "i", "input": "", "output": "o"}\n')
+        args = argparse.Namespace(lora_path=str(lora), val_file=str(val))
+        capturado = {}
+
+        def _from_pretrained(**kwargs):
+            capturado["model_name"] = kwargs["model_name"]
+            return env_llm["model"], env_llm["tok_sin_template"]
+
+        env_llm["unsloth"].FastLanguageModel.from_pretrained.side_effect = _from_pretrained
+
+        with (
+            patch.dict(sys.modules, env_llm["mods"]),
+            patch.object(
+                ft,
+                "cargar_dataset",
+                return_value=[{"instruction": "i", "input": "", "output": "o"}],
+            ),
+        ):
+            ft.evaluar(args)
+
+        assert isinstance(capturado["model_name"], str)
+        assert not isinstance(capturado["model_name"], Path)
