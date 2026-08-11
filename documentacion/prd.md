@@ -66,9 +66,11 @@ Cada bloque enlaza al roadmap y al backlog que lo desglosan en tareas con criter
 
 - **No sustituye a los avisos oficiales** (AEMET, Protección Civil): es una capa complementaria de anticipación y personalización.
 - **No es diagnóstico ni consejo médico**: los factores de personalización son riesgo relativo de la literatura, no evaluación clínica.
-- **Radiación UV**: queda declarada como línea futura (README).
+- **Radiación UV**: queda declarada como línea futura (README). Ticket de evaluación: [`UV-001`](../featureslist.json).
 - **Wearables y datos en streaming** (`DATA-005`, `DATA-006`): opcional de prioridad baja; sin fuente de datos viable no se aborda.
 - **Cobertura no global**: España por provincias (fuentes MoMo/ERA5 y modelo calibrados para España).
+
+Las métricas de éxito de abajo ("Uso real", "Cobertura") no se medían en producción al redactar este PRD; su medición es el ticket [`META-001`](../featureslist.json).
 
 Si una propuesta nueva cae en estas zonas, no entra directa al backlog: primero se discute si el PRD debe cambiar.
 

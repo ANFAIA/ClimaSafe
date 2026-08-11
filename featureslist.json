@@ -1463,10 +1463,10 @@
       ],
       "status": "blocked",
       "depends_on": [],
-      "started": "2026-08-07",
+      "started": "2026-08-11",
       "owner": "claude",
-      "review_rounds": 1,
-      "blocked_reason": "Quedo a medias de sesion previa sin dueno; se retoma en una segunda tanda. El usuario pidio avanzar los pendientes elegibles."
+      "review_rounds": 0,
+      "blocked_reason": "Reabierta en esta sesion pero el implementer fue cancelado por el usuario (fin de sesion, >5h). Se retoma en la proxima con el control de acceso por identidad."
     },
     {
       "id": "ARNES-012",
@@ -1629,6 +1629,37 @@
       ],
       "status": "pending",
       "depends_on": []
+    },
+    {
+      "id": "BOT-021",
+      "title": "Memoria conversacional: entender salidas en lenguaje natural (p.ej. 'voy al tenis como ayer')",
+      "description": "Memoria conversacional: entender salidas en lenguaje natural (p.ej. 'voy al tenis como ayer')",
+      "acceptance_criteria": [
+        "El bot acepta una frase libre del usuario que describe una salida ('voy al tenis como ayer', 'esta tarde correr 40 min', 'igual que el martes') y la interpreta sin formulario campo a campo",
+        "para interpretarla usa la ultima salida guardada (BOT-017) y/o la rutina del dia como contexto cuando la frase referencia 'ayer'/'como siempre'/'igual que'",
+        "la prediccion recibe exactamente los mismos campos que el formulario (se demuestra comparando el diccionario del pipeline con y sin frase libre)",
+        "cuando la frase es ambigua o le falta un campo obligatorio, el bot hace SOLO la pregunta que falta (no repite el formulario)",
+        "hay tests de las frases de ejemplo y de la ruta ambigua, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DATA-008",
+      "title": "Dataset LLM con ejemplos reales de frio desde los parquet descargados (2016-2026)",
+      "description": "Dataset LLM con ejemplos reales de frio desde los parquet descargados (2016-2026)",
+      "acceptance_criteria": [
+        "Un generador nuevo (o extension del existente) lee dataset_frio_labeled.parquet y genera ejemplos de frio: dias con t2m_c < 5C, varias provincias (al menos Leon, Soria, Lleida, Girona), perfil sintetico variado, y se pega el conteo real generado",
+        "Los ejemplos de frio salen del pipeline real (predict_ensemble sobre el weather del parquet, con el parte en el input: t_media, t_max, rh, viento, UV), nunca de datos inventados: se demuestra que el input de cada ejemplo lleva los 5 campos y que el output es la salida del pipeline para ese dia",
+        "El dataset resultante mezcla calor (los ~300 de train.jsonl actuales) + frio (~150-200 nuevos): train y val quedan mixtos y se pega el reparto por canal (t_media < 10C vs >= 10C) y por clase (SEGURO/PRECAUCION/PELIGRO) de los dos",
+        "Los ejemplos de frio tienen t_media < 10C reales y fechas invernales (noviembre-febrero) de 2016-2026, verificables en el JSONL",
+        "make test pasa y los tests existentes del generador y del pipeline siguen verdes"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-11",
+      "owner": "opencode",
+      "review_rounds": 0
     }
   ]
 }
