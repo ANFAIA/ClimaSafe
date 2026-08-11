@@ -13,6 +13,10 @@ from climasafeai.features.weather_indices import heat_index
 
 CLASES = ["SEGURO", "PRECAUCION", "PELIGRO"]
 
+# Mismos colores que el overlay Leaflet (chat/static/index.html)
+COLORES_RIESGO = {0: "#27ae60", 1: "#f39c12", 2: "#e74c3c"}
+ETIQUETAS_RIESGO = ["Seguro", "Precaución", "Peligro"]
+
 PERFILES_DISPONIBLES = {
     "vulnerable": {
         "label": "Más restrictivo",
@@ -228,3 +232,112 @@ def riesgo_zona_grid(
         "prob_personalizada": round(prob_pers, 4) if prob_pers is not None else None,
         "target_date": weather.get("target_date"),
     }
+
+
+def _paso_celdas(celdas: list[dict]) -> tuple[float, float]:
+    """Separación real entre celdas consecutivas, en grados.
+
+    La misma que deduce el frontend para pintar los rectángulos: la diferencia
+    entre los lat/lon consecutivos de la cuadrícula (paso 1 km del grid).
+    """
+    paso_lat = paso_lon = 0.01
+    lats = sorted({c["lat"] for c in celdas})
+    lons = sorted({c["lon"] for c in celdas})
+    if len(lats) > 1:
+        paso_lat = min(b - a for a, b in zip(lats, lats[1:]))
+    if len(lons) > 1:
+        paso_lon = min(b - a for a, b in zip(lons, lons[1:]))
+    if paso_lat <= 0.0001:
+        paso_lat = 0.01
+    if paso_lon <= 0.0001:
+        paso_lon = 0.01
+    return paso_lat, paso_lon
+
+
+def celdas_a_featurecollection(celdas: list[dict]) -> dict:
+    """Convierte las celdas del grid en una FeatureCollection GeoJSON.
+
+    Cada celda es un Polygon con el mismo rectángulo que pinta el overlay
+    Leaflet, con la clase de riesgo y el HI pico en properties. El orden de
+    coordenadas es [lon, lat], como exige la especificación GeoJSON.
+    """
+    paso_lat, paso_lon = _paso_celdas(celdas)
+    features = []
+    for c in celdas:
+        lon, lat = c["lon"], c["lat"]
+        rect = [
+            [lon - paso_lon / 2, lat - paso_lat / 2],
+            [lon + paso_lon / 2, lat - paso_lat / 2],
+            [lon + paso_lon / 2, lat + paso_lat / 2],
+            [lon - paso_lon / 2, lat + paso_lat / 2],
+            [lon - paso_lon / 2, lat - paso_lat / 2],
+        ]
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Polygon", "coordinates": [rect]},
+            "properties": {
+                "riesgo": c["riesgo"],
+                "riesgo_label": c["riesgo_label"],
+                "hi_pico": c.get("hi"),
+            },
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+
+def render_riesgo_png(
+    celdas: list[dict],
+    stats: Optional[dict] = None,
+    center: Optional[dict] = None,
+    resumen: Optional[dict] = None,
+    perfil_label: str = "",
+) -> bytes:
+    """Renderiza el overlay de riesgo del grid en un PNG (bytes).
+
+    Mismo color por clase que el mapa web; la cuadrícula se dibuja con el
+    tamaño real de celda (paso 1 km) para que las celdas salgan cuadradas.
+    """
+    import io
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    paso_lat, paso_lon = _paso_celdas(celdas)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    for c in celdas:
+        ax.add_patch(Rectangle(
+            (c["lon"] - paso_lon / 2, c["lat"] - paso_lat / 2),
+            paso_lon, paso_lat,
+            facecolor=COLORES_RIESGO.get(c["riesgo"], "#999999"),
+            edgecolor="white", linewidth=0.3,
+        ))
+    if center and abs(center.get("lat", 0)) < 89.9:
+        # Compensa la compresión de los grados de longitud con la latitud
+        ax.set_aspect(1.0 / max(math.cos(math.radians(center["lat"])), 0.01))
+    else:
+        ax.set_aspect(1.0)
+    ax.autoscale()
+    ax.set_xlabel("Longitud")
+    ax.set_ylabel("Latitud")
+
+    titulo = "Riesgo por zona"
+    if perfil_label:
+        titulo += f" — {perfil_label}"
+    if resumen and resumen.get("hi_peak") is not None:
+        titulo += f" — HI pico {resumen['hi_peak']}°C"
+    if stats:
+        titulo += f" ({stats.get('total_celdas', '?')} celdas)"
+    ax.set_title(titulo, fontsize=11)
+
+    handles = [
+        Rectangle((0, 0), 1, 1, facecolor=COLORES_RIESGO[i], label=ETIQUETAS_RIESGO[i])
+        for i in (0, 1, 2)
+    ]
+    ax.legend(handles=handles, loc="lower right", fontsize=9)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
+    plt.close(fig)
+    return buf.getvalue()
