@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +23,85 @@ from climasafeai.features.personalizacion import _OCUPACION_NIVELES, recomendar_
 from climasafeai.models.recomendaciones import recomendacion_resumen
 
 logger = logging.getLogger(__name__)
+
+# ── Modo debug del payload (ARNES-003) ─────────────────────────────────
+#
+# CLIMASAFE_DEBUG_LLM=1 hace que cada llamada al LLM registre el payload
+# EXACTO que sale hacia el modelo (system + mensajes + contexto RAG, sin
+# resumir) y cuántos tokens ocupa cada parte. Apagado por defecto: no
+# cambia nada de lo que se envía.
+
+ENV_DEBUG_LLM = "CLIMASAFE_DEBUG_LLM"
+
+
+def _debug_llm_activo() -> bool:
+    """True solo si CLIMASAFE_DEBUG_LLM está puesto (1/true/yes/on)."""
+    return os.environ.get(ENV_DEBUG_LLM, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _estimar_tokens(texto: str) -> int:
+    """Estimación sencilla de tokens: ~4 caracteres por token (regla empírica).
+
+    No depende de un tokenizador concreto ni de una descarga; sirve para
+    ver de un vistazo qué parte se come la ventana.
+    """
+    return max(1, (len(texto) + 3) // 4)
+
+
+def _debug_payload(messages: list[dict[str, str]], config: LLMConfig) -> str:
+    """Informe del payload exacto que sale hacia el LLM y su coste en tokens.
+
+    Puramente observacional: no toca `messages` ni la llamada. Las tres
+    rutas (RAG, raw, parte) pasan por aquí vía `_chat_litellm`.
+    """
+    partes: list[str] = [
+        f"== PAYLOAD HACIA EL LLM [{config.model}] ==",
+        f"Nº de mensajes: {len(messages)}",
+    ]
+    for i, m in enumerate(messages):
+        contenido = m.get("content", "")
+        partes.append(
+            f"--- mensaje {i} [{m.get('role')}] ({_estimar_tokens(contenido)} tok) ---\n{contenido}"
+        )
+
+    # Desglose por parte: system / contexto RAG recuperado / historial.
+    system_msgs = [m for m in messages if m.get("role") == "system"]
+    ultimo_user = next(
+        (m for m in reversed(messages) if m.get("role") == "user"), None
+    )
+    tokens_system = sum(_estimar_tokens(m.get("content", "")) for m in system_msgs)
+
+    tokens_rag = 0
+    tokens_pregunta = 0
+    if ultimo_user:
+        content = ultimo_user.get("content", "")
+        # El bloque RAG va entre los marcadores de CONTEXT_TEMPLATE; el
+        # resto es la pregunta + situación del usuario + adaptación.
+        inicio = content.find("=== FACTORES DE RIESGO RELEVANTES ===")
+        fin = content.find("=== PREGUNTA ===")
+        if inicio != -1 and fin != -1 and fin > inicio:
+            tokens_rag = _estimar_tokens(content[inicio:fin])
+            tokens_pregunta = _estimar_tokens(content[fin:])
+        else:
+            tokens_pregunta = _estimar_tokens(content)
+
+    # Historial: mensajes que no son system ni el último user (chat previo).
+    tokens_historial = sum(
+        _estimar_tokens(m.get("content", ""))
+        for i, m in enumerate(messages)
+        if m.get("role") != "system" and m is not ultimo_user
+    )
+    tokens_total = sum(_estimar_tokens(m.get("content", "")) for m in messages)
+
+    partes.append(
+        "== DESGLOSE DE TOKENS (estimación ~4 chars/token) ==\n"
+        f"  system prompt:        {tokens_system}\n"
+        f"  contexto RAG:         {tokens_rag}\n"
+        f"  pregunta / contexto:  {tokens_pregunta}\n"
+        f"  historial:            {tokens_historial}\n"
+        f"  TOTAL:                {tokens_total}"
+    )
+    return "\n".join(partes)
 
 # ── Constantes de modelo ────────────────────────────────────────────────
 
@@ -88,6 +168,10 @@ def _chat_litellm(
     LiteLLM normaliza la API de 100+ proveedores (Ollama, Groq, OpenAI…).
     El proveedor se deduce del prefijo del model name.
     """
+    # ARNES-003: debug opcional del payload. Apagado por defecto: no toca
+    # `messages` ni cambia la llamada, solo registra lo que se envía.
+    if _debug_llm_activo():
+        logger.info("[CLIMASAFE_DEBUG_LLM] %s", _debug_payload(messages, config))
     try:
         resp = litellm.completion(
             model=config.model,

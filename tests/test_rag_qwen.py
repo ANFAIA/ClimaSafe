@@ -665,3 +665,115 @@ class TestParteLlano:
         # Lo que sí copió no se duplica
         assert texto.count("Lo que más pesa") == 1
         assert texto.count("El modelo está seguro") == 1
+
+
+# ── ARNES-003: modo debug del payload hacia el LLM ─────────────────────
+
+
+class TestDebugLLM:
+    """CLIMASAFE_DEBUG_LLM=1 registra el payload exacto y los tokens por parte.
+
+    Apagado (default) no cambia nada: ni se registra ni se toca el payload.
+    Los tests parchean `litellm.completion` (no `_chat_litellm`) para que el
+    hook de debug, que vive dentro de `_chat_litellm`, se ejecute de verdad.
+    """
+
+    @staticmethod
+    def _mock_completion(respuesta: str) -> MagicMock:
+        mock_resp = MagicMock()
+        mock_resp.choices = [MagicMock()]
+        mock_resp.choices[0].message.content = respuesta
+        return mock_resp
+
+    def test_apagado_no_registra_ni_cambia_la_respuesta(self, caplog, monkeypatch):
+        from climasafeai.llm.rag_qwen import ask_raw
+
+        monkeypatch.delenv("CLIMASAFE_DEBUG_LLM", raising=False)
+        with patch("litellm.completion") as mock_completion:
+            mock_completion.return_value = self._mock_completion("Respuesta normal.")
+            with caplog.at_level("INFO"):
+                res = ask_raw("¿qué es SPF?", config=LLMConfig())
+        assert res["answer"] == "Respuesta normal."
+        assert "[CLIMASAFE_DEBUG_LLM]" not in caplog.text
+
+    @patch("climasafeai.llm.rag_qwen.DBManager")
+    @patch("litellm.completion")
+    def test_activado_registra_payload_completo_y_desglose(
+        self, mock_completion, mock_db, caplog, monkeypatch
+    ):
+        from climasafeai.llm.rag_qwen import SYSTEM_RAG
+
+        monkeypatch.setenv("CLIMASAFE_DEBUG_LLM", "1")
+        mock_completion.return_value = self._mock_completion(
+            "La humedad alta empeora el calor."
+        )
+        mock_instance = MagicMock()
+        mock_instance.search_factores.return_value = [
+            {"tipo": "calor", "categoria": "ambientales", "clave": "humedad",
+             "texto": "humedad relativa", "distance": 0.15},
+        ]
+        mock_instance.search_documentos.return_value = [
+            {"titulo": "Arquitectura", "seccion": "Modelo",
+             "texto": "ensemble de modelos", "distance": 0.22},
+        ]
+        mock_db.return_value = mock_instance
+
+        with caplog.at_level("INFO"):
+            ask_with_rag("¿cómo afecta la humedad?", config=LLMConfig())
+
+        # Criterio 1: el system prompt completo y el contexto RAG sin resumir
+        assert "[CLIMASAFE_DEBUG_LLM]" in caplog.text
+        assert "== PAYLOAD HACIA EL LLM" in caplog.text
+        assert "--- mensaje 0 [system] (" in caplog.text
+        assert SYSTEM_RAG in caplog.text
+        assert "humedad relativa" in caplog.text
+        assert "ensemble de modelos" in caplog.text
+        # Criterio 2: desglose de tokens por parte
+        assert "== DESGLOSE DE TOKENS" in caplog.text
+        assert "system prompt:" in caplog.text
+        assert "contexto RAG:" in caplog.text
+        assert "pregunta / contexto:" in caplog.text
+        assert "TOTAL:" in caplog.text
+        # El desglose numérico se puede leer: contexto RAG > 0
+        linea_rag = next(x for x in caplog.text.splitlines() if "contexto RAG:" in x)
+        assert int(linea_rag.split(":")[-1].strip()) > 0
+
+    @patch("climasafeai.llm.rag_qwen.DBManager")
+    @patch("litellm.completion")
+    def test_caso_spf_muestra_factores_de_frio_inyectados(
+        self, mock_completion, mock_db, caplog, monkeypatch
+    ):
+        """Caso conocido: '¿qué es SPF?' recupera factores de frío como contexto.
+
+        Es la reproducción de lo que devuelve el DB real (ver
+        data/climasafe.db): 4 de los 5 primeros factores son de frío.
+        """
+        monkeypatch.setenv("CLIMASAFE_DEBUG_LLM", "1")
+        mock_completion.return_value = self._mock_completion(
+            "El SPF es el factor de protección solar."
+        )
+        mock_instance = MagicMock()
+        mock_instance.search_factores.return_value = [
+            {"tipo": "frio", "categoria": "situacional", "clave": "vive_solo",
+             "texto": "vive solo. tipo: frio. coeficiente: 1.3", "distance": 0.547},
+            {"tipo": "frio", "categoria": "situacional", "clave": "encamado",
+             "texto": "encamado. tipo: frio. coeficiente: 1.5", "distance": 0.561},
+            {"tipo": "frio", "categoria": "situacional", "clave": "no_sale",
+             "texto": "no sale de casa. tipo: frio. coeficiente: 1.3", "distance": 0.595},
+        ]
+        mock_instance.search_documentos.return_value = []
+        mock_db.return_value = mock_instance
+
+        with caplog.at_level("INFO"):
+            res = ask_with_rag("¿qué es SPF?", config=LLMConfig())
+
+        assert res["error"] is None
+        # El payload registrado muestra la inyección: factores de frío como
+        # contexto RAG para una pregunta de fotoprotección.
+        assert "[CLIMASAFE_DEBUG_LLM]" in caplog.text
+        assert "=== FACTORES DE RIESGO RELEVANTES ===" in caplog.text
+        assert "vive_solo" in caplog.text
+        assert "encamado" in caplog.text
+        assert "no_sale" in caplog.text
+        assert "=== PREGUNTA ===" in caplog.text
+        assert "¿qué es SPF?" in caplog.text
