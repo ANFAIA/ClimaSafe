@@ -18,11 +18,13 @@ import os
 import re
 import signal
 import sys
+import unicodedata
 from datetime import date, datetime
 from enum import Enum, auto
 
 from climasafeai.bot.geocoding import buscar_lugar, provincia_desde_coords
 from climasafeai.features.personalizacion import (
+    DEPORTE_MET,
     _OCUPACION_NIVELES,
     nivel_actividad_de_deporte,
     pico_riesgo_actividad,
@@ -104,9 +106,13 @@ DEPORTES: dict[str, str] = {
 }
 
 # Nombres de rutina que son entrenamiento físico genérico, no una salida laboral:
-# no tienen MET propio en el Compendium (por eso no están en DEPORTES), pero se
-# guardan directo como hoy, sin el cuestionario de tipo de trabajo (BOT-015).
+# no tienen MET propio en el Compendium (por eso no están en DEPORTES). BOT-016:
+# tampoco se guardan directo, se pregunta la actividad concreta con DEPORTES.
 _NOMBRES_ENTRENAMIENTO = {"entreno", "entrenamiento"}
+
+# BOT-016: al añadir una rutina de deporte (o entrenamiento genérico) se pregunta
+# qué actividad concreta es; la respuesta se guarda en la columna `deporte`.
+PREGUNTA_TIPO_ACTIVIDAD = "¿Qué tipo de actividad deportiva?"
 
 # Cómo llega el usuario a la salida. Son los tres factores situacionales que el
 # modelo sí sabe puntuar; el de fiesta es de los que más pesan de todo el sistema.
@@ -248,6 +254,7 @@ class Estado(Enum):
     TIPO_TRABAJO = auto()
     DEPORTE = auto()
     CONFIRMAR_DIA = auto()  # BOT-019: resumen de la salida deducida de la rutina
+    REPETIR_SALIDA = auto()  # BOT-017: ofrecer repetir la última salida guardada
     COMORBILIDADES = auto()
     MEDICACION = auto()
     ESTADO_PREVIO = auto()
@@ -334,6 +341,16 @@ def _kb_tipo_trabajo(prefijo: str = "") -> list[list[dict]]:
     callback del flujo normal y del chat RAG posterior.
     """
     return [[{"text": v, "callback_data": f"{prefijo}{k}"}] for k, v in OCUPACIONES.items()]
+
+
+def _kb_tipo_deporte(prefijo: str = "") -> list[list[dict]]:
+    """Teclado de actividad deportiva para el cuestionario de rutina (BOT-016).
+
+    Mismos deportes que el formulario de /start, con el prefijo
+    ``rutina_deporte_`` para distinguir ese callback del flujo normal: al elegir
+    uno se guarda su clave, y el MET del Compendium fija la intensidad.
+    """
+    return [[{"text": v, "callback_data": f"{prefijo}{k}"}] for k, v in DEPORTES.items()]
 
 
 def _kb_estado_previo() -> list[list[dict]]:
@@ -446,6 +463,13 @@ FIELD_LABELS: dict[Estado, tuple[str, str, Any]] = {
         "He dado por supuesto la salida de hoy. ¿Es correcto?",
         "_confirmar_dia",
         None,  # se monta aparte: botones Sí / Cambiar
+    ),
+    Estado.REPETIR_SALIDA: (
+        # Placeholder: el texto real se construye en `_mensaje_repetir_salida`
+        # con la última salida guardada (BOT-017).
+        "La última vez saliste a... ¿repetimos?",
+        "_repetir_salida",
+        None,  # se monta aparte: botones Sí / No
     ),
     Estado.COMORBILIDADES: (
         "¿Tienes alguna de estas condiciones? (pulsa todas las que apliquen, "
@@ -1137,6 +1161,17 @@ def _etiqueta_ocupacion(ocupacion: str | None) -> str | None:
     return f"{OCUPACIONES.get(ocupacion, ocupacion.capitalize())} x{coef}"
 
 
+def _etiqueta_deporte(deporte: str | None) -> str | None:
+    """'Futbol MET 7' para un deporte con MET medido, o None si no lo es."""
+    if not deporte:
+        return None
+    entrada = DEPORTE_MET.get(deporte)
+    if not entrada:
+        return None
+    met, _ = entrada
+    return f"{DEPORTES.get(deporte, deporte.capitalize())} MET {met:g}"
+
+
 def _resumen_rutinas(rutinas: list[dict]) -> str:
     lineas = ["*Tus rutinas:*"]
     for r in rutinas:
@@ -1144,6 +1179,10 @@ def _resumen_rutinas(rutinas: list[dict]) -> str:
         etiqueta_ocp = _etiqueta_ocupacion(r.get("ocupacion"))
         if etiqueta_ocp:
             extra = f" ({etiqueta_ocp})"
+        else:
+            etiqueta_dep = _etiqueta_deporte(r.get("deporte"))
+            if etiqueta_dep:
+                extra = f" ({etiqueta_dep})"
         lineas.append(
             f"  {r['id']}. {r['nombre'].capitalize()} — "
             f"{_formatear_dias(r['dias'])}, {_formato_hora(r['hora_inicio'])}-{_formato_hora(r['hora_fin'])}{extra}"
@@ -1229,6 +1268,7 @@ def _prefill_desde_rutina(data: dict, rutina: dict) -> None:
 _DIA_DERIVADO = {
     "hora_inicio", "duracion_h", "nivel_actividad", "entrenado",
     "deporte", "ocupacion", "_por_trabajo", "_confirmar_dia_msg",
+    "_repetir_salida_msg",
 }
 
 
@@ -1283,6 +1323,288 @@ def _guardar_ubicacion_perfil(chat_id: int, lat: float, lon: float, provincia: s
         logger.exception("No se pudo guardar la ubicación en el perfil de %s", chat_id)
 
 
+# ── BOT-017: repetir la última salida guardada ─────────────────────────────
+
+
+def _etiqueta_actividad_salida(data: dict) -> str | None:
+    """Etiqueta legible de la salida para el parte y el resumen (BOT-017).
+
+    'Correr' para un deporte; 'trabajo de campo' para una salida laboral;
+    None si no hay actividad que nombrar.
+    """
+    if data.get("ocupacion") in _OCUPACION_NIVELES:
+        # "Construcción / albañilería (carga pesada, PPE, sol directo)" → "campo"
+        oficio = _OCUPACION_NIVELES[data["ocupacion"]][1].split("/")[0].split("(")[0].strip().lower()
+        return f"trabajo de {oficio}"
+    if data.get("deporte"):
+        return str(data["deporte"])
+    return None
+
+
+def _prefill_desde_ultima_salida(data: dict, ultima: dict) -> None:
+    """Rellena el día desde la última salida guardada (BOT-017).
+
+    La intensidad y el trabajo/deporte se guardan tal cual se predijeron la
+    última vez (el MET del deporte ya está dentro de `nivel_actividad`), así
+    que repetir es idéntico salvo el tiempo, que `predict_ensemble` siempre
+    toma de HOY.
+    """
+    data["hora_inicio"] = ultima.get("hora_inicio")
+    data["duracion_h"] = ultima.get("duracion_h")
+    data["nivel_actividad"] = ultima.get("nivel_actividad")
+    data["entrenado"] = ultima.get("entrenado")
+    if ultima.get("ocupacion"):
+        data["_por_trabajo"] = True
+        data["ocupacion"] = ultima["ocupacion"]
+        data["deporte"] = None
+    elif ultima.get("deporte"):
+        data["_por_trabajo"] = False
+        data["deporte"] = ultima["deporte"]
+        data["ocupacion"] = None
+    else:
+        data["_por_trabajo"] = False
+        data["deporte"] = None
+        data["ocupacion"] = None
+    if ultima.get("lat") is not None and ultima.get("lon") is not None:
+        data["lat"] = ultima["lat"]
+        data["lon"] = ultima["lon"]
+        data["provincia"] = ultima.get("provincia") or "Madrid"
+
+
+def _kb_repetir_salida() -> list[list[dict]]:
+    return [
+        [{"text": "Sí, repetir", "callback_data": "repetir_si"}],
+        [{"text": "No, pregúntamelo", "callback_data": "repetir_no"}],
+    ]
+
+
+def _mensaje_repetir_salida(ultima: dict) -> str:
+    """Resumen de la última salida guardada con la pregunta de repetirla."""
+    lineas = ["*La última vez saliste a*:"]
+    if ultima.get("actividad"):
+        lineas.append(f"• Actividad: {ultima['actividad']}")
+    if ultima.get("nivel_actividad"):
+        lineas.append(f"• Intensidad: {ultima['nivel_actividad'].replace('_', ' ')}")
+    if ultima.get("duracion_h") is not None:
+        lineas.append(f"• Duración: {ultima['duracion_h']:g} h")
+    if ultima.get("hora_inicio") is not None:
+        lineas.append(f"• Empieza: {_formato_hora(ultima['hora_inicio'])}")
+    if ultima.get("provincia"):
+        lineas.append(f"• Ubicación: {ultima['provincia']}")
+    lineas.append("")
+    lineas.append("¿Vas a hacer lo mismo hoy?")
+    return "\n".join(lineas)
+
+
+def _guardar_ultima_salida(chat_id: int, data: dict, result: dict) -> None:
+    """Guarda la salida de esta predicción como la última del perfil (BOT-017).
+
+    Criterio 1: al terminar un /start el perfil recuerda qué salida fue
+    (actividad u ocupación, intensidad, duración, hora y ubicación) para
+    ofrecer repetirla en el próximo /start. La clase se guarda para que
+    BOT-020 pueda comparar "es un nivel más alto que la simulación anterior".
+    No crítico: si falla solo se pierde el atajo, nunca la predicción.
+    """
+    try:
+        match = _db.buscar_por_telegram(str(chat_id))
+        if not match:
+            return
+        salida: dict[str, Any] = {
+            "actividad": _etiqueta_actividad_salida(data),
+            "nivel_actividad": data.get("nivel_actividad"),
+            "duracion_h": data.get("duracion_h"),
+            "hora_inicio": data.get("hora_inicio"),
+            "lat": data.get("lat"),
+            "lon": data.get("lon"),
+            "provincia": data.get("provincia"),
+            "entrenado": data.get("entrenado"),
+            "clase_final": result.get("clase_final"),
+        }
+        if data.get("ocupacion"):
+            salida["ocupacion"] = data["ocupacion"]
+        if data.get("deporte"):
+            salida["deporte"] = data["deporte"]
+        _db.actualizar_perfil(match["id"], {"ultima_salida": salida})
+    except Exception:
+        logger.exception("No se pudo guardar la última salida del perfil de %s", chat_id)
+
+
+# ── BOT-021: frase libre que describe una salida ──────────────────────────
+
+# Estados en los que el usuario puede describir la salida con una frase en vez
+# de rellenar el formulario campo a campo. Son los que abren el "día" de /start.
+_ESTADOS_FRASE_LIBRE = {Estado.ACTIVIDAD, Estado.CONFIRMAR_DIA, Estado.REPETIR_SALIDA}
+
+# Campo de la salida que falta → estado del formulario que lo pregunta. Cuando
+# una frase no lo dice todo, se hace SOLO esta pregunta, nunca el formulario.
+_ESTADO_POR_CAMPO = {
+    "actividad": Estado.ACTIVIDAD,
+    "duracion_h": Estado.DURACION,
+    "hora_inicio": Estado.HORA_INICIO,
+    "ubicacion": Estado.UBICACION,
+}
+
+# Frases que remiten a la salida anterior / a la rutina en vez de describirla:
+# 'como ayer', 'igual que el martes', 'como siempre'... El contexto (última
+# salida de BOT-017 o rutina de BOT-019) ya está prefillado en `data` cuando el
+# bot llega a CONFIRMAR_DIA o REPETIR_SALIDA, así que basta con no tocarlo.
+_SENAL_REFERENCIA = re.compile(
+    r"(?:como|igual que|lo mismo que|lo de)\s+"
+    r"(?:ayer|siempre|de costumbre|todos los dias|todos los días|"
+    r"el (?:lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo))"
+)
+
+# Adjetivos de intensidad → nivel de actividad. Solo valen cuando la frase no
+# nombra un deporte: si nombra deporte, el MET del Compendium manda (igual que
+# en los botones del formulario).
+_NIVEL_ADJETIVOS = {
+    "muy intensa": "muy_intensa", "muy intenso": "muy_intensa", "extremo": "muy_intensa",
+    "intensa": "intensa", "intenso": "intensa", "fuerte": "intensa",
+    "moderada": "moderada", "moderado": "moderada", "normal": "moderada",
+    "ligera": "ligera", "ligero": "ligera", "suave": "ligera",
+    "tranquila": "ligera", "tranquilo": "ligera", "reposo": "reposo",
+}
+
+
+def _deporte_en_frase(t: str) -> str | None:
+    """El deporte de DEPORTES mencionado en la frase (clave canónica), o None.
+
+    Se buscan primero las etiquetas largas ('tenis individual', 'tenis dobles',
+    'bici fuerte'...) para que 'voy a jugar tenis dobles' no caiga en 'tenis'.
+    """
+    etiquetas = sorted(
+        ((clave, etiqueta.lower()) for clave, etiqueta in DEPORTES.items()),
+        key=lambda kv: len(kv[1]),
+        reverse=True,
+    )
+    for clave, etiqueta in etiquetas:
+        if etiqueta in t or clave in t:
+            return clave
+    return None
+
+
+def _nivel_en_frase(t: str) -> str | None:
+    for adjetivo, nivel in sorted(_NIVEL_ADJETIVOS.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if adjetivo in t:
+            return nivel
+    return None
+
+
+def _duracion_en_frase(t: str) -> float | None:
+    """Duración que la frase menciona, en horas. '40 min' → 0.667, 'hora y media' → 1.5."""
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:horas?|h)\b", t)
+    if m:
+        return float(m.group(1).replace(",", "."))
+    m = re.search(r"(\d+)\s*(?:min|minutos?|mins?)\b", t)
+    if m:
+        return int(m.group(1)) / 60
+    if "hora y media" in t:
+        return 1.5
+    if re.search(r"\bmedia hora\b", t):
+        return 0.5
+    if re.search(r"\buna hora\b", t):
+        return 1.0
+    return None
+
+
+def _hora_en_frase(t: str) -> int | None:
+    """Hora de inicio que la frase menciona. 'esta tarde' → 17 (igual que /chat)."""
+    m = re.search(r"a las?\s+(\d{1,2})(?::(\d{2}))?\b", t)
+    if m and 0 <= int(m.group(1)) <= 23:
+        return int(m.group(1))
+    if re.search(r"\b(?:esta|por la)\s+tarde\b", t):
+        return 17
+    if re.search(r"\b(?:esta|por la|a la)\s+noche\b", t):
+        return 21
+    if "mediodia" in t or "mediodía" in t:
+        return 13
+    if re.search(r"\b(?:por la|esta)\s+(?:mañana|manana)\b", t):
+        return 9
+    return None
+
+
+def _interpretar_salida_frase(texto: str) -> dict:
+    """Lee de una frase libre los campos de la salida que se reconocen.
+
+    Interpretación determinista (regex/plantillas): no depende del LLM. Devuelve
+    solo las claves que la frase menciona — lo que no menciona lo aporta el
+    contexto (última salida guardada o rutina de hoy, ya prefillados en `data`).
+    `referencia` marca que la frase remite a la salida anterior ('como ayer',
+    'igual que el martes', 'como siempre').
+    """
+    t = unicodedata.normalize("NFC", texto.lower())
+    salida: dict[str, Any] = {}
+    if _SENAL_REFERENCIA.search(t):
+        salida["referencia"] = True
+    deporte = _deporte_en_frase(t)
+    if deporte:
+        salida["deporte"] = deporte
+    nivel = _nivel_en_frase(t)
+    if nivel:
+        salida["nivel_actividad"] = nivel
+    duracion = _duracion_en_frase(t)
+    if duracion is not None:
+        salida["duracion_h"] = duracion
+    hora = _hora_en_frase(t)
+    if hora is not None:
+        salida["hora_inicio"] = hora
+    return salida
+
+
+def _frase_describe_salida(salida: dict) -> bool:
+    """¿La frase merece el atajo de BOT-021 o es un valor suelto del formulario?
+
+    Un adjetivo suelto ('intensa') o un número ('2') son respuestas del
+    formulario, no una frase de salida. La frase libre se reconoce cuando
+    nombra la actividad, la duración, la hora o remite a una salida anterior.
+    """
+    if salida.get("referencia"):
+        return True
+    return bool(
+        salida.get("deporte")
+        or salida.get("duracion_h") is not None
+        or salida.get("hora_inicio") is not None
+    )
+
+
+def _campos_salida_faltantes(data: dict) -> list[str]:
+    """Campos de la salida sin los que no se puede predecir (BOT-021).
+
+    En el orden del formulario. La actividad puede venir como intensidad o como
+    deporte con MET propio; la ubicación viene del perfil, de la última salida
+    o de la rutina. Solo faltan los que no tiene nadie.
+    """
+    faltan = []
+    if not data.get("nivel_actividad"):
+        faltan.append("actividad")
+    if data.get("duracion_h") is None:
+        faltan.append("duracion_h")
+    if data.get("hora_inicio") is None:
+        faltan.append("hora_inicio")
+    if data.get("lat") is None or data.get("lon") is None:
+        faltan.append("ubicacion")
+    return faltan
+
+
+def _avanzar_tras_campo(conv: dict, estado: Estado) -> None:
+    """Avanza tras responder un campo del formulario (BOT-021).
+
+    Si se está completando una frase libre se pregunta el siguiente campo que
+    falte (uno a uno, nunca el formulario entero) o se predice directo cuando
+    ya está todo. Si no, sigue el formulario normal.
+    """
+    data = conv["data"]
+    if data.get("_frase_libre"):
+        faltan = _campos_salida_faltantes(data)
+        if faltan:
+            conv["estado"] = _ESTADO_POR_CAMPO[faltan[0]]
+            return
+        data.pop("_frase_libre", None)
+        conv["estado"] = Estado.DONE
+        return
+    conv["estado"] = _siguiente(estado, data)
+
+
 async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
     """Procesa un mensaje de texto del usuario. Devuelve texto a enviar."""
     conv = _conversaciones.setdefault(chat_id, {"estado": Estado.IDLE, "data": {}})
@@ -1309,6 +1631,9 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         if match:
             perfil = _db.obtener_perfil(match["id"])
             conv["data"].update(_perfil_a_data(perfil))
+            # BOT-017: la salida anterior guardada alimenta la comparación del
+            # parte ("es un nivel más alto que la simulación anterior de...").
+            conv["salida_anterior"] = perfil.get("ultima_salida") or None
             # BOT-019: si hay una única rutina hoy, la salida del día se deduce
             # (hora, duración, intensidad, trabajo/deporte) y solo se confirma.
             # El resto de casos sigue preguntando como siempre.
@@ -1317,6 +1642,15 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
                 _prefill_desde_rutina(conv["data"], rutina_hoy)
                 conv["estado"] = Estado.CONFIRMAR_DIA
                 conv["data"]["_confirmar_dia_msg"] = _mensaje_confirmar_dia(conv["data"], rutina_hoy)
+                return None  # el resumen + botones lo envía enviar_siguiente_pregunta
+            # BOT-017: sin rutina hoy, si el perfil guarda la última salida se
+            # ofrece repetirla antes de preguntar campo a campo. Una salida
+            # sin hora (blob parcial) no cuenta: mejor el flujo normal.
+            ultima_salida = perfil.get("ultima_salida")
+            if ultima_salida and ultima_salida.get("hora_inicio") is not None:
+                _prefill_desde_ultima_salida(conv["data"], ultima_salida)
+                conv["estado"] = Estado.REPETIR_SALIDA
+                conv["data"]["_repetir_salida_msg"] = _mensaje_repetir_salida(ultima_salida)
                 return None  # el resumen + botones lo envía enviar_siguiente_pregunta
             conv["estado"] = Estado.ACTIVIDAD  # saltar personales
             alias = perfil.get("alias") or match.get("alias", "")
@@ -1397,14 +1731,13 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
                 "No entendí la rutina. Formato: /rutinas_anadir <dias> <nombre> <inicio-fin>\n"
                 "Ej: /rutinas_anadir L-V trabajo 8-16"
             )
-        # BOT-015: los deportes (y el entrenamiento genérico) se guardan directo;
-        # una rutina que no es deporte se trata como salida laboral y se pregunta
-        # el tipo de trabajo antes de guardar: la intensidad laboral (x1.0 a x2.7)
-        # es un factor que el modelo sí sabe puntuar, no puede quedar en genérico.
-        if rutina["deporte"] or rutina["nombre"] in _NOMBRES_ENTRENAMIENTO:
-            _db.crear_rutina(str(chat_id), **rutina)
-            return "Rutina añadida:\n" + _resumen_rutinas(_db.listar_rutinas(str(chat_id)))
+        # BOT-016: ni el trabajo ni el deporte se guardan directo. El trabajo
+        # pregunta el tipo (ocupación, x1.0 a x2.7); el deporte (o el entreno
+        # genérico) pregunta la actividad concreta, cuyo MET del Compendium
+        # fija la intensidad mejor que el adjetivo que elegiría el usuario.
         conv["_rutina_pendiente"] = rutina
+        if rutina["deporte"] or rutina["nombre"] in _NOMBRES_ENTRENAMIENTO:
+            return PREGUNTA_TIPO_ACTIVIDAD
         return FIELD_LABELS[Estado.TIPO_TRABAJO][0]
 
     if texto.startswith("/rutinas"):
@@ -1495,8 +1828,45 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
 
     if texto and texto.lower() == "saltar":
         data[FIELD_LABELS[estado][1]] = None
-        conv["estado"] = _siguiente(estado, data)
+        _avanzar_tras_campo(conv, estado)
         return None
+
+    # ── BOT-021: frase libre que describe la salida ──────────────────
+    # En vez de contestar el formulario campo a campo, el usuario puede
+    # escribir la salida en una frase ('voy al tenis como ayer', 'esta tarde
+    # correr 40 min', 'igual que el martes'). La interpretación es
+    # determinista (regex/plantillas, sin depender del LLM) y usa como
+    # contexto la última salida guardada (BOT-017) o la rutina de hoy
+    # (BOT-019), que ya están prefilladas en `data`. Si falta algo se hace
+    # SOLO la pregunta del campo que falta, nunca el formulario entero.
+    if estado in _ESTADOS_FRASE_LIBRE or data.get("_frase_libre"):
+        salida = _interpretar_salida_frase(texto)
+        if salida and (data.get("_frase_libre") or _frase_describe_salida(salida)):
+            if salida.get("deporte"):
+                data["_por_trabajo"] = False
+                data["ocupacion"] = None
+                data["deporte"] = DEPORTES.get(salida["deporte"], salida["deporte"])
+                # El MET del deporte manda sobre cualquier adjetivo, igual
+                # que en los botones del formulario.
+                nivel = nivel_actividad_de_deporte(salida["deporte"])
+                if nivel:
+                    data["nivel_actividad"] = nivel
+                elif salida.get("nivel_actividad"):
+                    data["nivel_actividad"] = salida["nivel_actividad"]
+            elif salida.get("nivel_actividad"):
+                data["nivel_actividad"] = salida["nivel_actividad"]
+            if salida.get("duracion_h") is not None:
+                data["duracion_h"] = salida["duracion_h"]
+            if salida.get("hora_inicio") is not None:
+                data["hora_inicio"] = salida["hora_inicio"]
+            faltan = _campos_salida_faltantes(data)
+            if faltan:
+                data["_frase_libre"] = True
+                conv["estado"] = _ESTADO_POR_CAMPO[faltan[0]]
+                return FIELD_LABELS[conv["estado"]][0]
+            data.pop("_frase_libre", None)
+            conv["estado"] = Estado.DONE
+            return None
 
     campo = FIELD_LABELS[estado][1]
 
@@ -1513,7 +1883,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         data["provincia"] = lugar["provincia"] or "Madrid"
         data["lugar"] = lugar["nombre"]
         _guardar_ubicacion_perfil(chat_id, data["lat"], data["lon"], data["provincia"])
-        conv["estado"] = _siguiente(estado, data)
+        _avanzar_tras_campo(conv, estado)
         return None
 
     # Validar según el campo
@@ -1550,7 +1920,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
     else:
         data[campo] = texto.strip() if texto else ""
 
-    conv["estado"] = _siguiente(estado, data)
+    _avanzar_tras_campo(conv, estado)
     return None
 
 
@@ -1571,9 +1941,10 @@ def _siguiente(actual: Estado, data: dict | None = None) -> Estado:
             return _siguiente(sig, data)
         if sig == Estado.DEPORTE and por_trabajo:
             return _siguiente(sig, data)
-    # BOT-019: CONFIRMAR_DIA solo se alcanza por asignación directa desde
-    # /start (hay rutina hoy). El resto de flujos lo saltan sin tocar.
-    if sig == Estado.CONFIRMAR_DIA:
+    # BOT-019/BOT-017: CONFIRMAR_DIA y REPETIR_SALIDA solo se alcanzan por
+    # asignación directa desde /start (hay rutina hoy / hay última salida
+    # guardada). El resto de flujos los saltan sin tocar.
+    if sig in (Estado.CONFIRMAR_DIA, Estado.REPETIR_SALIDA):
         return _siguiente(sig, data)
     return sig
 
@@ -1602,6 +1973,19 @@ async def procesar_callback(chat_id: int, callback_data: str) -> tuple[str | Non
         if ocupacion not in OCUPACIONES:
             return "Tipo de trabajo inválido.", False
         rutina["ocupacion"] = ocupacion
+        conv.pop("_rutina_pendiente", None)
+        _db.crear_rutina(str(chat_id), **rutina)
+        return "Rutina añadida:\n" + _resumen_rutinas(_db.listar_rutinas(str(chat_id))), False
+
+    # ── BOT-016: elegir la actividad deportiva de una rutina pendiente ──
+    if callback_data.startswith("rutina_deporte_"):
+        rutina = conv.get("_rutina_pendiente")
+        if not rutina:
+            return "No hay ninguna rutina pendiente. Usa /rutinas_anadir.", False
+        deporte = callback_data[len("rutina_deporte_"):]
+        if deporte not in DEPORTES:
+            return "Actividad inválida.", False
+        rutina["deporte"] = deporte
         conv.pop("_rutina_pendiente", None)
         _db.crear_rutina(str(chat_id), **rutina)
         return "Rutina añadida:\n" + _resumen_rutinas(_db.listar_rutinas(str(chat_id))), False
@@ -1660,6 +2044,22 @@ async def procesar_callback(chat_id: int, callback_data: str) -> tuple[str | Non
         conv["estado"] = sig
         return None, sig == Estado.DONE
 
+    # BOT-017: repetir la última salida guardada. "Sí" salta directo a la
+    # predicción (criterio 3: no se vuelve a preguntar nada; el tiempo lo da
+    # predict_ensemble de HOY). "No" limpia la salida repetida y sigue el
+    # formulario exactamente como hoy, campo a campo.
+    if estado == Estado.REPETIR_SALIDA:
+        if callback_data == "repetir_no":
+            _limpiar_dia_derivado(data)
+            # La ubicación repetida tampoco cuenta: hoy, sin rutina, se
+            # pregunta siempre aunque el perfil la tenga guardada.
+            for k in ("lat", "lon", "provincia", "lugar"):
+                data.pop(k, None)
+            conv["estado"] = Estado.ACTIVIDAD
+            return None, False
+        conv["estado"] = Estado.DONE
+        return None, True
+
     if estado == Estado.FOTOTIPO:
         data["fototipo"] = callback_data
     elif estado == Estado.SEXO:
@@ -1697,9 +2097,8 @@ async def procesar_callback(chat_id: int, callback_data: str) -> tuple[str | Non
             return "Como quieres llamarte?", False
         # guardar_no → avanza a DONE (el siguiente estado)
 
-    sig = _siguiente(estado, data)
-    conv["estado"] = sig
-    return None, sig == Estado.DONE
+    _avanzar_tras_campo(conv, estado)
+    return None, conv["estado"] == Estado.DONE
 
 
 async def _procesar_callback_edicion(
@@ -1799,6 +2198,10 @@ async def ejecutar_prediccion(chat_id: int) -> str:
     # (CHAT-003) necesita el detalle de esta predicción.
     conv["ultimo_resultado"] = result
 
+    # BOT-017: al terminar un /start, el perfil recuerda esta salida para
+    # ofrecer repetirla en el próximo /start.
+    _guardar_ultima_salida(chat_id, data, result)
+
     # Respuesta según el modelo elegido
     modelo = conv.get("modelo", MODELO_DETERMINISTA)
     lugar = data.get("lugar")
@@ -1815,7 +2218,9 @@ async def ejecutar_prediccion(chat_id: int) -> str:
         texto = None
         logger.info("Modo determinista: respuesta con plantilla")
     if not texto:
-        texto = _format_template(result, lugar)
+        # BOT-020/BOT-017: con la salida anterior guardada, la plantilla
+        # compara "es un nivel más alto que la simulación anterior de...".
+        texto = _format_template(result, lugar, conv.get("salida_anterior"))
 
     return texto
 
@@ -2046,6 +2451,11 @@ async def enviar_siguiente_pregunta(chat_id: int) -> None:
     if estado == Estado.CONFIRMAR_DIA:
         msg = conv["data"].get("_confirmar_dia_msg") or FIELD_LABELS[estado][0]
         await enviar_mensaje(chat_id, msg, kb=_kb_confirmar_dia())
+        return
+
+    if estado == Estado.REPETIR_SALIDA:
+        msg = conv["data"].get("_repetir_salida_msg") or FIELD_LABELS[estado][0]
+        await enviar_mensaje(chat_id, msg, kb=_kb_repetir_salida())
         return
 
     if estado == Estado.GUARDAR_PERFIL:
@@ -2284,7 +2694,7 @@ async def _recibir_ubicacion(chat_id: int, location: dict) -> None:
     conv["data"]["provincia"] = sitio.get("provincia") or "Madrid"
     conv["data"]["lugar"] = sitio.get("nombre") or f"{lat:.4f}, {lon:.4f}"
     _guardar_ubicacion_perfil(chat_id, lat, lon, conv["data"]["provincia"])
-    conv["estado"] = _siguiente(Estado.UBICACION, conv["data"])
+    _avanzar_tras_campo(conv, Estado.UBICACION)
     await enviar_siguiente_pregunta(chat_id)
 
 
@@ -2331,10 +2741,15 @@ async def procesar_update(update: dict) -> None:
         if texto.startswith("/rutinas_anadir"):
             respuesta = await procesar_mensaje(chat_id, texto)
             if respuesta:
-                # BOT-015: si la rutina es de trabajo queda pendiente y la
-                # respuesta es la pregunta del tipo, con sus botones inline.
+                # BOT-016: si la rutina queda pendiente la respuesta es la
+                # pregunta del tipo — ocupación o actividad deportiva — y el
+                # teclado es el que corresponde a esa rama.
                 conv_actual = _conversaciones.get(chat_id, {})
-                kb = _kb_tipo_trabajo("rutina_tipo_") if conv_actual.get("_rutina_pendiente") else None
+                kb = None
+                pendiente = conv_actual.get("_rutina_pendiente")
+                if pendiente:
+                    es_deporte = bool(pendiente.get("deporte")) or pendiente.get("nombre") in _NOMBRES_ENTRENAMIENTO
+                    kb = _kb_tipo_deporte("rutina_deporte_") if es_deporte else _kb_tipo_trabajo("rutina_tipo_")
                 await enviar_mensaje(chat_id, respuesta, kb)
             return
 

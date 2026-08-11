@@ -65,14 +65,15 @@ class TestOrdenCampos:
         order = list(Estado)
         idx_sexo = order.index(Estado.SEXO)
         idx_done = order.index(Estado.DONE)
+        # CONFIRMAR_DIA (BOT-019) y REPETIR_SALIDA (BOT-017) solo se alcanzan
+        # por asignación directa desde /start: el paseo lineal los salta.
+        directos = {Estado.CONFIRMAR_DIA, Estado.REPETIR_SALIDA}
         for i in range(idx_sexo, idx_done):
             actual = order[i]
-            # CONFIRMAR_DIA (BOT-019) solo se alcanza por asignación directa
-            # desde /start con rutina hoy: el paseo lineal lo salta.
-            if actual == Estado.CONFIRMAR_DIA:
+            if actual in directos:
                 continue
             sig = _siguiente(actual)
-            esperado = next(e for e in order[i + 1:] if e != Estado.CONFIRMAR_DIA)
+            esperado = next(e for e in order[i + 1:] if e not in directos)
             assert sig == esperado, f"{actual} → {sig}, esperado {esperado}"
 
 
@@ -1956,3 +1957,580 @@ class TestBOT019:
         assert db.guardado.get("lat") == 42.29
         assert db.guardado.get("lon") == -8.81
         assert db.guardado.get("provincia") == "Pontevedra"
+
+
+class TestBOT017:
+    """BOT-017: repetir la última salida guardada en vez de repreguntarlo todo.
+
+    Criterio 1: al terminar un /start el perfil guarda la salida (actividad u
+    ocupación, intensidad, duración, hora y ubicación). Criterio 2-4: con
+    salida previa, /start la resume y ofrece repetirla con sí/no; "sí" predice
+    directo con el tiempo de HOY sin preguntar nada; "no" sigue el formulario
+    campo a campo. Criterio 5: sin salidas previas el flujo no cambia.
+    """
+
+    PERFIL = {
+        "alias": "Aldán", "sexo": "hombre", "edad": 57,
+        "porcentaje_grasa": 20.5, "fototipo": 3, "aclimatado": False,
+        "comorbilidades": ["cardiovascular"], "farmacos": ["diureticos_asa"],
+        "situacion_social": ["vive_solo"],
+        "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+    }
+    ULTIMA_SALIDA = {
+        "actividad": "Correr", "deporte": "Correr", "ocupacion": None,
+        "nivel_actividad": "muy_intensa", "duracion_h": 2.0, "hora_inicio": 8,
+        "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+        "entrenado": True, "clase_final": 0,
+    }
+
+    class _FakeDB:
+        def __init__(self, perfil, rutinas_hoy=None):
+            self._perfil = perfil
+            self._rutinas_hoy = rutinas_hoy or []
+            self.guardado = {}
+
+        def buscar_por_telegram(self, chat_id):
+            return {"id": 7, "alias": "Aldán"} if chat_id == "1" else None
+
+        def obtener_perfil(self, _pid):
+            return self._perfil
+
+        def rutinas_por_dia(self, chat_id, weekday):
+            return self._rutinas_hoy
+
+        def actualizar_perfil(self, perfil_id, datos):
+            self.guardado.update(datos)
+            return True
+
+    def _montar(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        enviados: list[str] = []
+
+        async def _fake_tg(method: str, **kwargs):
+            if method == "sendMessage":
+                enviados.append(kwargs["text"])
+            return {"ok": True, "result": {}}
+
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+        monkeypatch.setattr("climasafeai.llm.rag_qwen.ask_con_perfil", lambda *a, **k: None)
+        monkeypatch.setattr(mod, "predict_ensemble", lambda **kwargs: {
+            "clase_final": 2,
+            "clase_final_label": "PELIGRO",
+            "perfil": {"calor": {"prob_personalizada": 0.69, "factores": []}},
+            "perfil_usuario": {
+                "hora_inicio": kwargs.get("perfil", {}).get("hora_inicio"),
+                "duracion_actividad_h": kwargs.get("perfil", {}).get("duracion_actividad_h"),
+            },
+            "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 30.0, "rh": 60}, "uv_index": 8},
+            "recomendaciones": [],
+        })
+        monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
+            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
+        })
+        return mod, enviados
+
+    def _perfil_con_salida(self):
+        perfil = dict(self.PERFIL)
+        perfil["ultima_salida"] = dict(self.ULTIMA_SALIDA)
+        return perfil
+
+    @pytest.mark.asyncio
+    async def test_guardar_ultima_salida_al_terminar(self, monkeypatch):
+        """Criterio 1: al terminar un /start, el perfil guarda la salida usada."""
+        import climasafeai.bot.telegram_bot as mod
+
+        mod, _ = self._montar(monkeypatch)
+        db = self._FakeDB(dict(self.PERFIL), rutinas_hoy=[])
+        mod._db = db
+        _conversaciones.clear()
+        _conversaciones[1] = {
+            "estado": Estado.DONE,
+            "data": {
+                "sexo": "hombre", "edad": 57, "aclimatado": False,
+                "nivel_actividad": "muy_intensa", "duracion_h": 2.0,
+                "hora_inicio": 8, "deporte": "Correr", "entrenado": True,
+                "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+            },
+            "modelo": mod.MODELO_DETERMINISTA,
+        }
+        await mod.ejecutar_prediccion(1)
+
+        salida = db.guardado.get("ultima_salida")
+        assert salida is not None, db.guardado
+        assert salida["actividad"] == "Correr"
+        assert salida["nivel_actividad"] == "muy_intensa"
+        assert salida["duracion_h"] == 2.0
+        assert salida["hora_inicio"] == 8
+        assert salida["lat"] == 42.29 and salida["lon"] == -8.81
+        assert salida["provincia"] == "Pontevedra"
+        assert salida["clase_final"] == 2
+
+    @pytest.mark.asyncio
+    async def test_guardar_ultima_salida_laboral(self, monkeypatch):
+        """Criterio 1: una salida de trabajo guarda la ocupación como actividad."""
+        import climasafeai.bot.telegram_bot as mod
+
+        mod, _ = self._montar(monkeypatch)
+        db = self._FakeDB(dict(self.PERFIL), rutinas_hoy=[])
+        mod._db = db
+        _conversaciones.clear()
+        _conversaciones[1] = {
+            "estado": Estado.DONE,
+            "data": {
+                "sexo": "hombre", "edad": 57, "aclimatado": False,
+                "nivel_actividad": "ligera", "duracion_h": 8.0,
+                "hora_inicio": 8, "ocupacion": "campo", "entrenado": True,
+                "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+            },
+            "modelo": mod.MODELO_DETERMINISTA,
+        }
+        await mod.ejecutar_prediccion(1)
+
+        salida = db.guardado["ultima_salida"]
+        assert salida["ocupacion"] == "campo"
+        assert salida["actividad"] == "trabajo de campo"
+        assert "deporte" not in salida
+
+    @pytest.mark.asyncio
+    async def test_start_con_salida_previa_ofrece_repetir(self, monkeypatch):
+        """Criterio 2: /start resume la última salida y ofrece repetirla."""
+        import climasafeai.bot.telegram_bot as mod
+
+        mod, enviados = self._montar(monkeypatch)
+        mod._db = self._FakeDB(self._perfil_con_salida(), rutinas_hoy=[])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+
+        conv = _conversaciones[1]
+        assert conv["estado"] == Estado.REPETIR_SALIDA
+        msg = enviados[-1]
+        assert "La última vez saliste a" in msg, msg
+        assert "Correr" in msg
+        assert "muy intensa" in msg
+        assert "Empieza: 8:00" in msg
+        assert "Pontevedra" in msg
+        assert "¿Vas a hacer lo mismo hoy?" in msg, msg
+
+    @pytest.mark.asyncio
+    async def test_repetir_si_no_pregunta_nada_y_usa_hoy(self, monkeypatch):
+        """Criterio 3: "sí" salta directo a la predicción con el tiempo de HOY."""
+        import climasafeai.bot.telegram_bot as mod
+
+        mod, enviados = self._montar(monkeypatch)
+        capturas: list[dict] = []
+
+        def _fake_predict(**kwargs):
+            capturas.append(kwargs)
+            return {
+                "clase_final": 2,
+                "clase_final_label": "PELIGRO",
+                "perfil": {"calor": {"prob_personalizada": 0.69, "factores": []}},
+                "perfil_usuario": {
+                    "hora_inicio": kwargs["perfil"]["hora_inicio"],
+                    "duracion_actividad_h": kwargs["perfil"]["duracion_actividad_h"],
+                },
+                "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 30.0, "rh": 60}, "uv_index": 8},
+                "recomendaciones": [],
+            }
+
+        monkeypatch.setattr(mod, "predict_ensemble", _fake_predict)
+        db = self._FakeDB(self._perfil_con_salida(), rutinas_hoy=[])
+        mod._db = db
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+        assert _conversaciones[1]["estado"] == Estado.REPETIR_SALIDA
+
+        enviados.clear()
+        await mod.procesar_update({"update_id": 1, "callback_query": {
+            "id": "c1", "message": {"chat": {"id": 1}}, "data": "repetir_si",
+        }})
+
+        # No se pregunta nada: en modo determinista el chat termina al parte.
+        assert _conversaciones.get(1) is None, _conversaciones
+        # La predicción usó la salida repetida tal cual (el tiempo lo da HOY
+        # el propio predict_ensemble, que no recibe fecha alguna).
+        assert len(capturas) == 1
+        perfil_pred = capturas[0]["perfil"]
+        assert perfil_pred["hora_inicio"] == 8
+        assert perfil_pred["duracion_actividad_h"] == 2.0
+        assert perfil_pred["nivel_actividad"] == "muy_intensa"
+        assert perfil_pred["deporte"] == "Correr"
+        assert capturas[0]["lat"] == 42.29 and capturas[0]["lon"] == -8.81
+        # El parte compara con la salida anterior (BOT-020 activado por BOT-017)
+        parte = enviados[-1]
+        assert "Es un nivel más alto que la simulación anterior de Correr." in parte, parte
+        # Y la nueva salida queda guardada como la última
+        assert db.guardado["ultima_salida"]["clase_final"] == 2
+
+    @pytest.mark.asyncio
+    async def test_repetir_no_vuelve_al_flujo_normal(self, monkeypatch):
+        """Criterio 4: "no" sigue el formulario exactamente como hoy."""
+        import climasafeai.bot.telegram_bot as mod
+
+        mod, enviados = self._montar(monkeypatch)
+        mod._db = self._FakeDB(self._perfil_con_salida(), rutinas_hoy=[])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+        assert _conversaciones[1]["estado"] == Estado.REPETIR_SALIDA
+
+        enviados.clear()
+        await mod.procesar_update({"update_id": 1, "callback_query": {
+            "id": "c1", "message": {"chat": {"id": 1}}, "data": "repetir_no",
+        }})
+
+        conv = _conversaciones[1]
+        assert conv["estado"] == Estado.ACTIVIDAD
+        # Lo repetido se limpia: el formulario vuelve a preguntar el día entero
+        for k in ("hora_inicio", "duracion_h", "nivel_actividad", "deporte",
+                  "ocupacion", "entrenado", "_por_trabajo", "lat", "lon", "provincia"):
+            assert k not in conv["data"], k
+        # Los datos personales del perfil se conservan
+        assert conv["data"]["sexo"] == "hombre"
+        assert conv["data"]["edad"] == 57
+        # La siguiente pregunta es la primera del día: la intensidad
+        assert "¿Qué intensidad tendrá la actividad?" in enviados[-1], enviados
+
+    @pytest.mark.asyncio
+    async def test_sin_salida_previa_no_ofrece_repetir(self, monkeypatch):
+        """Criterio 5: un chat sin salidas previas no ve la pregunta."""
+        import climasafeai.bot.telegram_bot as mod
+
+        mod, enviados = self._montar(monkeypatch)
+        mod._db = self._FakeDB(dict(self.PERFIL), rutinas_hoy=[])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+
+        conv = _conversaciones[1]
+        assert conv["estado"] == Estado.ACTIVIDAD
+        assert "Hola de nuevo" in enviados[0]
+        assert "¿Qué intensidad" in enviados[1]
+        assert not any("última vez" in m for m in enviados), enviados
+
+
+class TestBOT021:
+    """BOT-021: entender una salida en lenguaje natural, sin formulario.
+
+    El usuario escribe la salida en una frase ('voy al tenis como ayer', 'esta
+    tarde correr 40 min', 'igual que el martes') y el bot la interpreta con
+    regex/plantillas (sin LLM), usando como contexto la última salida guardada
+    (BOT-017) o la rutina de hoy (BOT-019). Si falta algo, pregunta SOLO el
+    campo que falta. La predicción recibe exactamente los mismos campos que el
+    formulario (criterio 3).
+    """
+
+    PERFIL = {
+        "alias": "Aldán", "sexo": "hombre", "edad": 57,
+        "porcentaje_grasa": 20.5, "fototipo": 3, "aclimatado": False,
+        "comorbilidades": ["cardiovascular"], "farmacos": ["diureticos_asa"],
+        "situacion_social": ["vive_solo"],
+    }
+    PERFIL_CON_UBICACION = {
+        **PERFIL, "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+    }
+    ULTIMA_SALIDA = {
+        "actividad": "Correr", "deporte": "Correr", "ocupacion": None,
+        "nivel_actividad": "muy_intensa", "duracion_h": 2.0, "hora_inicio": 8,
+        "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+        "entrenado": True, "clase_final": 0,
+    }
+    RUTINA = {
+        "id": 3, "nombre": "correr", "dias": "1",
+        "hora_inicio": 8.0, "hora_fin": 10.0, "deporte": "correr",
+        "ocupacion": None,
+    }
+
+    class _FakeDatetime:
+        """Fija hoy en lunes para que la rutina (dias='1') sea 'la de hoy'."""
+
+        @classmethod
+        def now(cls):
+            return cls()
+
+        def isoweekday(self):
+            return 1
+
+    class _FakeDB:
+        def __init__(self, perfil, rutinas_hoy=None):
+            self._perfil = perfil
+            self._rutinas_hoy = rutinas_hoy or []
+            self.guardado = {}
+
+        def buscar_por_telegram(self, chat_id):
+            return {"id": 7, "alias": "Aldán"} if chat_id == "1" else None
+
+        def obtener_perfil(self, _pid):
+            return self._perfil
+
+        def rutinas_por_dia(self, chat_id, weekday):
+            return self._rutinas_hoy
+
+        def actualizar_perfil(self, perfil_id, datos):
+            self.guardado.update(datos)
+            return True
+
+    def _montar(self, monkeypatch, capturas=None):
+        import climasafeai.bot.telegram_bot as mod
+
+        enviados: list[str] = []
+
+        async def _fake_tg(method: str, **kwargs):
+            if method == "sendMessage":
+                enviados.append(kwargs["text"])
+            return {"ok": True, "result": {}}
+
+        def _fake_predict(**kwargs):
+            if capturas is not None:
+                capturas.append(kwargs)
+            return {
+                "clase_final": 2,
+                "clase_final_label": "PELIGRO",
+                "perfil": {"calor": {"prob_personalizada": 0.69, "factores": []}},
+                "perfil_usuario": {
+                    "hora_inicio": kwargs.get("perfil", {}).get("hora_inicio"),
+                    "duracion_actividad_h": kwargs.get("perfil", {}).get("duracion_actividad_h"),
+                },
+                "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 30.0, "rh": 60}, "uv_index": 8},
+                "recomendaciones": [],
+            }
+
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+        monkeypatch.setattr(mod, "predict_ensemble", _fake_predict)
+        monkeypatch.setattr("climasafeai.llm.rag_qwen.ask_con_perfil", lambda *a, **k: None)
+        monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
+            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
+        })
+        return mod, enviados
+
+    def _perfil_con_salida(self):
+        perfil = dict(self.PERFIL_CON_UBICACION)
+        perfil["ultima_salida"] = dict(self.ULTIMA_SALIDA)
+        return perfil
+
+    # ── Las frases de ejemplo ───────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_voy_al_tenis_como_ayer(self, monkeypatch):
+        """'voy al tenis como ayer': el tenis manda, el resto viene de ayer."""
+        import climasafeai.bot.telegram_bot as mod
+
+        capturas: list[dict] = []
+        mod, enviados = self._montar(monkeypatch, capturas)
+        db = self._FakeDB(self._perfil_con_salida(), rutinas_hoy=[])
+        mod._db = db
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+        assert _conversaciones[1]["estado"] == Estado.REPETIR_SALIDA
+
+        enviados.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "voy al tenis como ayer"}})
+
+        # Sin preguntas: se predice directo con el contexto de la última salida.
+        assert _conversaciones.get(1) is None, _conversaciones
+        assert len(capturas) == 1
+        perfil = capturas[0]["perfil"]
+        assert perfil["hora_inicio"] == 8            # de ayer
+        assert perfil["duracion_actividad_h"] == 2.0  # de ayer
+        assert perfil["deporte"] == "Tenis individual"
+        assert perfil["nivel_actividad"] == "muy_intensa"  # MET de tenis (8.0)
+        assert capturas[0]["lat"] == 42.29 and capturas[0]["lon"] == -8.81  # de ayer
+        # La nueva salida queda guardada como la última
+        assert db.guardado["ultima_salida"]["deporte"] == "Tenis individual"
+
+    @pytest.mark.asyncio
+    async def test_esta_tarde_correr_40_min(self, monkeypatch):
+        """'esta tarde correr 40 min': la frase completa sin contexto previo."""
+        import climasafeai.bot.telegram_bot as mod
+
+        capturas: list[dict] = []
+        mod, enviados = self._montar(monkeypatch, capturas)
+        mod._db = self._FakeDB(dict(self.PERFIL_CON_UBICACION), rutinas_hoy=[])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+        assert _conversaciones[1]["estado"] == Estado.ACTIVIDAD
+
+        enviados.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "esta tarde correr 40 min"}})
+
+        assert _conversaciones.get(1) is None, _conversaciones
+        assert len(capturas) == 1
+        perfil = capturas[0]["perfil"]
+        assert perfil["hora_inicio"] == 17           # "esta tarde"
+        assert perfil["duracion_actividad_h"] == pytest.approx(40 / 60)
+        assert perfil["deporte"] == "Correr"
+        assert perfil["nivel_actividad"] == "muy_intensa"  # MET de correr (10.5)
+        # Sin formulario campo a campo: ni duración, ni hora, ni entrenado...
+        for texto in enviados:
+            assert "¿Estás acostumbrado" not in texto, enviados
+            assert "¿A qué hora" not in texto, enviados
+            assert "¿Cuántas horas" not in texto, enviados
+            assert "¿Dónde vas a estar" not in texto, enviados
+
+    @pytest.mark.asyncio
+    async def test_igual_que_el_martes(self, monkeypatch):
+        """'igual que el martes': confirma la rutina del día sin tocar nada."""
+        import climasafeai.bot.telegram_bot as mod
+
+        capturas: list[dict] = []
+        mod, enviados = self._montar(monkeypatch, capturas)
+        monkeypatch.setattr(mod, "datetime", self._FakeDatetime)
+        mod._db = self._FakeDB(dict(self.PERFIL_CON_UBICACION), rutinas_hoy=[dict(self.RUTINA)])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+        assert _conversaciones[1]["estado"] == Estado.CONFIRMAR_DIA
+
+        enviados.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "igual que el martes"}})
+
+        assert _conversaciones.get(1) is None, _conversaciones
+        assert len(capturas) == 1
+        perfil = capturas[0]["perfil"]
+        assert perfil["hora_inicio"] == 8            # la rutina de hoy
+        assert perfil["duracion_actividad_h"] == 2.0
+        assert perfil["deporte"] == "Correr"
+        assert perfil["nivel_actividad"] == "muy_intensa"
+        assert perfil["entrenado"] is True
+
+    # ── Criterio 3: el pipeline recibe lo mismo que con el formulario ───
+
+    @pytest.mark.asyncio
+    async def test_frase_recibe_el_mismo_dict_que_el_formulario(self, monkeypatch):
+        """El dict que recibe predict_ensemble es idéntico con y sin frase."""
+        import climasafeai.bot.telegram_bot as mod
+
+        capturas: list[dict] = []
+        mod, _ = self._montar(monkeypatch, capturas)
+        mod._db = self._FakeDB(self._perfil_con_salida(), rutinas_hoy=[])
+        _conversaciones.clear()
+
+        # CON frase libre: 'voy al tenis como ayer' sobre la salida anterior.
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "voy al tenis como ayer"}})
+        assert len(capturas) == 1
+        con_frase = capturas[0]
+
+        # SIN frase: los mismos campos, recogidos por el formulario campo a campo.
+        _conversaciones.clear()
+        capturas.clear()
+        data_form = mod._perfil_a_data(dict(self.PERFIL_CON_UBICACION))
+        data_form.update({
+            "nivel_actividad": "muy_intensa", "duracion_h": 2.0,
+            "hora_inicio": 8, "deporte": "Tenis individual", "entrenado": True,
+        })
+        _conversaciones[1] = {
+            "estado": Estado.DONE,
+            "data": data_form,
+            "modelo": mod.MODELO_DETERMINISTA,
+        }
+        await mod.ejecutar_prediccion(1)
+        assert len(capturas) == 1
+        sin_frase = capturas[0]
+
+        assert con_frase == sin_frase, f"CON: {con_frase}\nSIN: {sin_frase}"
+
+    # ── La ruta ambigua: SOLO la pregunta que falta ─────────────────────
+
+    @pytest.mark.asyncio
+    async def test_ambigua_pregunta_solo_lo_que_falta(self, monkeypatch):
+        """'voy a correr' sin hora ni duración: solo se pregunta eso, no el formulario."""
+        import climasafeai.bot.telegram_bot as mod
+
+        capturas: list[dict] = []
+        mod, enviados = self._montar(monkeypatch, capturas)
+        mod._db = self._FakeDB(dict(self.PERFIL_CON_UBICACION), rutinas_hoy=[])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+
+        enviados.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "voy a correr"}})
+        # La única pregunta: la duración (la hora y la actividad ya se saben).
+        assert len(enviados) == 1, enviados
+        assert enviados[-1] == "¿Cuántas horas durará? (ej: 2, 3.5)", enviados
+        assert _conversaciones[1]["estado"] == Estado.DURACION
+
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "1"}})
+        # Ahora solo falta la hora.
+        assert len(enviados) == 2, enviados
+        assert enviados[-1] == "¿A qué hora empiezas? (ej: 8, 14, 10:30)", enviados
+        assert _conversaciones[1]["estado"] == Estado.HORA_INICIO
+
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "9"}})
+        # Se predice sin volver a preguntar nada del formulario.
+        assert _conversaciones.get(1) is None, _conversaciones
+        assert len(capturas) == 1
+        perfil = capturas[0]["perfil"]
+        assert perfil["hora_inicio"] == 9
+        assert perfil["duracion_actividad_h"] == 1.0
+        assert perfil["deporte"] == "Correr"
+        for texto in enviados:
+            assert "¿Estás acostumbrado" not in texto, enviados
+            assert "¿Qué deporte o actividad" not in texto, enviados
+            assert "¿Sales por trabajo" not in texto, enviados
+            assert "¿Dónde vas a estar" not in texto, enviados
+            assert "¿Cómo llegas" not in texto, enviados
+
+    @pytest.mark.asyncio
+    async def test_sin_contexto_la_referencia_pide_la_actividad(self, monkeypatch):
+        """'igual que el martes' sin salida previa ni rutina: se pregunta la actividad."""
+        import climasafeai.bot.telegram_bot as mod
+
+        mod, _ = self._montar(monkeypatch)
+        mod._db = self._FakeDB(dict(self.PERFIL_CON_UBICACION), rutinas_hoy=[])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+
+        respuesta = await procesar_mensaje(1, "igual que el martes")
+        assert respuesta == "¿Qué intensidad tendrá la actividad?", respuesta
+        assert _conversaciones[1]["estado"] == Estado.ACTIVIDAD
+        assert _conversaciones[1]["data"].get("_frase_libre") is True
+
+    @pytest.mark.asyncio
+    async def test_boton_al_campo_que_falta_no_repite_el_formulario(self, monkeypatch):
+        """Responder el campo que falta con un botón tampoco sigue el formulario."""
+        import climasafeai.bot.telegram_bot as mod
+
+        capturas: list[dict] = []
+        mod, enviados = self._montar(monkeypatch, capturas)
+        mod._db = self._FakeDB(dict(self.PERFIL_CON_UBICACION), rutinas_hoy=[])
+        _conversaciones.clear()
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
+
+        enviados.clear()
+        # 'esta tarde 2 horas' → solo falta la actividad: la única pregunta.
+        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "esta tarde 2 horas"}})
+        assert enviados[-1] == "¿Qué intensidad tendrá la actividad?", enviados
+        assert _conversaciones[1]["estado"] == Estado.ACTIVIDAD
+
+        t, es_final = await procesar_callback(1, "intensa")
+        assert t is None and es_final
+        await mod._finalizar_parte(1)
+        assert _conversaciones.get(1) is None
+        assert len(capturas) == 1
+        perfil = capturas[0]["perfil"]
+        assert perfil["nivel_actividad"] == "intensa"
+        assert perfil["hora_inicio"] == 17
+        assert perfil["duracion_actividad_h"] == 2.0
+        for texto in enviados:
+            assert "¿Estás acostumbrado" not in texto, enviados
+            assert "¿Qué deporte o actividad" not in texto, enviados
+            assert "¿Dónde vas a estar" not in texto, enviados
+
+    # ── El intérprete determinista, en crudo ─────────────────────────────
+
+    def test_interpretar_frase_crudo(self):
+        import climasafeai.bot.telegram_bot as mod
+
+        assert mod._interpretar_salida_frase("voy al tenis como ayer") == {
+            "referencia": True, "deporte": "tenis",
+        }
+        assert mod._interpretar_salida_frase("esta tarde correr 40 min") == {
+            "deporte": "correr", "duracion_h": pytest.approx(40 / 60), "hora_inicio": 17,
+        }
+        assert mod._interpretar_salida_frase("igual que el martes") == {"referencia": True}
+        assert mod._interpretar_salida_frase("como siempre") == {"referencia": True}
+        assert mod._interpretar_salida_frase("intensa") == {"nivel_actividad": "intensa"}
+        assert mod._frase_describe_salida({"nivel_actividad": "intensa"}) is False
+        assert mod._frase_describe_salida({"referencia": True}) is True
+        assert mod._frase_describe_salida({"deporte": "tenis"}) is True
