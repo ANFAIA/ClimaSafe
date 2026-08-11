@@ -1464,12 +1464,12 @@
         "Dos identidades distintas conviven sin verse: se pega la sesion de las dos sobre la misma base de datos",
         "Hay tests de acceso propio permitido y acceso ajeno denegado para CADA tool de lectura, y make test pasa"
       ],
-      "status": "blocked",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-11",
       "owner": "claude",
       "review_rounds": 0,
-      "blocked_reason": "Reabierta en esta sesion pero el implementer fue cancelado por el usuario (fin de sesion, >5h). Se retoma en la proxima con el control de acceso por identidad."
+      "closed": "2026-08-11"
     },
     {
       "id": "ARNES-012",
