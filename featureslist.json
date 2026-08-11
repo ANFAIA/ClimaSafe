@@ -24,8 +24,11 @@
         "Un CSV con columnas faltantes o valores inválidos devuelve un error explicativo, no un 500",
         "Hay tests del endpoint (caso feliz, CSV malformado, factor colectivo) y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-11",
+      "review_rounds": 1,
+      "closed": "2026-08-11"
     },
     {
       "id": "MAPA-001",
@@ -37,8 +40,9 @@
         "El GeoJSON generado se abre sin errores en un validador de GeoJSON",
         "make test pasa y hay al menos un test del endpoint de exportación"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-11"
     },
     {
       "id": "TG-002",
@@ -831,8 +835,9 @@
         "No se activa por defecto ni cambia el comportamiento del bot cuando esta apagado",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-11"
     },
     {
       "id": "ARNES-004",
@@ -930,8 +935,12 @@
         "Hay una eleccion justificada y por escrito, y esa eleccion es la que implementa ARNES-006",
         "Es un entregable de analisis, sin codigo: se cierra con el documento, no con la puerta en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-11",
+      "owner": "opencode",
+      "review_rounds": 0,
+      "closed": "2026-08-11"
     },
     {
       "id": "ARNES-010",
@@ -1080,8 +1089,9 @@
         "La grafica del MCP (MCP-IMG-001) marca la franja a evitar ademas de la recomendada",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "blocked_reason": "colision de ficheros con CSV-001 (chat/app.py, chat/static/index.html): la otra sesion los tiene modificados en curso. Secuencial: implementar al cerrar CSV-001"
     },
     {
       "id": "LLM-005",
@@ -1215,8 +1225,12 @@
         "Un chat sin salidas previas no ve la pregunta y el flujo actual no cambia",
         "Hay tests de las tres ramas (sin previa, repetir, no repetir) y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-11",
+      "owner": "opencode",
+      "review_rounds": 0,
+      "closed": "2026-08-11"
     },
     {
       "id": "BOT-018",
@@ -1377,8 +1391,9 @@
         "Si al redactarlo se concluye que no aporta nada sobre lo que ya hay, se escribe esa conclusion y se cierra sin PRD: es un resultado valido",
         "init.sh sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-11"
     },
     {
       "id": "BOT-019",
@@ -1446,11 +1461,12 @@
         "Dos identidades distintas conviven sin verse: se pega la sesion de las dos sobre la misma base de datos",
         "Hay tests de acceso propio permitido y acceso ajeno denegado para CADA tool de lectura, y make test pasa"
       ],
-      "status": "in_progress",
+      "status": "blocked",
       "depends_on": [],
       "started": "2026-08-07",
       "owner": "claude",
-      "review_rounds": 1
+      "review_rounds": 1,
+      "blocked_reason": "Quedo a medias de sesion previa sin dueno; se retoma en una segunda tanda. El usuario pidio avanzar los pendientes elegibles."
     },
     {
       "id": "ARNES-012",
@@ -1553,9 +1569,9 @@
       ],
       "status": "in_progress",
       "depends_on": [],
-      "started": "2026-08-07",
+      "started": "2026-08-11",
       "owner": "opencode",
-      "review_rounds": 1
+      "review_rounds": 0
     },
     {
       "id": "BUG-005",
@@ -1571,6 +1587,19 @@
       "status": "done",
       "depends_on": [],
       "closed": "2026-08-10"
+    },
+    {
+      "id": "BUG-006",
+      "title": "fine_tune.py --export-gguf y --eval-only pasan Path a Unsloth: PosixPath no tiene lower",
+      "description": "fine_tune.py --export-gguf y --eval-only pasan Path a Unsloth: PosixPath no tiene lower",
+      "acceptance_criteria": [
+        "exportar_gguf llama a FastLanguageModel.from_pretrained con model_name str (no Path), demostrado con test que mockea unsloth y comprueba el tipo",
+        "evaluar hace lo mismo (mismo bug en otra rama)",
+        "el conflicto timm/fastai de la celda 2 del notebook queda documentado como ruido benigno en colab-fine-tuning.md o se anade timm fastai al uninstall, con la decision escrita",
+        "make test pasa y los tests existentes de test_fine_tune.py siguen verdes"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }
