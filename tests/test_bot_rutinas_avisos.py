@@ -107,6 +107,42 @@ class TestDBAvisos:
         assert db.chats_con_aviso() == []
 
 
+class TestDBUltimaSalida:
+    """BOT-017: la última salida se guarda como JSON en el perfil y se lee
+    como dict, para que /start pueda ofrecer repetirla."""
+
+    def test_guardar_y_recuperar_ultima_salida(self, tmp_path):
+        db = DBManager(tmp_path / "test.db")
+        db.initialize()
+        pid = db.crear_perfil({"alias": "Aldán", "telegram_chat_id": "1"})
+        salida = {
+            "actividad": "Correr", "nivel_actividad": "muy_intensa",
+            "duracion_h": 2.0, "hora_inicio": 8,
+            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+            "entrenado": True, "clase_final": 1,
+        }
+        db.actualizar_perfil(pid, {"ultima_salida": salida})
+        perfil = db.obtener_perfil(pid)
+        assert perfil["ultima_salida"] == salida
+
+    def test_sin_ultima_salida_devuelve_none(self, tmp_path):
+        db = DBManager(tmp_path / "test.db")
+        db.initialize()
+        pid = db.crear_perfil({"alias": "Aldán", "telegram_chat_id": "1"})
+        perfil = db.obtener_perfil(pid)
+        assert perfil.get("ultima_salida") is None
+
+    def test_ultima_salida_se_sobreescribe(self, tmp_path):
+        """Cada /start guarda la última salida: la anterior se reemplaza."""
+        db = DBManager(tmp_path / "test.db")
+        db.initialize()
+        pid = db.crear_perfil({"alias": "Aldán", "telegram_chat_id": "1"})
+        db.actualizar_perfil(pid, {"ultima_salida": {"actividad": "Correr", "hora_inicio": 8}})
+        db.actualizar_perfil(pid, {"ultima_salida": {"actividad": "Senderismo", "hora_inicio": 9}})
+        perfil = db.obtener_perfil(pid)
+        assert perfil["ultima_salida"] == {"actividad": "Senderismo", "hora_inicio": 9}
+
+
 # ── Parsing y formateo de rutinas ───────────────────────────────────────────
 
 
@@ -539,7 +575,8 @@ class TestRutinas:
         assert all(d.startswith("rutina_tipo_") for d in datas)
 
     @pytest.mark.asyncio
-    async def test_anadir_rutina_entreno(self, monkeypatch):
+    async def test_anadir_rutina_entreno_pregunta_tipo_de_actividad(self, monkeypatch):
+        """BOT-016: 'entreno' no se guarda directo, pregunta la actividad."""
         import climasafeai.bot.telegram_bot as mod
 
         _sin_modelo(monkeypatch)
@@ -549,13 +586,17 @@ class TestRutinas:
 
         r = await mod.procesar_mensaje(1, "/rutinas_anadir L-V entreno 18-20")
 
-        assert db.rutinas[0]["hora_inicio"] == 18.0
-        assert "Entreno — L-V, 18:00-20:00" in r
-        assert db.rutinas[0].get("ocupacion") is None
+        assert "tipo de actividad" in r.lower()
+        assert db.rutinas == []  # no guarda directo
+        pendiente = _conversaciones[1]["_rutina_pendiente"]
+        assert pendiente["hora_inicio"] == 18.0
+        assert pendiente["hora_fin"] == 20.0
+        assert pendiente["nombre"] == "entreno"
+        assert pendiente.get("deporte") is None
 
     @pytest.mark.asyncio
-    async def test_anadir_rutina_deporte_directo_sin_cuestionario(self, monkeypatch):
-        """BOT-015: un deporte conocido (correr) se guarda directo, sin pregunta."""
+    async def test_anadir_rutina_entreno_guarda_con_deporte_al_elegir(self, monkeypatch):
+        """BOT-016: elegir la actividad guarda el entreno con su deporte."""
         import climasafeai.bot.telegram_bot as mod
 
         _sin_modelo(monkeypatch)
@@ -563,12 +604,112 @@ class TestRutinas:
         monkeypatch.setattr(mod, "_db", db)
         _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
 
-        r = await mod.procesar_mensaje(1, "/rutinas_anadir L,X correr 18-20")
+        await mod.procesar_mensaje(1, "/rutinas_anadir L-V entreno 18-20")
+        r, _ = await mod.procesar_callback(1, "rutina_deporte_correr")
 
-        assert "añadida" in r.lower()
+        assert len(db.rutinas) == 1
         assert db.rutinas[0]["deporte"] == "correr"
+        assert db.rutinas[0]["nombre"] == "entreno"
         assert db.rutinas[0].get("ocupacion") is None
+        assert "añadida" in r.lower()
+        assert "Correr MET 10.5" in r
         assert "_rutina_pendiente" not in _conversaciones[1]
+
+    @pytest.mark.asyncio
+    async def test_anadir_rutina_deporte_pregunta_tipo_y_no_guarda(self, monkeypatch):
+        """BOT-016: un deporte de la lista DEPORTES no se guarda directo."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r = await mod.procesar_mensaje(1, "/rutinas_anadir L,X futbol 18-20")
+
+        assert "tipo de actividad" in r.lower()
+        assert db.rutinas == []  # no guarda directo
+        pendiente = _conversaciones[1]["_rutina_pendiente"]
+        assert pendiente["dias"] == "1,3"
+        assert pendiente["nombre"] == "futbol"
+        assert pendiente["deporte"] == "futbol"
+        assert "ocupacion" not in pendiente
+
+    @pytest.mark.asyncio
+    async def test_anadir_rutina_deporte_guarda_con_deporte_al_elegir(self, monkeypatch):
+        """BOT-016: elegir la actividad guarda el deporte con su etiqueta y MET."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        await mod.procesar_mensaje(1, "/rutinas_anadir L,X futbol 18-20")
+        r, _ = await mod.procesar_callback(1, "rutina_deporte_futbol")
+
+        assert len(db.rutinas) == 1
+        assert db.rutinas[0]["deporte"] == "futbol"
+        assert db.rutinas[0]["dias"] == "1,3"
+        assert db.rutinas[0].get("ocupacion") is None
+        assert "añadida" in r.lower()
+        assert "Futbol MET 7" in r
+        assert "_rutina_pendiente" not in _conversaciones[1]
+
+    @pytest.mark.asyncio
+    async def test_anadir_rutina_deporte_otro_met_cambia_la_etiqueta(self, monkeypatch):
+        """BOT-016: futbol_competicion (9 MET) es otra actividad, no el mismo."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        await mod.procesar_mensaje(1, "/rutinas_anadir L,X futbol 18-20")
+        r, _ = await mod.procesar_callback(1, "rutina_deporte_futbol_competicion")
+
+        assert db.rutinas[0]["deporte"] == "futbol_competicion"
+        assert "Futbol de competicion MET 9" in r
+
+    @pytest.mark.asyncio
+    async def test_cuestionario_deporte_sin_pendiente_no_guarda(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r, _ = await mod.procesar_callback(1, "rutina_deporte_correr")
+
+        assert "ninguna rutina pendiente" in r.lower()
+        assert db.rutinas == []
+
+    @pytest.mark.asyncio
+    async def test_cuestionario_deporte_tipo_invalido(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        await mod.procesar_mensaje(1, "/rutinas_anadir L-X correr 18-20")
+        r, _ = await mod.procesar_callback(1, "rutina_deporte_padel")
+
+        assert "inválida" in r.lower()
+        assert db.rutinas == []
+
+    def test_kb_tipo_deporte_incluye_deportes_con_prefijo(self):
+        from climasafeai.bot.telegram_bot import _kb_tipo_deporte
+
+        kb = _kb_tipo_deporte("rutina_deporte_")
+        datas = [b["callback_data"] for fila in kb for b in fila]
+
+        assert "rutina_deporte_futbol" in datas
+        assert "rutina_deporte_correr" in datas
+        assert all(d.startswith("rutina_deporte_") for d in datas)
 
     @pytest.mark.asyncio
     async def test_anadir_rutina_formato_invalido(self, monkeypatch):
@@ -645,6 +786,32 @@ class TestRutinas:
         r = await mod.procesar_mensaje(1, "/rutinas")
 
         assert "Trabajo — L-V, 8:00-16:00 (Construcción x2.2)" in r
+
+    @pytest.mark.asyncio
+    async def test_listar_muestra_deporte_con_intensidad(self, monkeypatch):
+        """BOT-016: el resumen muestra la etiqueta del deporte y su MET."""
+        import climasafeai.bot.telegram_bot as mod
+
+        _sin_modelo(monkeypatch)
+        db = _FakeDBRutinas()
+        db.rutinas = [
+            {
+                "id": 1,
+                "chat_id": "1",
+                "nombre": "futbol",
+                "dias": "1,3",
+                "hora_inicio": 18.0,
+                "hora_fin": 20.0,
+                "ocupacion": None,
+                "deporte": "futbol",
+            },
+        ]
+        monkeypatch.setattr(mod, "_db", db)
+        _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
+
+        r = await mod.procesar_mensaje(1, "/rutinas")
+
+        assert "Futbol — L,X, 18:00-20:00 (Futbol MET 7)" in r
 
     @pytest.mark.asyncio
     async def test_borrar_rutina_por_callback(self, monkeypatch):
