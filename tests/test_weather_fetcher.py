@@ -18,7 +18,7 @@ import pytest
 
 import climasafeai.data.weather_fetcher as wf
 
-HOY = date(2026, 8, 10)
+HOY = date.today()
 
 
 def _horas(fecha_inicio: date, n_dias: int, base_temp: float) -> dict:
