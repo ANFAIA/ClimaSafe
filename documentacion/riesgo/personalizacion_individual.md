@@ -258,6 +258,33 @@ viene del `nivel_actividad` que el usuario seleccione. La etiqueta
 pueda ofrecer recomendaciones contextuales (protegerse del sol en
 trabajo/exposición UV en deporte).
 
+### Orgullo colectivo (grupo — CSV-001)
+
+En una competición o evento deportivo en grupo, la gente **se exige más de lo
+que haría sola** ("competition effect" en fisiología del ejercicio: la tasa de
+esfuerzo percibido y la potencia producida suben ~5–15% en contexto
+competitivo frente al entrenamiento individual). Más esfuerzo = más calor
+metabólico generado (el MET es el denominador común, igual que en el factor de
+nivel de actividad). Es un **modificador de exposición situacional** (analogo
+a los factores de NIOSH que el proyecto ya usa), no un RR de mortalidad
+publicado — no hay estimación poblacional directa "orgullo colectivo →
+mortalidad".
+
+| Factor | Condición | Coef. propuesto | Base | Confianza |
+|---|---|---|---|---|
+| **Orgullo colectivo** | `tipo_actividad` = competición/deporte | ×1.2 | "competition effect": +esfuerzo percibido en grupo → +carga metabólica sobre el nivel de actividad ya derivado del deporte | Media (mecanismo fisiológico, no RR) |
+
+El ×1.2 equivale a un escalón de `nivel_actividad` (ligera ×1.1 → moderada
+×1.3 en la tabla de calor) **sin duplicar** el factor de actividad que el
+deporte ya aplica vía MET: suma una capa por el contexto de grupo, no por la
+actividad en sí. Se aplica **en odds** (misma composición que el resto de
+factores) y solo cuando el tipo de actividad es competición o deporte —
+cualquier otro tipo (trabajo, ninguno) deja la probabilidad intacta.
+
+Implementación: `chat/app.py` → `ORGULLO_COLECTIVO = 1.2` y
+`_aplicar_orgullo_colectivo(prob, tipo_actividad)` (endpoint
+`POST /api/riesgo-colectivo/csv`, CSV-001).
+
 ---
 
 ## Tabla de coeficientes propuesta — FRÍO

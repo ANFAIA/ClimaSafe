@@ -21,7 +21,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -864,6 +864,34 @@ FACTORES_COEF = {
 
 FACTORES_ETIQUETAS = {k: v["label"] for k, v in FACTORES_COEF.items()}
 
+# CSV-001 — orgullo colectivo. Factor multiplicativo sobre las ODDS del riesgo
+# individual que se aplica solo cuando el tipo de actividad del grupo es
+# competición o deporte: en ese contexto la gente se exige más de lo que haría
+# sola y genera más calor metabólico. Valor ×1.2: un salto de carga comparable
+# al de un escalón de nivel_actividad (ligera ×1.1 → moderada ×1.3) sin duplicar
+# el factor de actividad que el deporte ya aplica. No es un RR publicado: es un
+# modificador de exposición situacional, igual que los factores de NIOSH que ya
+# usa el proyecto. Documentado en
+# documentacion/riesgo/personalizacion_individual.md (sección "Orgullo colectivo").
+ORGULLO_COLECTIVO = 1.2
+# Valores de `tipo_actividad` que disparan el orgullo colectivo. Mismos
+# valores que la rama de etiqueta de /api/riesgo-colectivo ("competicion",
+# "deporte") para que el frontend no tenga que distinguir.
+TIPOS_ACTIVIDAD_COMPETICION = ("competicion", "deporte")
+
+
+def _aplicar_orgullo_colectivo(prob: float, tipo_actividad: str) -> tuple[float, float]:
+    """Aplica el orgullo colectivo a la probabilidad, en odds (CSV-001).
+
+    Solo cuando ``tipo_actividad`` es competición/deporte; cualquier otro tipo
+    (o "sin tipo") devuelve la probabilidad intacta con factor 1.0.
+    """
+    if tipo_actividad not in TIPOS_ACTIVIDAD_COMPETICION or not 0 < prob < 1:
+        return prob, 1.0
+    odds = prob / (1.0 - prob)
+    odds_ajustadas = odds * ORGULLO_COLECTIVO
+    return odds_ajustadas / (1.0 + odds_ajustadas), ORGULLO_COLECTIVO
+
 
 def _calcular_riesgo_colectivo(body: dict) -> dict:
     """Núcleo del cálculo de riesgo colectivo (modo 'numero').
@@ -1234,6 +1262,206 @@ async def api_riesgo_colectivo(body: dict):
         }
 
     return {"error": "tipo no válido"}
+
+
+# ── CSV-001: riesgo colectivo desde un CSV de personas ──────────────────────
+# Columnas obligatorias en el CSV; el resto son opcionales y se mapean al
+# perfil que entiende predict_ensemble (grasa→porcentaje_grasa,
+# duracion/duracion_h→duracion_actividad_h, actividad→nivel_actividad).
+
+CSV_COLUMNAS_REQUERIDAS = ("nombre", "edad", "sexo")
+_VALORES_ACLMATADO = {
+    "si": True, "sí": True, "true": True, "1": True,
+    "no": False, "false": False, "0": False,
+}
+
+
+def _leer_numero(valor, campo, errores, minimo=None, maximo=None):
+    """Columna numérica → float (None si vacía). Apunta error legible."""
+    texto = (valor or "").strip()
+    if not texto:
+        return None
+    try:
+        n = float(texto.replace(",", "."))
+    except ValueError:
+        errores.append(f"'{campo}' debe ser un número")
+        return None
+    if minimo is not None and n < minimo:
+        errores.append(f"'{campo}' no puede ser menor que {minimo}")
+    if maximo is not None and n > maximo:
+        errores.append(f"'{campo}' no puede ser mayor que {maximo}")
+    return n
+
+
+def _parsear_csv_personas(texto: str) -> list[dict]:
+    """Convierte el CSV de personas en perfiles validados para predict_ensemble.
+
+    Devuelve una lista de {"nombre": str, "perfil": dict}. Cualquier problema
+    (CSV ilegible, columnas faltantes, valor inválido) lanza ValueError con un
+    mensaje en español que dice QUÉ falla y EN QUÉ fila — el endpoint lo
+    convierte en 400 explicativo, nunca en un 500 mudo.
+    """
+    import csv as csv_mod
+    from io import StringIO
+
+    try:
+        filas = list(csv_mod.DictReader(StringIO(texto)))
+    except csv_mod.Error as exc:
+        raise ValueError(f"El CSV no se puede leer: {exc}") from exc
+
+    if not filas:
+        raise ValueError("El CSV está vacío: no hay ninguna persona.")
+
+    cabecera = [c for c in filas[0].keys() if c]
+    faltantes = [c for c in CSV_COLUMNAS_REQUERIDAS if c not in cabecera]
+    if faltantes:
+        raise ValueError(
+            "Faltan columnas en el CSV: " + ", ".join(faltantes)
+            + f". Columnas mínimas: {', '.join(CSV_COLUMNAS_REQUERIDAS)}."
+        )
+
+    personas = []
+    for i, fila in enumerate(filas, start=2):
+        nombre = (fila.get("nombre") or "").strip() or f"persona_{i}"
+        errores: list[str] = []
+
+        edad = _leer_numero(fila.get("edad"), "edad", errores, minimo=0, maximo=120)
+        if edad is None:
+            errores.append("'edad' no puede estar vacía")
+        sexo = (fila.get("sexo") or "").strip().lower()
+        if sexo not in ("hombre", "mujer"):
+            errores.append("'sexo' debe ser 'hombre' o 'mujer'")
+        grasa = _leer_numero(fila.get("grasa") or fila.get("porcentaje_grasa"), "grasa", errores, minimo=0, maximo=100)
+        hora_inicio = _leer_numero(fila.get("hora_inicio"), "hora_inicio", errores, minimo=0, maximo=24)
+        duracion = _leer_numero(
+            fila.get("duracion") or fila.get("duracion_h") or fila.get("duracion_actividad_h"),
+            "duracion", errores, minimo=0, maximo=24,
+        )
+
+        aclimatado = None
+        texto_acl = (fila.get("aclimatado") or "").strip().lower()
+        if texto_acl:
+            if texto_acl not in _VALORES_ACLMATADO:
+                errores.append("'aclimatado' debe ser si/no")
+            else:
+                aclimatado = _VALORES_ACLMATADO[texto_acl]
+
+        comorbilidades = {
+            c.strip() for c in (fila.get("comorbilidades") or "").replace(";", "|").split("|")
+            if c.strip()
+        }
+
+        if errores:
+            raise ValueError(f"Fila {i} ({nombre}): " + "; ".join(errores) + ".")
+
+        perfil = {"edad": int(edad), "sexo": sexo}
+        if grasa is not None:
+            perfil["porcentaje_grasa"] = grasa
+        if (fila.get("nivel_actividad") or "").strip():
+            perfil["nivel_actividad"] = fila["nivel_actividad"].strip()
+        if hora_inicio is not None:
+            perfil["hora_inicio"] = hora_inicio
+        if duracion is not None:
+            perfil["duracion_actividad_h"] = duracion
+        if (fila.get("deporte") or "").strip():
+            perfil["deporte"] = fila["deporte"].strip()
+        if aclimatado is not None:
+            perfil["aclimatado"] = aclimatado
+        if (fila.get("fototipo") or "").strip():
+            perfil["fototipo"] = fila["fototipo"].strip()
+        if comorbilidades:
+            perfil["comorbilidades"] = comorbilidades
+        # El MET del deporte fija la intensidad antes de predecir (igual que el bot)
+        _aplicar_deporte_a_nivel(perfil)
+
+        personas.append({"nombre": nombre, "perfil": perfil})
+
+    return personas
+
+
+@app.post("/api/riesgo-colectivo/csv")
+async def api_riesgo_colectivo_csv(body: dict):
+    """Riesgo individual + estadísticas de grupo desde un CSV de personas (CSV-001).
+
+    Body: {"csv": "...", "lat", "lon", "provincia"?, "fecha"?, "tipo_actividad"?}.
+
+    Columnas del CSV: nombre, edad, sexo (obligatorias); opcionales:
+    grasa/porcentaje_grasa, nivel_actividad/actividad, hora_inicio,
+    duracion/duracion_h/duracion_actividad_h, deporte, aclimatado (si/no),
+    fototipo, comorbilidades (separadas por | o ;).
+
+    Devuelve una fila de riesgo por persona (``detalle``) y el bloque de
+    estadísticas del grupo. Cuando ``tipo_actividad`` es competicion/deporte se
+    aplica el factor orgullo colectivo (ver ORGULLO_COLECTIVO) a la
+    probabilidad de cada persona.
+    """
+    texto = body.get("csv")
+    if not isinstance(texto, str) or not texto.strip():
+        raise HTTPException(400, "Falta el campo 'csv' con el contenido del fichero.")
+
+    lat = body.get("lat")
+    lon = body.get("lon")
+    if lat is None or lon is None:
+        raise HTTPException(400, "Faltan lat y lon: hacen falta la ubicación y la fecha para predecir.")
+    provincia = body.get("provincia", "Madrid")
+
+    date_obj = None
+    if body.get("fecha"):
+        try:
+            from datetime import date as date_type
+            date_obj = date_type.fromisoformat(body["fecha"])
+        except ValueError:
+            pass
+
+    try:
+        personas = _parsear_csv_personas(texto)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    from climasafeai.models.ensemble import predict_ensemble
+
+    tipo_actividad = body.get("tipo_actividad") or ""
+    resultados = []
+    primer_pred = None
+    for p in personas:
+        try:
+            pred = predict_ensemble(
+                lat=lat, lon=lon, provincia=provincia,
+                perfil=p["perfil"], target_date=date_obj,
+            )
+        except Exception as exc:
+            raise HTTPException(400, f"No se pudo predecir el riesgo de {p['nombre']}: {exc}") from exc
+        if primer_pred is None:
+            primer_pred = pred
+        prob_base = pred.get("perfil", {}).get("calor", {}).get("prob_personalizada", 0) or 0
+        prob, factor = _aplicar_orgullo_colectivo(prob_base, tipo_actividad)
+        resultados.append({
+            "nombre": p["nombre"],
+            "edad": p["perfil"].get("edad"),
+            "sexo": p["perfil"].get("sexo"),
+            "clase": pred.get("clase_final_label", "SEGURO"),
+            "prob_riesgo": round(prob, 4),
+            "factor_orgullo": factor,
+        })
+
+    seguros = sum(1 for r in resultados if r["clase"] == "SEGURO")
+    precaucion = sum(1 for r in resultados if r["clase"] == "PRECAUCION")
+    peligro = sum(1 for r in resultados if r["clase"] == "PELIGRO")
+
+    return {
+        "total_personas": len(resultados),
+        "seguros": seguros,
+        "en_precaucion": precaucion,
+        "en_peligro": peligro,
+        "pct_peligro": round(peligro / len(resultados) * 100, 1) if resultados else 0,
+        "clase": "PELIGRO" if peligro and peligro / len(resultados) > 0.2 else ("PRECAUCION" if precaucion else "SEGURO"),
+        "tipo_actividad": tipo_actividad or None,
+        "orgullo_colectivo": {
+            "aplicado": tipo_actividad in TIPOS_ACTIVIDAD_COMPETICION,
+            "factor": ORGULLO_COLECTIVO if tipo_actividad in TIPOS_ACTIVIDAD_COMPETICION else 1.0,
+        },
+        "detalle": resultados,
+    }
 
 
 @app.get("/api/perfiles")
@@ -1665,8 +1893,8 @@ async def api_riesgo_zona(
         return {"error": str(exc)}
 
 
-@app.post("/api/riesgo-zona")
-async def api_riesgo_zona_post(body: dict):
+def _riesgo_zona_resultado(body: dict) -> dict:
+    """Núcleo compartido de /api/riesgo-zona (POST) y sus exportaciones."""
     from climasafeai.data.grid_risk import riesgo_zona_grid
 
     lat = body.get("lat")
@@ -1697,6 +1925,55 @@ async def api_riesgo_zona_post(body: dict):
         return result
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.post("/api/riesgo-zona")
+async def api_riesgo_zona_post(body: dict):
+    return _riesgo_zona_resultado(body)
+
+
+@app.post("/api/riesgo-zona/export/geojson")
+async def api_riesgo_zona_export_geojson(body: dict):
+    """Descarga las celdas del grid como FeatureCollection GeoJSON (MAPA-001).
+
+    Cada celda es un Polygon con la clase de riesgo (riesgo/riesgo_label) y su
+    HI pico (hi_pico) en properties. Misma geometría que el overlay Leaflet.
+    """
+    from climasafeai.data.grid_risk import celdas_a_featurecollection
+
+    result = _riesgo_zona_resultado(body)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return JSONResponse(
+        celdas_a_featurecollection(result["celdas"]),
+        headers={"Content-Disposition": 'attachment; filename="riesgo_zona.geojson"'},
+    )
+
+
+@app.post("/api/riesgo-zona/export/png")
+async def api_riesgo_zona_export_png(body: dict):
+    """Descarga el overlay de riesgo del grid como PNG (MAPA-001).
+
+    Render server-side con matplotlib (dependencia ya existente) usando el
+    mismo código de color por clase que el overlay Leaflet.
+    """
+    from climasafeai.data.grid_risk import render_riesgo_png
+
+    result = _riesgo_zona_resultado(body)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    png = render_riesgo_png(
+        result["celdas"],
+        stats=result.get("stats"),
+        center=result.get("center"),
+        resumen=result.get("resumen_horario"),
+        perfil_label=result.get("perfil_label", ""),
+    )
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Content-Disposition": 'attachment; filename="riesgo_zona.png"'},
+    )
 
 
 @app.post("/api/riesgo-volumen")
