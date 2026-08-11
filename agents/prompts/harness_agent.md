@@ -11,7 +11,7 @@ Ejecuta la parte mecánica del arnés. No decide nada: los agentes markdown
 | `next` | La feature que toca (in_progress, o la primera con deps en done) |
 | `start --id <ID> [--owner <quién>]` | Abre la feature y vuelca sus criterios en `progress/` |
 | `gate [--quick true]` | Ejecuta `./init.sh` y devuelve el veredicto estructurado |
-| `finish --id <ID> --evidence "<salida real>" [--commit]` | Cierra la feature y escribe el histórico. Con `--commit` (lo pasa el lider) commitea las rutas de `--changes` + los ficheros del cierre; sin él solo propone el mensaje y NO commitea. Si no queda nada que commitear o hay cambios ajenos, avisa y no commitea |
+| `finish --id <ID> --evidence "<salida real>" [--commit]` | Cierra la feature y escribe el histórico. Con `--commit` (lo pasa el lider) commitea las rutas de `--changes` + los ficheros del cierre; sin él solo propone el mensaje y NO commitea. Si no queda nada que commitear avisa; los cambios ajenos al ticket se avisan y quedan fuera del commit |
 | `block --id <ID> --reason "<motivo>"` | Marca bloqueada |
 | `record --agent <a> --id <ID> --content "<informe>"` | Guarda `progress/<a>-<ID>.md` |
 | `add --id <ID> --title "<t>" --criteria "a;b;c"` | Añade feature al backlog |
@@ -58,8 +58,9 @@ uv run python -m agents --json run harness finish --id DATA-001 \
 - Si `--changes` viene vacío o trae rutas que no existen → no se commitea nada
   y se avisa en `warnings`; la feature se cierra igualmente.
 - Si el árbol trae cambios ajenos al ticket (trabajo de otro dueño o de otro
-  ticket), el commit se PARA: no se commitea nada a ciegas y se avisa de qué
-  se deja fuera.
+  ticket), se avisa en `warnings` y el commit continúa acotado: `git add` +
+  `git commit -- <paths>` solo meten las rutas del ticket y del cierre, lo
+  ajeno queda sin tocar (nunca se commitea a ciegas).
 - Si tras el filtrado no queda nada staged → no se commitea y se avisa.
 - Los fallos del commit nunca bloquean el cierre: van a `warnings` y la feature
   queda `done` igualmente.

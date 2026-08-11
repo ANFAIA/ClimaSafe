@@ -9,8 +9,9 @@ automático SOLO ocurre cuando el lider pasa `--commit` y, aun así, acotado a
 las rutas del ticket (`--changes` + los ficheros del propio cierre) con
 mensaje Conventional Commits sin línea de co-autoría. Sin el flag, `finish`
 propone el mensaje y NO commitea — ningún otro agente ni asistente commitea
-por su cuenta. Si `--changes` viene vacío, trae rutas inexistentes o el árbol
-trae cambios ajenos al ticket, se avisa y no se commitea.
+por su cuenta. Si `--changes` viene vacío o trae rutas inexistentes, se avisa
+y no se commitea; los cambios ajenos al ticket se avisan y el commit continúa
+acotado a las rutas del ticket + cierre, dejando lo ajeno sin tocar.
 """
 
 from __future__ import annotations
@@ -250,8 +251,8 @@ def test_finish_missing_path_does_not_commit(project_root):
     assert _head(project_root) == before
 
 
-def test_finish_foreign_changes_stop_the_commit(project_root):
-    """Cambios ajenos en el árbol + --commit → el commit se PARA y se avisa; no se commitea a ciegas."""
+def test_finish_foreign_changes_do_not_block_the_commit(project_root):
+    """Cambios ajenos en el árbol + --commit → se avisa y el commit continúa acotado; lo ajeno queda sin tocar."""
     _setup_ticket(project_root)
     # un cambio ajeno al ticket, sin declarar en --changes
     (project_root / "mi_paquete" / "ajeno.py").write_text("y = 2\n")
@@ -262,15 +263,22 @@ def test_finish_foreign_changes_stop_the_commit(project_root):
     )
 
     assert result.success
-    assert "auto_commit" not in result.data
+    assert "auto_commit" in result.data
     assert any("fuera del ticket" in w for w in result.warnings)
-    # el commit no avanzó y ajeno.py sigue en el árbol
-    assert _head(project_root) == before
+    # el commit avanzó (solo con las rutas del ticket + cierre)
+    assert _head(project_root) != before
+    # lo ajeno sigue en el árbol, sin commitear
     status = subprocess.run(
         ["git", "status", "--porcelain", "-uall"], cwd=project_root,
         capture_output=True, text=True, check=True,
     ).stdout
     assert "mi_paquete/ajeno.py" in status
+    # el commit no contiene la ruta ajena
+    commit_files = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"], cwd=project_root,
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert "mi_paquete/ajeno.py" not in commit_files
 
 
 def test_finish_without_flag_leaves_foreign_changes_untouched(project_root):

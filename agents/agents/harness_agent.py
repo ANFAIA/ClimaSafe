@@ -592,8 +592,9 @@ class HarnessAgent(BaseAgent):
         commit automático de ARNES-014 solo se intenta con el flag explícito
         `commit=True` (el que pasa el lider): sin flag se propone el mensaje
         y no se commitea. Si no queda nada que commitear, si `--changes` viene
-        vacío o trae rutas inexistentes, o si el árbol trae cambios ajenos al
-        ticket, se avisa en `warnings` y no se commitea.
+        vacío o trae rutas inexistentes, se avisa en `warnings` y no se
+        commitea. Los cambios ajenos al ticket se avisan pero no impiden el
+        commit: este queda acotado a las rutas del ticket y del cierre.
 
         Nunca bloquea el cierre: si algo falla (sin versión parseable, sin
         cambios que resumir, sin repo git) se avisa en `warnings` y se
@@ -668,10 +669,10 @@ class HarnessAgent(BaseAgent):
         los ficheros del propio cierre (`featureslist.json`, `progress/`,
         `pyproject.toml`, `README.md`). Si `--changes` viene vacío o trae
         rutas que no existen, no se commitea nada y se avisa. Si el árbol trae
-        cambios ajenos al ticket (trabajo de otro dueño o de otro ticket), el
-        commit se PARA: no se commitea nada a ciegas y se avisa de qué se deja
-        fuera. Si tras el filtrado no queda nada staged, no se commitea y se
-        avisa.
+        cambios ajenos al ticket (trabajo de otro dueño o de otro ticket), se
+        avisa en `warnings` y el commit continúa acotado: solo entran las
+        rutas del ticket y del cierre, lo ajeno queda sin tocar. Si tras el
+        filtrado no queda nada staged, no se commitea y se avisa.
 
         El mensaje es Conventional Commits con el id de la feature como
         subject y sin línea de co-autoría: se genera con
@@ -729,20 +730,20 @@ class HarnessAgent(BaseAgent):
                     return True
             return False
 
-        # Cambios ajenos al ticket: con el flag de commit, el commit se PARA.
-        # `git commit -- <paths>` no se llevaría nada ajeno, pero un árbol con
-        # trabajo de otro dueño o de otro ticket es señal de que el cierre no
-        # está listo: mejor avisar y no commitear a ciegas.
+        # Cambios ajenos al ticket: se avisan pero NO paran el commit. El
+        # `git add` y el `git commit -- <paths>` están acotados a las rutas
+        # del ticket + cierre, así que lo ajeno jamás entra en el commit
+        # aunque el árbol esté sucio (p. ej. otra sesión trabajando en
+        # paralelo). Parar bloqueaba el cierre automático siempre que hubiera
+        # cualquier cambio fuera del ticket.
         ajenas = [p for _, p in git_agent.git.status_porcelain(all_untracked=True) if not _in_allowed(p)]
         if ajenas:
             warnings.append(
                 f"Cambios fuera del ticket ({', '.join(ajenas[:5])}"
                 f"{'…' if len(ajenas) > 5 else ''}) — trabajo de otro dueño o "
-                "de otro ticket: el commit del cierre se PARA para no "
-                "llevárselo. Revísalos y cierra de nuevo con --commit cuando "
-                "el árbol solo tenga las rutas de este ticket."
+                "de otro ticket: se dejan fuera del commit del cierre (el "
+                "commit solo incluye las rutas de este ticket)."
             )
-            return {"warnings": warnings, "data": data}
 
         stage = git_agent.git.add(*stage_paths)
         if not stage.ok:

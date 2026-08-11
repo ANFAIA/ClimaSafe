@@ -1567,11 +1567,12 @@
         "Ningun otro agente ni asistente commitea por su cuenta: un finish sin el flag (el caso de opencode) no genera commit y se demuestra",
         "Hay tests del arnes de los casos con flag, sin flag, --changes vacio y rutas inexistentes, y make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-11",
       "owner": "opencode",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-11"
     },
     {
       "id": "BUG-005",
@@ -1597,6 +1598,34 @@
         "evaluar hace lo mismo (mismo bug en otra rama)",
         "el conflicto timm/fastai de la celda 2 del notebook queda documentado como ruido benigno en colab-fine-tuning.md o se anade timm fastai al uninstall, con la decision escrita",
         "make test pasa y los tests existentes de test_fine_tune.py siguen verdes"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "META-001",
+      "title": "Medir las metricas de exito del PRD en produccion: uso real y cobertura",
+      "description": "Medir las metricas de exito del PRD en produccion: uso real y cobertura",
+      "acceptance_criteria": [
+        "Queda definido que se mide (consultas bot/web/API, % con perfil personalizado, provincias x dias con aviso fiable) y de que fuente sale cada numero",
+        "hay un comando o script que calcula esas metricas y se pega la salida real con datos de produccion (o un dataset de muestra si no hay produccion)",
+        "las metricas se comparan con las lineas base del PRD (documentacion/prd.md) y se pega la tabla",
+        "si alguna metrica no se puede medir hoy, queda escrito que falta y que se necesita para medirla",
+        "init.sh sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "UV-001",
+      "title": "Linea futura del PRD: radiacion UV en el aviso de riesgo",
+      "description": "Linea futura del PRD: radiacion UV en el aviso de riesgo",
+      "acceptance_criteria": [
+        "Queda escrito el alcance de la linea UV: que dato de entrada (indice UV de Open-Meteo u otra fuente), que rango se considera peligroso y para quien",
+        "se evalua si el indice UV se puede incorporar al aviso diario con la fuente actual y se pega la traza de una llamada real",
+        "se decide con numeros si entra en v2 o se queda documentado como fuera de alcance con el motivo",
+        "si entra, el ticket que lo implemente queda escrito como propuesta al backlog",
+        "init.sh sigue en verde"
       ],
       "status": "pending",
       "depends_on": []
