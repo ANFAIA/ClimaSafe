@@ -54,10 +54,14 @@
         "Un chat sin perfil asociado sigue funcionando: pide los datos como hasta ahora",
         "Hay tests de la vinculación y de la ruta sin perfil, y make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "BOT-002"
-      ]
+      ],
+      "started": "2026-08-12",
+      "owner": "opencode",
+      "review_rounds": 0,
+      "closed": "2026-08-12"
     },
     {
       "id": "FORECAST-001",
@@ -186,8 +190,11 @@
         "Integrado con el sistema de prediccion existente",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-12",
+      "owner": "opencode-web",
+      "review_rounds": 0
     },
     {
       "id": "RESEARCH-001",
@@ -772,8 +779,11 @@
         "Hay umbral de distancia: si nada supera el umbral no se inyecta contexto irrelevante y se cae a ask_raw, y se demuestra con la pregunta de SPF que hoy devuelve factores de frio",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-12",
+      "owner": "opencode-rag",
+      "review_rounds": 0
     },
     {
       "id": "RAG-004",
@@ -970,8 +980,11 @@
         "make test pasa y el servidor MCP actual sigue sirviendo JSON para clientes sin soporte de apps (degradacion: host sin UI recibe texto)",
         "no se toca la web ni se migran las otras 10 tools mas alla del estudio"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-12",
+      "owner": "opencode-mcp",
+      "review_rounds": 0
     },
     {
       "id": "ARNES-011",

@@ -73,7 +73,7 @@ class TestOrdenCampos:
             if actual in directos:
                 continue
             sig = _siguiente(actual)
-            esperado = next(e for e in order[i + 1:] if e not in directos)
+            esperado = next(e for e in order[i + 1 :] if e not in directos)
             assert sig == esperado, f"{actual} → {sig}, esperado {esperado}"
 
 
@@ -247,9 +247,17 @@ class TestBotonesCallback:
     async def test_ubicacion_escrita_se_geocodifica(self, monkeypatch):
         """El nombre lo resuelve Nominatim, nunca un LLM."""
         import climasafeai.bot.telegram_bot as mod
-        monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
-            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
-        })
+
+        monkeypatch.setattr(
+            mod,
+            "buscar_lugar",
+            lambda n: {
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
+                "nombre": "Aldán, Pontevedra",
+            },
+        )
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.UBICACION
         r = await procesar_mensaje(1, "Aldán")
@@ -262,6 +270,7 @@ class TestBotonesCallback:
     async def test_ubicacion_no_encontrada_no_avanza(self, monkeypatch):
         """Si no se encuentra, se vuelve a preguntar. Jamás se inventan coordenadas."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "buscar_lugar", lambda n: None)
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.UBICACION
@@ -358,8 +367,12 @@ class TestStartConPerfil:
 
             def obtener_perfil(self, _pid: int):
                 return {
-                    "alias": "Aldán", "sexo": "hombre", "edad": 57,
-                    "comorbilidades": [], "farmacos": [], "situacion_social": [],
+                    "alias": "Aldán",
+                    "sexo": "hombre",
+                    "edad": 57,
+                    "comorbilidades": [],
+                    "farmacos": [],
+                    "situacion_social": [],
                 }
 
             def rutinas_por_dia(self, chat_id: str, weekday: int):
@@ -405,12 +418,14 @@ class TestRecomendacionContexto:
 
     def test_frio_recomienda_abrigo_sin_spf(self):
         from climasafeai.models.recomendaciones import recomendacion_resumen
+
         rec = recomendacion_resumen(self._resultado(t=5, uv=1, wc=-2, hi=5))
         assert "abrígate" in rec
         assert "SPF" not in rec
 
     def test_calor_con_uv_recomienda_spf_y_evitar_horas_centrales(self):
         from climasafeai.models.recomendaciones import recomendacion_resumen
+
         rec = recomendacion_resumen(self._resultado(t=34, uv=7, wc=20, hi=36))
         assert "Mantente hidratado" in rec
         assert "SPF 30+" in rec
@@ -418,12 +433,14 @@ class TestRecomendacionContexto:
 
     def test_tiempo_suave_sin_uv_no_impone_spf(self):
         from climasafeai.models.recomendaciones import recomendacion_resumen
+
         rec = recomendacion_resumen(self._resultado(t=22, uv=2, wc=15, hi=22, clase=0))
         assert "SPF" not in rec
         assert "hidratado" in rec
 
     def test_peligro_recomienda_no_hacer_actividad(self):
         from climasafeai.models.recomendaciones import recomendacion_resumen
+
         rec = recomendacion_resumen(self._resultado(t=38, uv=9, wc=25, hi=42, clase=2))
         assert "evita la actividad física" in rec
 
@@ -461,9 +478,17 @@ class TestRecomendacionCanalDominante:
         from climasafeai.models.recomendaciones import recomendacion_resumen
 
         # O Casal, Pontevedra: PRECAUCIÓN 21%, 35.3 °C, UV 7.6 → manda calor
-        rec = recomendacion_resumen(self._resultado(
-            prob_calor=0.21, prob_frio=0.02, t=35.3, uv=7.6, wc=5, hi=38, clase=1,
-        ))
+        rec = recomendacion_resumen(
+            self._resultado(
+                prob_calor=0.21,
+                prob_frio=0.02,
+                t=35.3,
+                uv=7.6,
+                wc=5,
+                hi=38,
+                clase=1,
+            )
+        )
         assert "evita la exposición prolongada entre las horas de mayor calor" in rec
         assert "SPF 30+" in rec
         assert "abrígate" not in rec  # el canal frío no manda: nada de abrigo
@@ -472,9 +497,17 @@ class TestRecomendacionCanalDominante:
         from climasafeai.models.recomendaciones import recomendacion_resumen
 
         # WC muy negativo, prob_frio alta → manda frío
-        rec = recomendacion_resumen(self._resultado(
-            prob_calor=0.03, prob_frio=0.45, t=2, uv=1, wc=-18, hi=4, clase=1,
-        ))
+        rec = recomendacion_resumen(
+            self._resultado(
+                prob_calor=0.03,
+                prob_frio=0.45,
+                t=2,
+                uv=1,
+                wc=-18,
+                hi=4,
+                clase=1,
+            )
+        )
         assert "abrígate" in rec
         assert "evita la exposición prolongada" not in rec  # nada de calor
         assert "SPF" not in rec
@@ -484,9 +517,17 @@ class TestRecomendacionCanalDominante:
 
         # prob_frio=0.10 < 0.15: aunque haga frío físico (wc=-3, t=5), el canal
         # frío no aporta recomendaciones; tampoco el calor (prob 0.05)
-        rec = recomendacion_resumen(self._resultado(
-            prob_calor=0.05, prob_frio=0.10, t=5, uv=2, wc=-3, hi=8, clase=0,
-        ))
+        rec = recomendacion_resumen(
+            self._resultado(
+                prob_calor=0.05,
+                prob_frio=0.10,
+                t=5,
+                uv=2,
+                wc=-3,
+                hi=8,
+                clase=0,
+            )
+        )
         assert "abrígate" not in rec
         assert "evita la exposición prolongada" not in rec
         assert "hidratado" in rec
@@ -494,9 +535,17 @@ class TestRecomendacionCanalDominante:
     def test_recomendacion_canal_dominante_ambos_activos_gana_el_mayor(self):
         from climasafeai.models.recomendaciones import recomendacion_resumen
 
-        rec = recomendacion_resumen(self._resultado(
-            prob_calor=0.30, prob_frio=0.55, t=12, uv=3, wc=-5, hi=18, clase=1,
-        ))
+        rec = recomendacion_resumen(
+            self._resultado(
+                prob_calor=0.30,
+                prob_frio=0.55,
+                t=12,
+                uv=3,
+                wc=-5,
+                hi=18,
+                clase=1,
+            )
+        )
         assert "abrígate" in rec
         assert "evita la exposición prolongada" not in rec
 
@@ -513,9 +562,17 @@ class TestFlujoCompleto:
     async def test_flujo_simulado(self, monkeypatch):
         """Simula una conversación completa desde /start hasta DONE."""
         import climasafeai.bot.telegram_bot as mod
-        monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
-            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
-        })
+
+        monkeypatch.setattr(
+            mod,
+            "buscar_lugar",
+            lambda n: {
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
+                "nombre": "Aldán, Pontevedra",
+            },
+        )
         monkeypatch.setattr(mod, "date", _HoyFijo)
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.SEXO
@@ -529,7 +586,9 @@ class TestFlujoCompleto:
         assert _conversaciones[1]["estado"] == Estado.GRASA
 
         await procesar_mensaje(1, "saltar")
-        assert _conversaciones[1]["estado"] == Estado.FOTOTIPO, f"Esperado FOTOTIPO, es {_conversaciones[1]['estado']}"
+        assert _conversaciones[1]["estado"] == Estado.FOTOTIPO, (
+            f"Esperado FOTOTIPO, es {_conversaciones[1]['estado']}"
+        )
 
         # fototipo: elige tipo 3 (o saltar como texto)
         await procesar_callback(1, "3")
@@ -542,16 +601,16 @@ class TestFlujoCompleto:
         await procesar_callback(1, "intensa")
         assert _conversaciones[1]["data"]["nivel_actividad"] == "intensa"
 
-        await procesar_callback(1, "no")          # entrenado
+        await procesar_callback(1, "no")  # entrenado
         assert _conversaciones[1]["data"]["entrenado"] is False
 
-        await procesar_mensaje(1, "8")            # duración
+        await procesar_mensaje(1, "8")  # duración
         assert _conversaciones[1]["data"]["duracion_h"] == 8
 
-        await procesar_mensaje(1, "8")            # hora de inicio
+        await procesar_mensaje(1, "8")  # hora de inicio
         assert _conversaciones[1]["data"]["hora_inicio"] == 8
 
-        await procesar_callback(1, "trabajo")     # sale a trabajar
+        await procesar_callback(1, "trabajo")  # sale a trabajar
         assert _conversaciones[1]["estado"] == Estado.TIPO_TRABAJO
         await procesar_callback(1, "campo")
         assert _conversaciones[1]["data"]["ocupacion"] == "campo"
@@ -559,13 +618,13 @@ class TestFlujoCompleto:
         assert _conversaciones[1]["estado"] == Estado.COMORBILIDADES
 
         await procesar_callback(1, "cardiovascular")
-        await procesar_callback(1, "__done__")    # comorbilidades
+        await procesar_callback(1, "__done__")  # comorbilidades
 
         await procesar_callback(1, "diureticos_asa")
-        await procesar_callback(1, "__done__")    # medicación
+        await procesar_callback(1, "__done__")  # medicación
 
         await procesar_callback(1, "fiesta")
-        await procesar_callback(1, "__done__")    # cómo llega a la salida
+        await procesar_callback(1, "__done__")  # cómo llega a la salida
         assert _conversaciones[1]["estado"] == Estado.SITUACION_SOCIAL
 
         # situación social: skip
@@ -614,16 +673,29 @@ class TestFlujoCompleto:
         monkeypatch.setattr("climasafeai.llm.rag_qwen.ask_con_perfil", _sin_llm)
 
         _conversaciones.clear()
-        _conversaciones[1] = {"estado": Estado.DONE, "data": {
-            "sexo": "hombre", "edad": 57, "porcentaje_grasa": 20.5,
-            "fototipo": "3",
-            "aclimatado": False, "nivel_actividad": "intensa", "entrenado": True,
-            "duracion_h": 8, "hora_inicio": 8, "ocupacion": "campo",
-            "comorbilidades": {"cardiovascular"}, "farmacos": {"diureticos_asa"},
-            "estado_previo": {"fiesta", "falta_sueno"},
-            "situacion_social": {"vive_solo"},
-            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "lugar": "Aldán",
-        }}
+        _conversaciones[1] = {
+            "estado": Estado.DONE,
+            "data": {
+                "sexo": "hombre",
+                "edad": 57,
+                "porcentaje_grasa": 20.5,
+                "fototipo": "3",
+                "aclimatado": False,
+                "nivel_actividad": "intensa",
+                "entrenado": True,
+                "duracion_h": 8,
+                "hora_inicio": 8,
+                "ocupacion": "campo",
+                "comorbilidades": {"cardiovascular"},
+                "farmacos": {"diureticos_asa"},
+                "estado_previo": {"fiesta", "falta_sueno"},
+                "situacion_social": {"vive_solo"},
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
+                "lugar": "Aldán",
+            },
+        }
 
         texto = await mod.ejecutar_prediccion(1)
 
@@ -647,27 +719,35 @@ class TestFlujoCompleto:
 class TestGeocodificacion:
     """Funciones puras del geocodificador: sin red."""
 
-    @pytest.mark.parametrize("address, esperado", [
-        ({"province": "Provincia de Pontevedra"}, "Pontevedra"),
-        ({"province": "Pontevedra"}, "Pontevedra"),
-        ({"state": "Madrid"}, "Madrid"),
-        ({"county": "O Morrazo"}, "O Morrazo"),
-        ({"city": "Vigo"}, None),
-        ({}, None),
-    ])
+    @pytest.mark.parametrize(
+        "address, esperado",
+        [
+            ({"province": "Provincia de Pontevedra"}, "Pontevedra"),
+            ({"province": "Pontevedra"}, "Pontevedra"),
+            ({"state": "Madrid"}, "Madrid"),
+            ({"county": "O Morrazo"}, "O Morrazo"),
+            ({"city": "Vigo"}, None),
+            ({}, None),
+        ],
+    )
     def test_extraer_provincia(self, address, esperado):
         from climasafeai.bot.geocoding import _extraer_provincia
+
         assert _extraer_provincia(address) == esperado
 
     def test_nombre_prefiere_lo_que_busco_el_usuario(self):
         """Quien busca 'Aldán' quiere ver 'Aldán', no el municipio que lo contiene."""
         from climasafeai.bot.geocoding import _extraer_nombre
-        item = {"name": "Aldán",
-                "address": {"village": "Cangas de Morrazo", "province": "Pontevedra"}}
+
+        item = {
+            "name": "Aldán",
+            "address": {"village": "Cangas de Morrazo", "province": "Pontevedra"},
+        }
         assert _extraer_nombre(item) == "Aldán, Pontevedra"
 
     def test_buscar_lugar_vacio_no_llama_a_la_red(self):
         from climasafeai.bot.geocoding import buscar_lugar
+
         assert buscar_lugar("") is None
         assert buscar_lugar("   ") is None
 
@@ -679,34 +759,40 @@ class TestDeporteMET:
     (doi:10.1016/j.jshs.2023.10.010).
     """
 
-    @pytest.mark.parametrize("deporte, nivel", [
-        ("pasear", "moderada"),          # 3.5 MET
-        ("senderismo", "intensa"),       # 6.0
-        ("futbol", "intensa"),           # 7.0
-        ("tenis", "muy_intensa"),        # 8.0
-        ("correr", "muy_intensa"),       # 10.5
-    ])
+    @pytest.mark.parametrize(
+        "deporte, nivel",
+        [
+            ("pasear", "moderada"),  # 3.5 MET
+            ("senderismo", "intensa"),  # 6.0
+            ("futbol", "intensa"),  # 7.0
+            ("tenis", "muy_intensa"),  # 8.0
+            ("correr", "muy_intensa"),  # 10.5
+        ],
+    )
     def test_met_fija_la_intensidad(self, deporte, nivel):
         from climasafeai.features.personalizacion import nivel_actividad_de_deporte
+
         assert nivel_actividad_de_deporte(deporte) == nivel
 
     def test_deporte_desconocido_no_inventa_intensidad(self):
         """El pádel no está en el Compendium: mejor None que un número inventado."""
         from climasafeai.features.personalizacion import nivel_actividad_de_deporte
+
         assert nivel_actividad_de_deporte("padel") is None
         assert nivel_actividad_de_deporte(None) is None
 
     def test_solo_se_ofrecen_deportes_con_met(self):
         from climasafeai.bot.telegram_bot import DEPORTES
         from climasafeai.features.personalizacion import DEPORTE_MET
+
         assert set(DEPORTES) <= set(DEPORTE_MET), "hay deportes en el menú sin MET medido"
 
     @pytest.mark.asyncio
     async def test_elegir_deporte_sobrescribe_la_intensidad(self):
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.DEPORTE
-        _conversaciones[1]["data"]["nivel_actividad"] = "moderada"   # lo que dijo él
-        await procesar_callback(1, "tenis")                          # 8 MET
+        _conversaciones[1]["data"]["nivel_actividad"] = "moderada"  # lo que dijo él
+        await procesar_callback(1, "tenis")  # 8 MET
         assert _conversaciones[1]["data"]["nivel_actividad"] == "muy_intensa"
         assert _conversaciones[1]["data"]["_nivel_desde_deporte"] is True
 
@@ -732,6 +818,7 @@ class TestBienvenida:
     @pytest.mark.asyncio
     async def test_help_explica_start_como_unico_camino(self, monkeypatch):
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
         _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
 
@@ -745,6 +832,7 @@ class TestBienvenida:
     async def test_help_invita_a_preguntar_dudas_tras_el_parte(self, monkeypatch):
         """CHAT-003: tras el parte se pueden preguntar dudas (p. ej. SPF)."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
         _conversaciones[1] = {"estado": Estado.IDLE, "data": {}}
 
@@ -758,6 +846,7 @@ class TestBienvenida:
     async def test_primer_contacto_sin_comando_muestra_la_bienvenida(self, monkeypatch):
         """Antes contestaba 'Envía /start para comenzar.' y nada más."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
 
         r = await procesar_mensaje(1, "hola")
@@ -792,6 +881,7 @@ class TestBienvenida:
     def test_bienvenida_no_menciona_el_chat(self):
         """Criterio 1: /chat desaparece de la bienvenida y del bot."""
         import climasafeai.bot.telegram_bot as mod
+
         assert "/chat" not in mod.BIENVENIDA
         assert "/start" in mod.BIENVENIDA
 
@@ -799,9 +889,12 @@ class TestBienvenida:
 class TestLogging:
     """BOT-004: el token no puede acabar en el log, y las lineas no se duplican."""
 
-    def _preparar(self, tmp_path, monkeypatch, token="123456789:AAFAKE_token_de_prueba_xxxxxxxxxxxx"):
+    def _preparar(
+        self, tmp_path, monkeypatch, token="123456789:AAFAKE_token_de_prueba_xxxxxxxxxxxx"
+    ):
         import logging
         from climasafeai.bot.telegram_bot import _setup_logging
+
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
         monkeypatch.chdir(tmp_path)
         raiz = logging.getLogger()
@@ -813,6 +906,7 @@ class TestLogging:
 
     def test_el_token_no_aparece_en_el_log(self, tmp_path, monkeypatch):
         import logging
+
         raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
         try:
             setup()
@@ -836,13 +930,15 @@ class TestLogging:
         haber una ruta de escritura con el token en claro."""
         import logging
         from climasafeai.bot.telegram_bot import _OcultarToken
+
         raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
         try:
             setup()
             assert raiz.handlers, "debe haber al menos el handler de fichero"
             for h in raiz.handlers:
-                assert any(isinstance(f, _OcultarToken) for f in h.filters), \
+                assert any(isinstance(f, _OcultarToken) for f in h.filters), (
                     f"{type(h).__name__} no filtra el token"
+                )
         finally:
             for h in list(raiz.handlers):
                 raiz.removeHandler(h)
@@ -855,29 +951,37 @@ class TestLogging:
         import logging
         import sys
         from climasafeai.bot.telegram_bot import _OcultarToken, _setup_logging
+
         raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
         try:
+
             class _FakeOut:
                 def __init__(self, tty):
                     self._tty = tty
+
                 def isatty(self):
                     return self._tty
+
                 def write(self, _m):
                     pass
+
                 def flush(self):
                     pass
 
             # RotatingFileHandler hereda de StreamHandler: la consola es el que
             # escribe a un stream que NO es un fichero
             def es_consola(h):
-                return isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+                return isinstance(h, logging.StreamHandler) and not isinstance(
+                    h, logging.FileHandler
+                )
 
             # stdout redirigido a fichero (run_bot.sh): solo el handler de fichero
             monkeypatch.setattr(sys, "stdout", _FakeOut(tty=False))
             _setup_logging()
             assert len(raiz.handlers) == 1, "sin consola queda solo el fichero"
-            assert not es_consola(raiz.handlers[0]), \
+            assert not es_consola(raiz.handlers[0]), (
                 "stdout redirigido a fichero: el console handler duplicaria las lineas"
+            )
             assert any(isinstance(f, _OcultarToken) for f in raiz.handlers[0].filters)
 
             # terminal real: consola + fichero, y ambos filtran el token
@@ -888,8 +992,9 @@ class TestLogging:
             consolas = [h for h in raiz.handlers if es_consola(h)]
             assert len(consolas) == 1, "con un terminal real la consola debe estar"
             for h in raiz.handlers:
-                assert any(isinstance(f, _OcultarToken) for f in h.filters), \
+                assert any(isinstance(f, _OcultarToken) for f in h.filters), (
                     f"{type(h).__name__} no filtra el token"
+                )
         finally:
             for h in list(raiz.handlers):
                 raiz.removeHandler(h)
@@ -899,6 +1004,7 @@ class TestLogging:
     def test_varios_arranques_no_duplican_las_lineas(self, tmp_path, monkeypatch):
         """run_bot.sh reinicia en bucle: cada arranque anadia otro par de handlers."""
         import logging
+
         raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
         try:
             setup()
@@ -909,7 +1015,9 @@ class TestLogging:
             logging.getLogger("prueba").info("una sola vez")
             for h in raiz.handlers:
                 h.flush()
-            lineas = [ln for ln in (tmp_path / "logs" / "bot.log").read_text().splitlines() if ln.strip()]
+            lineas = [
+                ln for ln in (tmp_path / "logs" / "bot.log").read_text().splitlines() if ln.strip()
+            ]
             assert len(lineas) == 1, f"la linea se ha escrito {len(lineas)} veces"
         finally:
             for h in list(raiz.handlers):
@@ -931,8 +1039,10 @@ _RESULTADO_PELIGRO = {
         "provincia": "Pontevedra",
         "current": {"t2m_c": 36.0, "rh": 50},
         "uv_index": 7,
-        "perfil_horario": [{"hora": 17, "HI": 39.0, "temp": 36.0},
-                           {"hora": 18, "HI": 38.0, "temp": 35.0}],
+        "perfil_horario": [
+            {"hora": 17, "HI": 39.0, "temp": 36.0},
+            {"hora": 18, "HI": 38.0, "temp": 35.0},
+        ],
     },
     "modelos": {"Formula": {"frio": {"wind_chill_c": 30}, "calor": {"heat_index_c": 39}}},
     "recomendaciones": ["Evita la actividad"],
@@ -953,17 +1063,29 @@ class TestChatAbiertoTrasStart:
     @staticmethod
     def _data_completa():
         return {
-            "sexo": "hombre", "edad": 57, "porcentaje_grasa": 20.5,
-            "fototipo": "3", "aclimatado": False, "nivel_actividad": "moderada",
-            "entrenado": True, "duracion_h": 2, "hora_inicio": 17,
-            "comorbilidades": {"cardiovascular"}, "farmacos": {"diureticos_asa"},
-            "estado_previo": {"fiesta"}, "situacion_social": {"vive_solo"},
-            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "lugar": "Aldán",
+            "sexo": "hombre",
+            "edad": 57,
+            "porcentaje_grasa": 20.5,
+            "fototipo": "3",
+            "aclimatado": False,
+            "nivel_actividad": "moderada",
+            "entrenado": True,
+            "duracion_h": 2,
+            "hora_inicio": 17,
+            "comorbilidades": {"cardiovascular"},
+            "farmacos": {"diureticos_asa"},
+            "estado_previo": {"fiesta"},
+            "situacion_social": {"vive_solo"},
+            "lat": 42.29,
+            "lon": -8.81,
+            "provincia": "Pontevedra",
+            "lugar": "Aldán",
         }
 
     @staticmethod
     def _capturar_enviados(monkeypatch):
         import climasafeai.bot.telegram_bot as mod
+
         enviados: list[str] = []
 
         async def _fake_enviar(_cid, texto, kb=None, reply_markup=None):
@@ -975,6 +1097,7 @@ class TestChatAbiertoTrasStart:
     def test_cierre_invita_a_preguntar_y_a_volver_a_start(self):
         """Criterio 4: el cierre del parte invita a dudas (SPF) y a /start."""
         import climasafeai.bot.telegram_bot as mod
+
         assert "SPF" in mod.CHAT_CIERRE
         assert "/start" in mod.CHAT_CIERRE
         assert "duda" in mod.CHAT_CIERRE.lower()
@@ -984,14 +1107,17 @@ class TestChatAbiertoTrasStart:
         """Criterio 2: con LLM, la respuesta la redacta ask_con_perfil y el
         chat queda abierto para preguntas."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
         monkeypatch.setattr(
-            mod, "ask_con_perfil",
+            mod,
+            "ask_con_perfil",
             lambda _p, _r, _c=None, _l=None: _RESPONSE_LLM,
         )
         _, enviados = self._capturar_enviados(monkeypatch)
         _conversaciones[1] = {
-            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "estado": Estado.DONE,
+            "modelo": "ollama/qwen2.5:7b",
             "data": self._data_completa(),
         }
 
@@ -1006,16 +1132,18 @@ class TestChatAbiertoTrasStart:
     async def test_determinista_responde_con_plantilla_y_cierra(self, monkeypatch):
         """Criterio 3: sin LLM, plantilla y cierre normal, sin chat abierto."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
         _, enviados = self._capturar_enviados(monkeypatch)
         _conversaciones[1] = {
-            "estado": Estado.DONE, "modelo": mod.MODELO_DETERMINISTA,
+            "estado": Estado.DONE,
+            "modelo": mod.MODELO_DETERMINISTA,
             "data": self._data_completa(),
         }
 
         await mod._finalizar_parte(1)
 
-        assert 1 not in _conversaciones          # cerrada
+        assert 1 not in _conversaciones  # cerrada
         assert len(enviados) == 1
         assert "PELIGRO" in enviados[0]
         assert mod.CHAT_CIERRE not in enviados[0]
@@ -1024,6 +1152,7 @@ class TestChatAbiertoTrasStart:
     async def test_pregunta_tras_el_parte_va_al_rag_con_el_parte_de_contexto(self, monkeypatch):
         """Criterio 7: preguntar por SPF responde con info útil, no rechazo."""
         import climasafeai.bot.telegram_bot as mod
+
         recibido: dict = {}
 
         def _fake_rag(q, k1, k2, c, ctx=None, perfil=None):
@@ -1034,7 +1163,8 @@ class TestChatAbiertoTrasStart:
 
         monkeypatch.setattr(mod, "ask_with_rag", _fake_rag)
         _conversaciones[1] = {
-            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "estado": Estado.DONE,
+            "modelo": "ollama/qwen2.5:7b",
             "ultima_prediccion": _RESPONSE_LLM,
             "data": {"_prediccion_hecha": True},
         }
@@ -1051,9 +1181,11 @@ class TestChatAbiertoTrasStart:
     async def test_salir_cierra_el_chat_y_vuelve_al_inicio(self, monkeypatch, comando):
         """Criterio 6: /salir (o equivalente) cierra el chat de preguntas."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "ask_with_rag", lambda *a, **k: {"answer": "x"})
         _conversaciones[1] = {
-            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "estado": Estado.DONE,
+            "modelo": "ollama/qwen2.5:7b",
             "ultima_prediccion": _RESPONSE_LLM,
             "data": {"_prediccion_hecha": True},
         }
@@ -1071,10 +1203,12 @@ class TestChatAbiertoTrasStart:
     async def test_start_nuevo_sobreescribe_el_parte_anterior(self, monkeypatch):
         """Criterio 5: /start nuevo resetea el parte y arranca el formulario."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "_db", _FakeDBSinPerfil())
         monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
         _conversaciones[1] = {
-            "estado": Estado.DONE, "modelo": "ollama/qwen2.5:7b",
+            "estado": Estado.DONE,
+            "modelo": "ollama/qwen2.5:7b",
             "ultima_prediccion": _RESPONSE_LLM,
             "ultimo_resultado": _RESULTADO_PELIGRO,
             "data": {"_prediccion_hecha": True, "lat": 42.29, "lon": -8.81},
@@ -1092,14 +1226,19 @@ class TestChatAbiertoTrasStart:
     async def test_flujo_completo_con_llm_abre_el_chat_y_responde_spf(self, monkeypatch):
         """De punta a punta: /start con LLM → parte + chat abierto → SPF."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
         monkeypatch.setattr(
-            mod, "ask_con_perfil",
+            mod,
+            "ask_con_perfil",
             lambda _p, _r, _c=None, _l=None: _RESPONSE_LLM,
         )
         monkeypatch.setattr(
-            mod, "ask_with_rag",
-            lambda q, k1, k2, c, ctx=None, perfil=None: {"answer": "Usa SPF 30+ y renueva cada 2 horas."},
+            mod,
+            "ask_with_rag",
+            lambda q, k1, k2, c, ctx=None, perfil=None: {
+                "answer": "Usa SPF 30+ y renueva cada 2 horas."
+            },
         )
         enviados: list[str] = []
 
@@ -1110,15 +1249,21 @@ class TestChatAbiertoTrasStart:
 
         monkeypatch.setattr(mod, "_tg", _fake_tg)
         _conversaciones[1] = {
-            "estado": Estado.GUARDAR_PERFIL, "modelo": "ollama/qwen2.5:7b",
+            "estado": Estado.GUARDAR_PERFIL,
+            "modelo": "ollama/qwen2.5:7b",
             "data": self._data_completa(),
         }
 
         # El usuario pulsa "No" a guardar perfil → DONE → parte con LLM + chat abierto
-        await mod.procesar_update({"callback_query": {
-            "id": "q1", "data": "guardar_no",
-            "message": {"chat": {"id": 1}, "message_id": 1},
-        }})
+        await mod.procesar_update(
+            {
+                "callback_query": {
+                    "id": "q1",
+                    "data": "guardar_no",
+                    "message": {"chat": {"id": 1}, "message_id": 1},
+                }
+            }
+        )
 
         assert len(enviados) == 1, enviados
         assert _RESPONSE_LLM in enviados[0]
@@ -1147,7 +1292,8 @@ class TestEnviarMensajeMarkdown:
             intentos.append(kwargs)
             if "parse_mode" in kwargs:
                 raise httpx.HTTPStatusError(
-                    "bad entities", request=httpx.Request("POST", "http://x"),
+                    "bad entities",
+                    request=httpx.Request("POST", "http://x"),
                     response=httpx.Response(400),
                 )
             return {"ok": True}
@@ -1218,6 +1364,7 @@ class TestFechaNacimiento:
     async def test_fecha_nacimiento_flujo_guarda_edad_calculada(self, monkeypatch):
         """El formulario guarda data['edad'] como entero desde la fecha."""
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "date", _HoyFijo)
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.EDAD
@@ -1230,6 +1377,7 @@ class TestFechaNacimiento:
     @pytest.mark.asyncio
     async def test_fecha_nacimiento_flujo_formato_malo_no_avanza(self, monkeypatch):
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "date", _HoyFijo)
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.EDAD
@@ -1241,6 +1389,7 @@ class TestFechaNacimiento:
     @pytest.mark.asyncio
     async def test_fecha_nacimiento_flujo_fecha_futura_no_avanza(self, monkeypatch):
         import climasafeai.bot.telegram_bot as mod
+
         monkeypatch.setattr(mod, "date", _HoyFijo)
         _conv_limpia()
         _conversaciones[1]["estado"] = Estado.EDAD
@@ -1319,8 +1468,10 @@ class TestPartePorcentaje:
             # parte van en el mensaje con role=user.
             user_msgs = [m for m in messages if m["role"] == "user"]
             capturado["prompt"] = user_msgs[0]["content"]
-            return ("Moaña — Riesgo PRECAUCIÓN: 21% de probabilidad de riesgo térmico "
-                    "durante la actividad. Mantente hidratado.")
+            return (
+                "Moaña — Riesgo PRECAUCIÓN: 21% de probabilidad de riesgo térmico "
+                "durante la actividad. Mantente hidratado."
+            )
 
         monkeypatch.setattr(rag, "_chat_litellm", _fake_chat)
         texto = rag.ask_con_perfil(
@@ -1353,17 +1504,36 @@ class TestParteBOT020:
         return {
             "clase_final": clase,
             "clase_final_label": "PELIGRO" if clase >= 2 else "PRECAUCIÓN",
-            "perfil": {"calor": {"prob_personalizada": prob, "factores": [
-                {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
-                 "categoria": "ocupacional", "factor": 2.2},
-                {"nombre": "duración 8.0 h", "categoria": "fisiologico", "factor": 1.4},
-                {"nombre": "hora inicio 8:00 (solapa pico calor)", "categoria": "fisiologico", "factor": 1.2},
-                {"nombre": "falta de sueño / mala noche", "categoria": "fisiologico", "factor": 1.2},
-            ]}},
+            "perfil": {
+                "calor": {
+                    "prob_personalizada": prob,
+                    "factores": [
+                        {
+                            "nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
+                            "categoria": "ocupacional",
+                            "factor": 2.2,
+                        },
+                        {"nombre": "duración 8.0 h", "categoria": "fisiologico", "factor": 1.4},
+                        {
+                            "nombre": "hora inicio 8:00 (solapa pico calor)",
+                            "categoria": "fisiologico",
+                            "factor": 1.2,
+                        },
+                        {
+                            "nombre": "falta de sueño / mala noche",
+                            "categoria": "fisiologico",
+                            "factor": 1.2,
+                        },
+                    ],
+                }
+            },
             "perfil_usuario": {
-                "hora_inicio": 8, "duracion_actividad_h": 8,
-                "nivel_actividad": "moderada", "aclimatado": False,
-                "ocupacion": "construccion", "falta_sueno": True,
+                "hora_inicio": 8,
+                "duracion_actividad_h": 8,
+                "nivel_actividad": "moderada",
+                "aclimatado": False,
+                "ocupacion": "construccion",
+                "falta_sueno": True,
             },
             "weather": {
                 "provincia": "Madrid",
@@ -1372,8 +1542,21 @@ class TestParteBOT020:
                 # Campana: el HI sube hasta las 13 y baja, para que el pico de
                 # la curva quede en medio de la ventana y haya inicio/pico/fin.
                 "perfil_horario": [
-                    {"hora": h, "HI": {8: 25, 9: 28, 10: 31, 11: 33, 12: 35, 13: 37, 14: 34, 15: 31, 16: 29}[h],
-                     "temp": 20 + h}
+                    {
+                        "hora": h,
+                        "HI": {
+                            8: 25,
+                            9: 28,
+                            10: 31,
+                            11: 33,
+                            12: 35,
+                            13: 37,
+                            14: 34,
+                            15: 31,
+                            16: 29,
+                        }[h],
+                        "temp": 20 + h,
+                    }
                     for h in range(8, 17)
                 ],
             },
@@ -1426,7 +1609,8 @@ class TestParteBOT020:
     def test_comparacion_con_salida_anterior(self):
         """Criterio 5: si hay salida previa y el nivel sube, se dice."""
         texto = _format_template(
-            self._resultado(), "Madrid",
+            self._resultado(),
+            "Madrid",
             salida_anterior={"clase_final": 0, "actividad": "correr por la tarde"},
         )
         assert "Es un nivel más alto que la simulación anterior de correr por la tarde." in texto
@@ -1475,7 +1659,10 @@ class TestFranjasBOT012:
 
     def test_pico_de_riesgo_viene_de_pico_riesgo_actividad(self):
         """Criterio 2: la cifra de riesgo de la franja sale de pico_riesgo_actividad."""
-        from climasafeai.features.personalizacion import pico_riesgo_actividad, riesgo_horario_acumulado
+        from climasafeai.features.personalizacion import (
+            pico_riesgo_actividad,
+            riesgo_horario_acumulado,
+        )
 
         result = self._resultado()
         ph = result["weather"]["perfil_horario"]
@@ -1506,7 +1693,13 @@ class TestChatParteConcisa:
     @staticmethod
     def _conv():
         result = TestRecomendacionCanalDominante._resultado(
-            prob_calor=0.21, prob_frio=0.02, t=35.3, uv=7.6, wc=5, hi=38, clase=1,
+            prob_calor=0.21,
+            prob_frio=0.02,
+            t=35.3,
+            uv=7.6,
+            wc=5,
+            hi=38,
+            clase=1,
         )
         return {
             "modelo": "ollama/qwen2.5:7b",
@@ -1522,11 +1715,11 @@ class TestChatParteConcisa:
         ctx = _contexto_parte_conversacion(self._conv())
 
         assert ctx.startswith("Parte que le acabas de dar al usuario")
-        assert "O Casal" in ctx                      # el parte entregado
-        assert "21%" in ctx                          # probabilidad real
-        assert "Pontevedra" in ctx                   # ubicación real
-        assert "no_aclimatado" in ctx                # factor real de esa predicción
-        assert "2-3 frases" in ctx                   # instrucción de concisión
+        assert "O Casal" in ctx  # el parte entregado
+        assert "21%" in ctx  # probabilidad real
+        assert "Pontevedra" in ctx  # ubicación real
+        assert "no_aclimatado" in ctx  # factor real de esa predicción
+        assert "2-3 frases" in ctx  # instrucción de concisión
         assert "sin textos genéricos" in ctx
 
     def test_chat_parte_concisa_contexto_lleva_multiplicadores_y_ocupacion(self):
@@ -1535,11 +1728,16 @@ class TestChatParteConcisa:
         conv = self._conv()
         # Factores como los del pipeline real: dicts {nombre, factor}
         conv["ultimo_resultado"]["perfil"]["calor"]["factores"] = [
-            {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)", "factor": 2.2},
+            {
+                "nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
+                "factor": 2.2,
+            },
             {"nombre": "no aclimatado", "factor": 1.3},
         ]
         conv["ultimo_resultado"]["perfil_usuario"] = {
-            "hora_inicio": 8, "duracion_actividad_h": 2, "ocupacion": "construccion",
+            "hora_inicio": 8,
+            "duracion_actividad_h": 2,
+            "ocupacion": "construccion",
         }
 
         ctx = _contexto_parte_conversacion(conv)
@@ -1557,6 +1755,7 @@ class TestChatParteConcisa:
     @pytest.mark.asyncio
     async def test_chat_parte_concisa_flujo_pasa_el_contexto_al_rag(self, monkeypatch):
         import climasafeai.bot.telegram_bot as mod
+
         recibido: dict = {}
 
         def _fake_rag(q, k1, k2, c, ctx=None, perfil=None):
@@ -1591,7 +1790,13 @@ class TestChatBOT014:
     @staticmethod
     def _conv(prob_calor=0.21, prob_frio=0.02, factores_calor=None, factores_frio=None):
         result = TestRecomendacionCanalDominante._resultado(
-            prob_calor=prob_calor, prob_frio=prob_frio, t=35.3, uv=7.6, wc=5, hi=38, clase=1,
+            prob_calor=prob_calor,
+            prob_frio=prob_frio,
+            t=35.3,
+            uv=7.6,
+            wc=5,
+            hi=38,
+            clase=1,
         )
         result["perfil"]["calor"]["factores"] = factores_calor or [
             {"nombre": "trabajo", "factor": 2.2},
@@ -1634,11 +1839,13 @@ class TestChatBOT014:
     def test_factores_ordenados_por_coeficiente_con_su_peso(self):
         from climasafeai.bot.telegram_bot import _contexto_parte_conversacion
 
-        conv = self._conv(factores_calor=[
-            {"nombre": "menor", "factor": 1.1},
-            {"nombre": "mayor", "factor": 2.2},
-            {"nombre": "medio", "factor": 1.5},
-        ])
+        conv = self._conv(
+            factores_calor=[
+                {"nombre": "menor", "factor": 1.1},
+                {"nombre": "mayor", "factor": 2.2},
+                {"nombre": "medio", "factor": 1.5},
+            ]
+        )
         ctx = _contexto_parte_conversacion(conv)
 
         assert "mayor (x2.2)" in ctx
@@ -1659,17 +1866,29 @@ class TestBOT019:
     """
 
     PERFIL = {
-        "alias": "Aldán", "sexo": "hombre", "edad": 57,
-        "porcentaje_grasa": 20.5, "fototipo": 3, "aclimatado": False,
-        "comorbilidades": ["cardiovascular"], "farmacos": ["diureticos_asa"],
+        "alias": "Aldán",
+        "sexo": "hombre",
+        "edad": 57,
+        "porcentaje_grasa": 20.5,
+        "fototipo": 3,
+        "aclimatado": False,
+        "comorbilidades": ["cardiovascular"],
+        "farmacos": ["diureticos_asa"],
         "situacion_social": ["vive_solo"],
     }
     PERFIL_CON_UBICACION = {
-        **PERFIL, "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+        **PERFIL,
+        "lat": 42.29,
+        "lon": -8.81,
+        "provincia": "Pontevedra",
     }
     RUTINA = {
-        "id": 3, "nombre": "correr", "dias": "1",
-        "hora_inicio": 8.0, "hora_fin": 10.0, "deporte": "correr",
+        "id": 3,
+        "nombre": "correr",
+        "dias": "1",
+        "hora_inicio": 8.0,
+        "hora_fin": 10.0,
+        "deporte": "correr",
         "ocupacion": None,
     }
 
@@ -1715,9 +1934,16 @@ class TestBOT019:
         monkeypatch.setattr(mod, "_tg", _fake_tg)
         monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
         monkeypatch.setattr(mod, "datetime", self._FakeDatetime)
-        monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
-            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
-        })
+        monkeypatch.setattr(
+            mod,
+            "buscar_lugar",
+            lambda n: {
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
+                "nombre": "Aldán, Pontevedra",
+            },
+        )
         return mod, enviados
 
     @pytest.mark.asyncio
@@ -1749,19 +1975,19 @@ class TestBOT019:
             "data": mod._perfil_a_data(self.PERFIL),
             "modelo": mod.MODELO_DETERMINISTA,
         }
-        await procesar_callback(1, "muy_intensa")      # intensidad (MET de correr)
-        await procesar_callback(1, "si")               # entrenado
-        await procesar_mensaje(1, "2")                 # duración
-        await procesar_mensaje(1, "8")                 # hora de inicio
-        await procesar_callback(1, "propia")           # por su cuenta
-        await procesar_callback(1, "correr")           # deporte
-        mod._saltar_si_prellenado(conv)                # → ESTADO_PREVIO
+        await procesar_callback(1, "muy_intensa")  # intensidad (MET de correr)
+        await procesar_callback(1, "si")  # entrenado
+        await procesar_mensaje(1, "2")  # duración
+        await procesar_mensaje(1, "8")  # hora de inicio
+        await procesar_callback(1, "propia")  # por su cuenta
+        await procesar_callback(1, "correr")  # deporte
+        mod._saltar_si_prellenado(conv)  # → ESTADO_PREVIO
         assert conv["estado"] == Estado.ESTADO_PREVIO
         await procesar_callback(1, "fiesta")
         await procesar_callback(1, "__done__")
-        mod._saltar_si_prellenado(conv)                # → UBICACION
+        mod._saltar_si_prellenado(conv)  # → UBICACION
         assert conv["estado"] == Estado.UBICACION
-        await procesar_mensaje(1, "Aldán")             # ubicación
+        await procesar_mensaje(1, "Aldán")  # ubicación
         await mod.ejecutar_prediccion(1)
         antes = capturas[-1]
 
@@ -1772,18 +1998,18 @@ class TestBOT019:
         conv = _conversaciones[1]
         assert conv["estado"] == Estado.CONFIRMAR_DIA
         await procesar_callback(1, "confirmar_si")
-        mod._saltar_si_prellenado(conv)                # → ESTADO_PREVIO
+        mod._saltar_si_prellenado(conv)  # → ESTADO_PREVIO
         assert conv["estado"] == Estado.ESTADO_PREVIO
         await procesar_callback(1, "fiesta")
         await procesar_callback(1, "__done__")
-        mod._saltar_si_prellenado(conv)                # → UBICACION saltada → GUARDAR_PERFIL
+        mod._saltar_si_prellenado(conv)  # → UBICACION saltada → GUARDAR_PERFIL
         assert conv["estado"] == Estado.GUARDAR_PERFIL
         await mod.ejecutar_prediccion(1)
         despues = capturas[-1]
 
         assert antes == despues, f"ANTES: {antes}\nDESPUÉS: {despues}"
         perfil = despues["perfil"]
-        assert perfil["nivel_actividad"] == "muy_intensa"   # MET de correr (10.5)
+        assert perfil["nivel_actividad"] == "muy_intensa"  # MET de correr (10.5)
         assert perfil["duracion_actividad_h"] == 2.0
         assert perfil["hora_inicio"] == 8
         assert perfil["entrenado"] is True
@@ -1798,12 +2024,16 @@ class TestBOT019:
 
         mod, enviados = self._montar(monkeypatch)
         monkeypatch.setattr("climasafeai.llm.rag_qwen.ask_con_perfil", lambda *a, **k: None)
-        monkeypatch.setattr(mod, "predict_ensemble", lambda **kwargs: {
-            "clase_final_label": "SEGURO",
-            "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 22.0, "rh": 70}},
-            "perfil": {"calor": {"prob_personalizada": 0.1, "factores": []}},
-            "recomendaciones": [],
-        })
+        monkeypatch.setattr(
+            mod,
+            "predict_ensemble",
+            lambda **kwargs: {
+                "clase_final_label": "SEGURO",
+                "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 22.0, "rh": 70}},
+                "perfil": {"calor": {"prob_personalizada": 0.1, "factores": []}},
+                "recomendaciones": [],
+            },
+        )
 
         async def _finalizar_si(es_final):
             if es_final:
@@ -1835,15 +2065,15 @@ class TestBOT019:
             else:
                 await mod.enviar_siguiente_pregunta(1)
 
-        await _click("intensa")          # ACTIVIDAD
-        await _click("no")               # ENTRENADO
-        await _texto("2")                # DURACION
-        await _texto("8")                # HORA_INICIO
-        await _click("propia")           # TRABAJO
-        await _click("correr")           # DEPORTE
-        await _click("fiesta")           # ESTADO_PREVIO
+        await _click("intensa")  # ACTIVIDAD
+        await _click("no")  # ENTRENADO
+        await _texto("2")  # DURACION
+        await _texto("8")  # HORA_INICIO
+        await _click("propia")  # TRABAJO
+        await _click("correr")  # DEPORTE
+        await _click("fiesta")  # ESTADO_PREVIO
         await _click("__done__")
-        await _texto("Aldán")            # UBICACION (perfil con ubicación pero SIN rutina: se pregunta)
+        await _texto("Aldán")  # UBICACION (perfil con ubicación pero SIN rutina: se pregunta)
         turnos_antes = turnos
         conversacion_antes = list(enviados)
 
@@ -1853,8 +2083,8 @@ class TestBOT019:
         enviados.clear()
         turnos = 0
         await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
-        await _click("confirmar_si")     # CONFIRMAR_DIA
-        await _click("__done__")         # ESTADO_PREVIO (sin nada)
+        await _click("confirmar_si")  # CONFIRMAR_DIA
+        await _click("__done__")  # ESTADO_PREVIO (sin nada)
         turnos_despues = turnos
         conversacion_despues = list(enviados)
 
@@ -1894,7 +2124,14 @@ class TestBOT019:
         # "Cambiar algo": se limpia lo deducido y se vuelve a preguntar el día
         await procesar_callback(1, "confirmar_no")
         assert conv["estado"] == Estado.ACTIVIDAD
-        for k in ("hora_inicio", "duracion_h", "nivel_actividad", "deporte", "ocupacion", "_por_trabajo"):
+        for k in (
+            "hora_inicio",
+            "duracion_h",
+            "nivel_actividad",
+            "deporte",
+            "ocupacion",
+            "_por_trabajo",
+        ):
             assert k not in conv["data"], k
         # El perfil no se toca
         assert conv["data"]["sexo"] == "hombre"
@@ -1916,7 +2153,10 @@ class TestBOT019:
         # Con varias rutinas hoy tampoco se deduce: /start pregunta por UNA salida
         mod._db = self._FakeDB(
             dict(self.PERFIL_CON_UBICACION),
-            rutinas_hoy=[dict(self.RUTINA), dict({**self.RUTINA, "id": 4, "deporte": None, "ocupacion": "campo"})],
+            rutinas_hoy=[
+                dict(self.RUTINA),
+                dict({**self.RUTINA, "id": 4, "deporte": None, "ocupacion": "campo"}),
+            ],
         )
         _conversaciones.clear()
         await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
@@ -1970,17 +2210,31 @@ class TestBOT017:
     """
 
     PERFIL = {
-        "alias": "Aldán", "sexo": "hombre", "edad": 57,
-        "porcentaje_grasa": 20.5, "fototipo": 3, "aclimatado": False,
-        "comorbilidades": ["cardiovascular"], "farmacos": ["diureticos_asa"],
+        "alias": "Aldán",
+        "sexo": "hombre",
+        "edad": 57,
+        "porcentaje_grasa": 20.5,
+        "fototipo": 3,
+        "aclimatado": False,
+        "comorbilidades": ["cardiovascular"],
+        "farmacos": ["diureticos_asa"],
         "situacion_social": ["vive_solo"],
-        "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+        "lat": 42.29,
+        "lon": -8.81,
+        "provincia": "Pontevedra",
     }
     ULTIMA_SALIDA = {
-        "actividad": "Correr", "deporte": "Correr", "ocupacion": None,
-        "nivel_actividad": "muy_intensa", "duracion_h": 2.0, "hora_inicio": 8,
-        "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
-        "entrenado": True, "clase_final": 0,
+        "actividad": "Correr",
+        "deporte": "Correr",
+        "ocupacion": None,
+        "nivel_actividad": "muy_intensa",
+        "duracion_h": 2.0,
+        "hora_inicio": 8,
+        "lat": 42.29,
+        "lon": -8.81,
+        "provincia": "Pontevedra",
+        "entrenado": True,
+        "clase_final": 0,
     }
 
     class _FakeDB:
@@ -2015,20 +2269,35 @@ class TestBOT017:
         monkeypatch.setattr(mod, "_tg", _fake_tg)
         monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
         monkeypatch.setattr("climasafeai.llm.rag_qwen.ask_con_perfil", lambda *a, **k: None)
-        monkeypatch.setattr(mod, "predict_ensemble", lambda **kwargs: {
-            "clase_final": 2,
-            "clase_final_label": "PELIGRO",
-            "perfil": {"calor": {"prob_personalizada": 0.69, "factores": []}},
-            "perfil_usuario": {
-                "hora_inicio": kwargs.get("perfil", {}).get("hora_inicio"),
-                "duracion_actividad_h": kwargs.get("perfil", {}).get("duracion_actividad_h"),
+        monkeypatch.setattr(
+            mod,
+            "predict_ensemble",
+            lambda **kwargs: {
+                "clase_final": 2,
+                "clase_final_label": "PELIGRO",
+                "perfil": {"calor": {"prob_personalizada": 0.69, "factores": []}},
+                "perfil_usuario": {
+                    "hora_inicio": kwargs.get("perfil", {}).get("hora_inicio"),
+                    "duracion_actividad_h": kwargs.get("perfil", {}).get("duracion_actividad_h"),
+                },
+                "weather": {
+                    "provincia": "Pontevedra",
+                    "current": {"t2m_c": 30.0, "rh": 60},
+                    "uv_index": 8,
+                },
+                "recomendaciones": [],
             },
-            "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 30.0, "rh": 60}, "uv_index": 8},
-            "recomendaciones": [],
-        })
-        monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
-            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
-        })
+        )
+        monkeypatch.setattr(
+            mod,
+            "buscar_lugar",
+            lambda n: {
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
+                "nombre": "Aldán, Pontevedra",
+            },
+        )
         return mod, enviados
 
     def _perfil_con_salida(self):
@@ -2048,10 +2317,17 @@ class TestBOT017:
         _conversaciones[1] = {
             "estado": Estado.DONE,
             "data": {
-                "sexo": "hombre", "edad": 57, "aclimatado": False,
-                "nivel_actividad": "muy_intensa", "duracion_h": 2.0,
-                "hora_inicio": 8, "deporte": "Correr", "entrenado": True,
-                "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+                "sexo": "hombre",
+                "edad": 57,
+                "aclimatado": False,
+                "nivel_actividad": "muy_intensa",
+                "duracion_h": 2.0,
+                "hora_inicio": 8,
+                "deporte": "Correr",
+                "entrenado": True,
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
             },
             "modelo": mod.MODELO_DETERMINISTA,
         }
@@ -2079,10 +2355,17 @@ class TestBOT017:
         _conversaciones[1] = {
             "estado": Estado.DONE,
             "data": {
-                "sexo": "hombre", "edad": 57, "aclimatado": False,
-                "nivel_actividad": "ligera", "duracion_h": 8.0,
-                "hora_inicio": 8, "ocupacion": "campo", "entrenado": True,
-                "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+                "sexo": "hombre",
+                "edad": 57,
+                "aclimatado": False,
+                "nivel_actividad": "ligera",
+                "duracion_h": 8.0,
+                "hora_inicio": 8,
+                "ocupacion": "campo",
+                "entrenado": True,
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
             },
             "modelo": mod.MODELO_DETERMINISTA,
         }
@@ -2131,7 +2414,11 @@ class TestBOT017:
                     "hora_inicio": kwargs["perfil"]["hora_inicio"],
                     "duracion_actividad_h": kwargs["perfil"]["duracion_actividad_h"],
                 },
-                "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 30.0, "rh": 60}, "uv_index": 8},
+                "weather": {
+                    "provincia": "Pontevedra",
+                    "current": {"t2m_c": 30.0, "rh": 60},
+                    "uv_index": 8,
+                },
                 "recomendaciones": [],
             }
 
@@ -2143,9 +2430,16 @@ class TestBOT017:
         assert _conversaciones[1]["estado"] == Estado.REPETIR_SALIDA
 
         enviados.clear()
-        await mod.procesar_update({"update_id": 1, "callback_query": {
-            "id": "c1", "message": {"chat": {"id": 1}}, "data": "repetir_si",
-        }})
+        await mod.procesar_update(
+            {
+                "update_id": 1,
+                "callback_query": {
+                    "id": "c1",
+                    "message": {"chat": {"id": 1}},
+                    "data": "repetir_si",
+                },
+            }
+        )
 
         # No se pregunta nada: en modo determinista el chat termina al parte.
         assert _conversaciones.get(1) is None, _conversaciones
@@ -2176,15 +2470,32 @@ class TestBOT017:
         assert _conversaciones[1]["estado"] == Estado.REPETIR_SALIDA
 
         enviados.clear()
-        await mod.procesar_update({"update_id": 1, "callback_query": {
-            "id": "c1", "message": {"chat": {"id": 1}}, "data": "repetir_no",
-        }})
+        await mod.procesar_update(
+            {
+                "update_id": 1,
+                "callback_query": {
+                    "id": "c1",
+                    "message": {"chat": {"id": 1}},
+                    "data": "repetir_no",
+                },
+            }
+        )
 
         conv = _conversaciones[1]
         assert conv["estado"] == Estado.ACTIVIDAD
         # Lo repetido se limpia: el formulario vuelve a preguntar el día entero
-        for k in ("hora_inicio", "duracion_h", "nivel_actividad", "deporte",
-                  "ocupacion", "entrenado", "_por_trabajo", "lat", "lon", "provincia"):
+        for k in (
+            "hora_inicio",
+            "duracion_h",
+            "nivel_actividad",
+            "deporte",
+            "ocupacion",
+            "entrenado",
+            "_por_trabajo",
+            "lat",
+            "lon",
+            "provincia",
+        ):
             assert k not in conv["data"], k
         # Los datos personales del perfil se conservan
         assert conv["data"]["sexo"] == "hombre"
@@ -2221,23 +2532,42 @@ class TestBOT021:
     """
 
     PERFIL = {
-        "alias": "Aldán", "sexo": "hombre", "edad": 57,
-        "porcentaje_grasa": 20.5, "fototipo": 3, "aclimatado": False,
-        "comorbilidades": ["cardiovascular"], "farmacos": ["diureticos_asa"],
+        "alias": "Aldán",
+        "sexo": "hombre",
+        "edad": 57,
+        "porcentaje_grasa": 20.5,
+        "fototipo": 3,
+        "aclimatado": False,
+        "comorbilidades": ["cardiovascular"],
+        "farmacos": ["diureticos_asa"],
         "situacion_social": ["vive_solo"],
     }
     PERFIL_CON_UBICACION = {
-        **PERFIL, "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
+        **PERFIL,
+        "lat": 42.29,
+        "lon": -8.81,
+        "provincia": "Pontevedra",
     }
     ULTIMA_SALIDA = {
-        "actividad": "Correr", "deporte": "Correr", "ocupacion": None,
-        "nivel_actividad": "muy_intensa", "duracion_h": 2.0, "hora_inicio": 8,
-        "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra",
-        "entrenado": True, "clase_final": 0,
+        "actividad": "Correr",
+        "deporte": "Correr",
+        "ocupacion": None,
+        "nivel_actividad": "muy_intensa",
+        "duracion_h": 2.0,
+        "hora_inicio": 8,
+        "lat": 42.29,
+        "lon": -8.81,
+        "provincia": "Pontevedra",
+        "entrenado": True,
+        "clase_final": 0,
     }
     RUTINA = {
-        "id": 3, "nombre": "correr", "dias": "1",
-        "hora_inicio": 8.0, "hora_fin": 10.0, "deporte": "correr",
+        "id": 3,
+        "nombre": "correr",
+        "dias": "1",
+        "hora_inicio": 8.0,
+        "hora_fin": 10.0,
+        "deporte": "correr",
         "ocupacion": None,
     }
 
@@ -2291,7 +2621,11 @@ class TestBOT021:
                     "hora_inicio": kwargs.get("perfil", {}).get("hora_inicio"),
                     "duracion_actividad_h": kwargs.get("perfil", {}).get("duracion_actividad_h"),
                 },
-                "weather": {"provincia": "Pontevedra", "current": {"t2m_c": 30.0, "rh": 60}, "uv_index": 8},
+                "weather": {
+                    "provincia": "Pontevedra",
+                    "current": {"t2m_c": 30.0, "rh": 60},
+                    "uv_index": 8,
+                },
                 "recomendaciones": [],
             }
 
@@ -2299,9 +2633,16 @@ class TestBOT021:
         monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
         monkeypatch.setattr(mod, "predict_ensemble", _fake_predict)
         monkeypatch.setattr("climasafeai.llm.rag_qwen.ask_con_perfil", lambda *a, **k: None)
-        monkeypatch.setattr(mod, "buscar_lugar", lambda n: {
-            "lat": 42.29, "lon": -8.81, "provincia": "Pontevedra", "nombre": "Aldán, Pontevedra",
-        })
+        monkeypatch.setattr(
+            mod,
+            "buscar_lugar",
+            lambda n: {
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
+                "nombre": "Aldán, Pontevedra",
+            },
+        )
         return mod, enviados
 
     def _perfil_con_salida(self):
@@ -2325,13 +2666,15 @@ class TestBOT021:
         assert _conversaciones[1]["estado"] == Estado.REPETIR_SALIDA
 
         enviados.clear()
-        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "voy al tenis como ayer"}})
+        await mod.procesar_update(
+            {"message": {"chat": {"id": 1}, "text": "voy al tenis como ayer"}}
+        )
 
         # Sin preguntas: se predice directo con el contexto de la última salida.
         assert _conversaciones.get(1) is None, _conversaciones
         assert len(capturas) == 1
         perfil = capturas[0]["perfil"]
-        assert perfil["hora_inicio"] == 8            # de ayer
+        assert perfil["hora_inicio"] == 8  # de ayer
         assert perfil["duracion_actividad_h"] == 2.0  # de ayer
         assert perfil["deporte"] == "Tenis individual"
         assert perfil["nivel_actividad"] == "muy_intensa"  # MET de tenis (8.0)
@@ -2352,12 +2695,14 @@ class TestBOT021:
         assert _conversaciones[1]["estado"] == Estado.ACTIVIDAD
 
         enviados.clear()
-        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "esta tarde correr 40 min"}})
+        await mod.procesar_update(
+            {"message": {"chat": {"id": 1}, "text": "esta tarde correr 40 min"}}
+        )
 
         assert _conversaciones.get(1) is None, _conversaciones
         assert len(capturas) == 1
         perfil = capturas[0]["perfil"]
-        assert perfil["hora_inicio"] == 17           # "esta tarde"
+        assert perfil["hora_inicio"] == 17  # "esta tarde"
         assert perfil["duracion_actividad_h"] == pytest.approx(40 / 60)
         assert perfil["deporte"] == "Correr"
         assert perfil["nivel_actividad"] == "muy_intensa"  # MET de correr (10.5)
@@ -2387,7 +2732,7 @@ class TestBOT021:
         assert _conversaciones.get(1) is None, _conversaciones
         assert len(capturas) == 1
         perfil = capturas[0]["perfil"]
-        assert perfil["hora_inicio"] == 8            # la rutina de hoy
+        assert perfil["hora_inicio"] == 8  # la rutina de hoy
         assert perfil["duracion_actividad_h"] == 2.0
         assert perfil["deporte"] == "Correr"
         assert perfil["nivel_actividad"] == "muy_intensa"
@@ -2407,7 +2752,9 @@ class TestBOT021:
 
         # CON frase libre: 'voy al tenis como ayer' sobre la salida anterior.
         await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "/start"}})
-        await mod.procesar_update({"message": {"chat": {"id": 1}, "text": "voy al tenis como ayer"}})
+        await mod.procesar_update(
+            {"message": {"chat": {"id": 1}, "text": "voy al tenis como ayer"}}
+        )
         assert len(capturas) == 1
         con_frase = capturas[0]
 
@@ -2415,10 +2762,15 @@ class TestBOT021:
         _conversaciones.clear()
         capturas.clear()
         data_form = mod._perfil_a_data(dict(self.PERFIL_CON_UBICACION))
-        data_form.update({
-            "nivel_actividad": "muy_intensa", "duracion_h": 2.0,
-            "hora_inicio": 8, "deporte": "Tenis individual", "entrenado": True,
-        })
+        data_form.update(
+            {
+                "nivel_actividad": "muy_intensa",
+                "duracion_h": 2.0,
+                "hora_inicio": 8,
+                "deporte": "Tenis individual",
+                "entrenado": True,
+            }
+        )
         _conversaciones[1] = {
             "estado": Estado.DONE,
             "data": data_form,
@@ -2523,10 +2875,13 @@ class TestBOT021:
         import climasafeai.bot.telegram_bot as mod
 
         assert mod._interpretar_salida_frase("voy al tenis como ayer") == {
-            "referencia": True, "deporte": "tenis",
+            "referencia": True,
+            "deporte": "tenis",
         }
         assert mod._interpretar_salida_frase("esta tarde correr 40 min") == {
-            "deporte": "correr", "duracion_h": pytest.approx(40 / 60), "hora_inicio": 17,
+            "deporte": "correr",
+            "duracion_h": pytest.approx(40 / 60),
+            "hora_inicio": 17,
         }
         assert mod._interpretar_salida_frase("igual que el martes") == {"referencia": True}
         assert mod._interpretar_salida_frase("como siempre") == {"referencia": True}
@@ -2534,3 +2889,96 @@ class TestBOT021:
         assert mod._frase_describe_salida({"nivel_actividad": "intensa"}) is False
         assert mod._frase_describe_salida({"referencia": True}) is True
         assert mod._frase_describe_salida({"deporte": "tenis"}) is True
+
+
+class TestTG002PerfilVinculado:
+    """TG-002: el perfil creado desde el bot queda vinculado al chat_id de
+    Telegram en SQLite, y un chat con perfil no vuelve a pedir los datos.
+
+    Se ejercita el SQLite real (DBManager sobre tmp_path), no un fake: el
+    criterio es que la asociación quede escrita en la BD.
+    """
+
+    @staticmethod
+    def _montar_con_bd(monkeypatch, tmp_path):
+        """Bot con DBManager real en tmp_path y Telegram stub."""
+        import climasafeai.bot.telegram_bot as mod
+        from climasafeai.db.manager import DBManager
+
+        db = DBManager(tmp_path / "tg002.db")
+        db.initialize()
+        monkeypatch.setattr(mod, "_db", db)
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+
+        async def _fake_tg(method: str, **kwargs):
+            return {"ok": True, "result": {}}
+
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+        return mod, db
+
+    @pytest.mark.asyncio
+    async def test_guardar_perfil_asocia_el_chat_id(self, monkeypatch, tmp_path):
+        """Criterio 1: al guardar el perfil desde el bot, `telegram_chat_id`
+        queda asociado a ese perfil en SQLite."""
+        mod, db = self._montar_con_bd(monkeypatch, tmp_path)
+        _conversaciones.clear()
+        _conversaciones[1] = {
+            "estado": Estado.GUARDAR_PERFIL,
+            "modelo": mod.MODELO_DETERMINISTA,
+            "data": dict(TestChatAbiertoTrasStart._data_completa()),
+        }
+
+        # El usuario pulsa "Sí" a guardar el perfil y escribe el alias
+        respuesta, es_final = await mod.procesar_callback(1, "guardar_si")
+        assert respuesta == "Como quieres llamarte?"
+        assert not es_final
+        await mod.procesar_mensaje(1, "Aldán")
+
+        # El perfil queda vinculado: buscar_por_telegram lo encuentra
+        match = db.buscar_por_telegram("1")
+        assert match is not None, "el chat_id no quedó asociado a ningún perfil"
+        assert match["alias"] == "Aldán"
+        perfil = db.obtener_perfil(match["id"])
+        assert perfil["telegram_chat_id"] == "1"
+        assert perfil["edad"] == 57 and perfil["sexo"] == "hombre"
+
+    @pytest.mark.asyncio
+    async def test_segunda_prediccion_no_vuelve_a_pedir_datos(self, monkeypatch, tmp_path):
+        """Criterio 2: con perfil vinculado, un nuevo /start no vuelve a pedir
+        los datos personales: llega directo a la intensidad del día."""
+        mod, db = self._montar_con_bd(monkeypatch, tmp_path)
+        db.crear_perfil(
+            {
+                "alias": "Aldán",
+                "telegram_chat_id": "1",
+                "sexo": "hombre",
+                "edad": 57,
+                "aclimatado": False,
+                "fototipo": 3,
+                "comorbilidades": ["cardiovascular"],
+                "farmacos": ["diureticos_asa"],
+            }
+        )
+        _conversaciones.clear()
+
+        respuesta = await mod.procesar_mensaje(1, "/start")
+
+        assert "se cargaron tus datos previos" in respuesta.lower()
+        assert _conversaciones[1]["estado"] == Estado.ACTIVIDAD
+        assert _conversaciones[1]["data"].get("_perfil_cargado") is True
+        assert _conversaciones[1]["data"].get("sexo") == "hombre"
+        assert _conversaciones[1]["data"].get("edad") == 57
+
+    @pytest.mark.asyncio
+    async def test_chat_sin_perfil_sigue_pidiendo_datos(self, monkeypatch):
+        """Criterio 3: sin perfil vinculado, /start pide los datos como siempre."""
+        import climasafeai.bot.telegram_bot as mod
+
+        monkeypatch.setattr(mod, "_db", _FakeDBSinPerfil())
+        monkeypatch.setattr(mod, "_modelo_por_defecto", lambda: mod.MODELO_DETERMINISTA)
+        _conversaciones.clear()
+
+        respuesta = await mod.procesar_mensaje(1, "/start")
+
+        assert respuesta == mod.BIENVENIDA
+        assert _conversaciones[1]["estado"] == Estado.SEXO
