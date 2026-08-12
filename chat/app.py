@@ -9,9 +9,11 @@ Se inicia automaticamente via:
 o directamente:
     python -m uvicorn chat.app:app --host 0.0.0.0 --port 8080
 """
+
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,33 +33,32 @@ from climasafeai.features.personalizacion import nivel_actividad_de_deporte
 logger = logging.getLogger(__name__)
 
 
-
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-PROJECT_DIR   = Path(__file__).resolve().parents[1]
-MODELS_DIR    = PROJECT_DIR / "models"
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+MODELS_DIR = PROJECT_DIR / "models"
 ARTIFACTS_DIR = MODELS_DIR / "artifacts"
-CHAT_DIR    = PROJECT_DIR / "chat"
-STATIC_DIR    = CHAT_DIR / "static"
+CHAT_DIR = PROJECT_DIR / "chat"
+STATIC_DIR = CHAT_DIR / "static"
 
 # ---------------------------------------------------------------------------
 # Estado global del servicio
 # ---------------------------------------------------------------------------
 _state: dict[str, Any] = {
-    "models":         {},
-    "scaler":         None,
-    "encoders":       {},
-    "feature_names":  [],
+    "models": {},
+    "scaler": None,
+    "encoders": {},
+    "feature_names": [],
     "target_encoder": None,
-    "model_loaded":   False,
+    "model_loaded": False,
 }
 
 # Constantes del proyecto (fijadas en la generacion del template)
-_PROJECT     = "ClimaSafeAI"
-_ML_TYPE     = "supervisado"
-_TASK_TYPE   = "clasificacion"
-_VERSION     = "0.0.1"
+_PROJECT = "ClimaSafeAI"
+_ML_TYPE = "supervisado"
+_TASK_TYPE = "clasificacion"
+_VERSION = "0.0.1"
 
 
 # ---------------------------------------------------------------------------
@@ -86,9 +87,15 @@ def load_models() -> None:
     if te_path.exists():
         _state["target_encoder"] = joblib.load(te_path)
 
-
-    _skip = {"scaler", "encoders", "pca", "threshold", "feature_names",
-             "target_encoder", "output_dim"}
+    _skip = {
+        "scaler",
+        "encoders",
+        "pca",
+        "threshold",
+        "feature_names",
+        "target_encoder",
+        "output_dim",
+    }
     for path in sorted(MODELS_DIR.glob("*.joblib")):
         if path.stem in _skip or path.stem.startswith("best_params_"):
             continue
@@ -96,8 +103,6 @@ def load_models() -> None:
             _state["models"][path.stem] = joblib.load(path)
         except Exception as exc:
             print(f"[chat/app] No se pudo cargar {path.name}: {exc}", file=sys.stderr)
-
-
 
     _state["model_loaded"] = bool(_state["models"])
     print(f"[chat/app] Modelos cargados: {list(_state['models'].keys())}", file=sys.stderr)
@@ -147,11 +152,9 @@ def predict_one(features: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         return {"error": str(exc)}
 
-
     model_name = list(_state["models"].keys())[0]
-    model      = _state["models"][model_name]
-    pred       = model.predict(X)[0]
-
+    model = _state["models"][model_name]
+    pred = model.predict(X)[0]
 
     prob: float | None = None
     if hasattr(model, "predict_proba"):
@@ -163,9 +166,6 @@ def predict_one(features: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             label = str(pred)
     return {"prediction": int(pred), "probability": prob, "label": label, "model": model_name}
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -241,8 +241,9 @@ def _start_prediction(session: dict) -> str:
     if not features:
         return "   No se detectaron nombres de features. Vuelve a entrenar el modelo."
     # Snapshot de features en la sesion — inmune a reload() durante la prediccion
-    session.update({"state": "collecting", "features": {}, "idx": 0,
-                    "snapshot_features": list(features)})
+    session.update(
+        {"state": "collecting", "features": {}, "idx": 0, "snapshot_features": list(features)}
+    )
     return (
         f"   **Modo prediccion** — introduce el valor de cada feature.\n\n"
         f"**{len(features)} features** en total. Escribe `cancelar` para salir.\n\n"
@@ -258,11 +259,11 @@ def _handle_feature(msg: str, session: dict) -> str:
 
     # Usar snapshot de la sesion (inmune a reload durante la prediccion)
     features = session.get("snapshot_features") or _state["feature_names"]
-    idx      = session["idx"]
-    if idx >= len(features):          # proteccion ante desfase por reload
+    idx = session["idx"]
+    if idx >= len(features):  # proteccion ante desfase por reload
         session["state"] = "idle"
         return "   Sesion de prediccion desfasada. Escribe `predict` para empezar de nuevo."
-    name     = features[idx]
+    name = features[idx]
 
     try:
         value = float(msg.replace(",", "."))
@@ -279,13 +280,12 @@ def _handle_feature(msg: str, session: dict) -> str:
         if "error" in result:
             return f" ✕ Error: {result['error']}"
 
-
-        pred       = result.get("prediction", "?")
-        prob       = result.get("probability")
-        label      = result.get("label")
+        pred = result.get("prediction", "?")
+        prob = result.get("probability")
+        label = result.get("label")
         model_name = result.get("model", "?")
-        prob_str   = f"\n**Confianza:** `{prob:.1%}`" if prob is not None else ""
-        label_str  = f"\n**Clase:** `{label}`" if label else ""
+        prob_str = f"\n**Confianza:** `{prob:.1%}`" if prob is not None else ""
+        label_str = f"\n**Clase:** `{label}`" if label else ""
         return (
             f" ✔ **Resultado de la prediccion**\n\n"
             f"**Prediccion:** `{pred}`{label_str}{prob_str}\n"
@@ -293,12 +293,8 @@ def _handle_feature(msg: str, session: dict) -> str:
             f"¿Otra prediccion? Escribe `predict`."
         )
 
-
     next_name = features[session["idx"]]  # features ya es el snapshot
-    return (
-        f"✓ `{name}` = `{value}`\n\n"
-        f"**[{session['idx'] + 1}/{len(features)}]** `{next_name}`"
-    )
+    return f"✓ `{name}` = `{value}`\n\n**[{session['idx'] + 1}/{len(features)}]** `{next_name}`"
 
 
 # ---------------------------------------------------------------------------
@@ -318,11 +314,16 @@ async def process_message(msg: str, session: dict) -> str:
     if low in ("info"):
         return _info_message()
     if low in ("reload", "recargar"):
-        _state.update({
-            "models": {}, "model_loaded": False,
-            "scaler": None, "encoders": {},
-            "feature_names": [], "target_encoder": None,
-        })
+        _state.update(
+            {
+                "models": {},
+                "model_loaded": False,
+                "scaler": None,
+                "encoders": {},
+                "feature_names": [],
+                "target_encoder": None,
+            }
+        )
         load_models()
         if _state["model_loaded"]:
             return f" ✔ Modelos recargados: **{', '.join(_state['models'].keys())}**"
@@ -347,7 +348,7 @@ async def process_message(msg: str, session: dict) -> str:
             proc = subprocess.Popen(
                 [sys.executable, "main.py"],
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,   # evita deadlock por pipe lleno
+                stdout=subprocess.DEVNULL,  # evita deadlock por pipe lleno
                 stderr=subprocess.DEVNULL,
                 cwd=str(PROJECT_DIR),
                 text=True,
@@ -369,10 +370,7 @@ async def process_message(msg: str, session: dict) -> str:
     if low in ("cancel", "cancelar"):
         return "ℹ No hay ninguna operacion activa."
 
-    return (
-        f"❓ No reconozco `{msg}`.\n\n"
-        f"Escribe `help` para ver los comandos disponibles."
-    )
+    return f"❓ No reconozco `{msg}`.\n\nEscribe `help` para ver los comandos disponibles."
 
 
 # ---------------------------------------------------------------------------
@@ -412,25 +410,30 @@ async def root():
 @app.get("/api/status")
 async def api_status():
     return {
-        "project":      _PROJECT,
-        "ml_type":      _ML_TYPE,
-        "task_type":    _TASK_TYPE,
-        "version":      _VERSION,
+        "project": _PROJECT,
+        "ml_type": _ML_TYPE,
+        "task_type": _TASK_TYPE,
+        "version": _VERSION,
         "model_loaded": _state["model_loaded"],
-        "models":       list(_state["models"].keys()),
+        "models": list(_state["models"].keys()),
         "feature_count": len(_state["feature_names"]),
-        "features":     _state["feature_names"],
+        "features": _state["feature_names"],
         "has_pending_factors": len(_get_pending_factors() or []) > 0,
     }
 
 
 @app.get("/api/reload")
 async def api_reload():
-    _state.update({
-        "models": {}, "model_loaded": False,
-        "scaler": None, "encoders": {},
-        "feature_names": [], "target_encoder": None,
-    })
+    _state.update(
+        {
+            "models": {},
+            "model_loaded": False,
+            "scaler": None,
+            "encoders": {},
+            "feature_names": [],
+            "target_encoder": None,
+        }
+    )
     load_models()
     return {
         "model_loaded": _state["model_loaded"],
@@ -449,6 +452,10 @@ def _normalize_perfil(perfil: dict) -> dict:
     comorb = p.get("comorbilidades")
     if isinstance(comorb, list):
         p["comorbilidades"] = {c for c in comorb if c}
+
+    farmacos = p.get("farmacos")
+    if isinstance(farmacos, list):
+        p["farmacos"] = {f for f in farmacos if f}
 
     social = p.get("situacion_social")
     if isinstance(social, list):
@@ -521,7 +528,8 @@ def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[
     duracion = perfil_usuario.get("duracion_actividad_h")
     if inicio is not None and duracion is not None:
         en_ventana = [
-            h["temp"] for h in perfil_horario
+            h["temp"]
+            for h in perfil_horario
             if inicio <= h["hora"] < inicio + duracion and h.get("temp") is not None
         ]
         if en_ventana:
@@ -644,21 +652,32 @@ async def api_predict(body: dict, date: str | None = None):
     if date:
         try:
             from datetime import date as date_type, timedelta
+
             # Mismo horizonte que el forecast meteorológico (FORECAST-001): 7 días.
             from climasafeai.data.weather_fetcher import FORECAST_HORIZON_DAYS
+
             target_date = date_type.fromisoformat(date)
             today = date_type.today()
             if target_date < today:
                 return {"error": f"La fecha {date} ya pasó. Solo se aceptan hoy o el futuro."}
             if (target_date - today).days > FORECAST_HORIZON_DAYS:
-                return {"error": f"Fecha {date} está a más de {FORECAST_HORIZON_DAYS} días vista. El forecast meteorológico cubre hasta {FORECAST_HORIZON_DAYS} días."}
+                return {
+                    "error": f"Fecha {date} está a más de {FORECAST_HORIZON_DAYS} días vista. El forecast meteorológico cubre hasta {FORECAST_HORIZON_DAYS} días."
+                }
         except ValueError:
             return {"error": f"Fecha inválida: '{date}'. Usa formato ISO: YYYY-MM-DD"}
 
     try:
         from climasafeai.models.ensemble import predict_ensemble
-        result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil,
-                                  target_date=target_date, resolucion=resolucion)
+
+        result = predict_ensemble(
+            lat=lat,
+            lon=lon,
+            provincia=provincia,
+            perfil=perfil,
+            target_date=target_date,
+            resolucion=resolucion,
+        )
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -706,9 +725,14 @@ async def api_predict(body: dict, date: str | None = None):
         indice_orig = result.get("explicacion", {}).get("indice_original")
         indice_pers = result.get("explicacion", {}).get("indice_personalizado")
         _db.guardar_consulta(
-            perfil_id=perfil_id, provincia=provincia, lat=lat, lon=lon,
-            tipo_riesgo=tipo, indice_original=indice_orig,
-            indice_personalizado=indice_pers, clase_final=clase,
+            perfil_id=perfil_id,
+            provincia=provincia,
+            lat=lat,
+            lon=lon,
+            tipo_riesgo=tipo,
+            indice_original=indice_orig,
+            indice_personalizado=indice_pers,
+            clase_final=clase,
         )
 
     result["perfil_id"] = perfil_id
@@ -732,8 +756,11 @@ async def api_predict(body: dict, date: str | None = None):
     # gráfica y da el mejor tramo horario para la actividad.
     try:
         from climasafeai.features.personalizacion import (
-            riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad,
+            riesgo_horario_acumulado,
+            recomendar_horario,
+            pico_riesgo_actividad,
         )
+
         _ph = result["weather"].get("perfil_horario") or []
         _curva = riesgo_horario_acumulado(_ph, perfil)
         result["riesgo_horario"] = _curva
@@ -743,6 +770,434 @@ async def api_predict(body: dict, date: str | None = None):
         pass
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# UX-001 — Agente conversacional web (estilo SymptomAI)
+#
+# El agente pregunta de una en una y va construyendo el perfil de forma
+# progresiva, como el cuestionario del bot de Telegram, pero para la GUI web.
+# El estado vive en el cliente (paso + perfil + ubicacion), así que el
+# endpoint es stateless: cada llamada recibe la respuesta y el estado
+# acumulado, y devuelve la siguiente pregunta o, al terminar, la predicción
+# por el MISMO camino que /api/predict (predict_ensemble + _normalize_perfil
+# + _aplicar_deporte_a_nivel). No se duplica la lógica de riesgo.
+# ---------------------------------------------------------------------------
+
+_CHAT_CAMPOS_LABEL = {
+    "ubicacion": "Ubicación",
+    "edad": "Edad",
+    "sexo": "Sexo",
+    "aclimatado": "Aclimatado al calor",
+    "nivel_actividad": "Intensidad de la actividad",
+    "duracion_actividad_h": "Duración de la actividad",
+    "hora_inicio": "Hora de inicio",
+    "comorbilidades": "Comorbilidades",
+    "farmacos": "Medicación",
+    "situacion_social": "Situación social",
+    "porcentaje_grasa": "% grasa corporal",
+    "fototipo": "Fototipo",
+}
+
+_CHAT_ACTIVIDADES = ["reposo", "ligera", "moderada", "intensa", "muy_intensa"]
+
+# Las opciones de sexo y actividad están fijas; las de comorbilidades,
+# medicación y situación social salen del catálogo de /api/factores (la misma
+# fuente que el formulario), para no duplicar listas a mano.
+_CHAT_PASOS: list[dict] = [
+    {
+        "campo": "ubicacion",
+        "pregunta": "¿Dónde vas a estar? Escribe el nombre del sitio (ej: Madrid) o las coordenadas 'lat,lon'.",
+        "parse": "ubicacion",
+    },
+    {
+        "campo": "edad",
+        "pregunta": "¿Cuántos años tienes?",
+        "parse": "edad",
+    },
+    {
+        "campo": "sexo",
+        "pregunta": "¿Cuál es tu sexo?",
+        "opciones": [
+            {"clave": "hombre", "nombre": "Hombre"},
+            {"clave": "mujer", "nombre": "Mujer"},
+        ],
+        "parse": "opcion",
+    },
+    {
+        "campo": "aclimatado",
+        "pregunta": "¿Estás aclimatado al calor? (vives en clima cálido o llevas semanas de calor — hacer deporte no cuenta)",
+        "opciones": [{"clave": "si", "nombre": "Sí"}, {"clave": "no", "nombre": "No"}],
+        "parse": "siono",
+    },
+    {
+        "campo": "nivel_actividad",
+        "pregunta": "¿Qué intensidad tendrá la actividad?",
+        "opciones": [
+            {"clave": a, "nombre": a.replace("_", " ").title()} for a in _CHAT_ACTIVIDADES
+        ],
+        "parse": "opcion",
+    },
+    {
+        "campo": "duracion_actividad_h",
+        "pregunta": "¿Cuántas horas durará? (ej: 2, 3.5)",
+        "parse": "numero_rango",
+        "rango": (0, 24),
+    },
+    {
+        "campo": "hora_inicio",
+        "pregunta": "¿A qué hora empiezas? (de 0 a 24, ej: 8 o 14.5)",
+        "parse": "numero_rango",
+        "rango": (0, 24),
+    },
+    {
+        "campo": "comorbilidades",
+        "pregunta": "¿Tienes alguna de estas condiciones? Escribe los números separados por comas, o 'ninguna'.",
+        "fuente": "comorbilidades",
+        "multiselect": True,
+        "opcional": True,
+        "parse": "multiselect",
+    },
+    {
+        "campo": "farmacos",
+        "pregunta": "¿Tomas alguno de estos medicamentos? Escribe los números separados por comas, o 'ninguna'.",
+        "fuente": "farmacos",
+        "multiselect": True,
+        "opcional": True,
+        "parse": "multiselect",
+    },
+    {
+        "campo": "situacion_social",
+        "pregunta": "¿Cómo es tu situación habitual? Escribe los números separados por comas, o 'ninguna'.",
+        "fuente": "situacional",
+        "multiselect": True,
+        "opcional": True,
+        "parse": "multiselect",
+    },
+    {
+        "campo": "porcentaje_grasa",
+        "pregunta": "¿Sabes tu % de grasa corporal? Escríbelo, o 'saltar' si no lo sabes.",
+        "opcional": True,
+        "parse": "grasa",
+    },
+    {
+        "campo": "fototipo",
+        "pregunta": "¿Cuál es tu fototipo de piel? Elige el número (1-6) o 'saltar'.",
+        "opciones": [{"clave": str(i), "nombre": f"Tipo {i}"} for i in range(1, 7)],
+        "opcional": True,
+        "parse": "opcion",
+    },
+]
+
+_CHAT_NINGUNA = ("ninguna", "ninguno", "no", "nada", "terminar", "termine", "ok")
+
+
+def _chat_opciones_paso(paso: dict) -> list[dict]:
+    """Opciones de un paso: estáticas o del catálogo de factores implementados.
+
+    Misma fuente que el formulario web (/api/factores); el 'alcohol' de
+    situación social no se ofrece (el formulario lo oculta igualmente).
+    """
+    if paso.get("multiselect"):
+        factores = _get_implemented_factors()
+        items = (factores.get("calor") or {}).get(paso["fuente"]) or []
+        if paso["fuente"] == "situacional":
+            items = [f for f in items if f.get("clave") != "alcohol"]
+        return [{"clave": f["clave"], "nombre": f["nombre"]} for f in items]
+    return paso.get("opciones") or []
+
+
+def _chat_parse_ubicacion(texto: str) -> tuple[Any, str | None]:
+    """'lat,lon' → dict con coordenadas; cualquier otro texto → provincia."""
+    m = re.match(r"^(-?\d{1,3}(?:\.\d+)?)\s*[,;]\s*(-?\d{1,3}(?:\.\d+)?)$", texto)
+    if m:
+        lat, lon = float(m.group(1)), float(m.group(2))
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return None, "Coordenadas fuera de rango: lat entre -90 y 90, lon entre -180 y 180."
+        return {"lat": lat, "lon": lon, "provincia": f"{lat},{lon}"}, None
+    if len(texto) < 2:
+        return (
+            None,
+            "Escribe el nombre del sitio (ej: Madrid) o las coordenadas 'lat,lon' (ej: 40.4168,-3.7038).",
+        )
+    return {"provincia": texto, "lat": None, "lon": None}, None
+
+
+def _chat_parse_edad(texto: str) -> tuple[Any, str | None]:
+    try:
+        edad = float(texto.replace(",", "."))
+    except ValueError:
+        return None, "La edad debe ser un número (ej: 45)."
+    if not 0 <= edad <= 120:
+        return None, "La edad debe estar entre 0 y 120 años."
+    return int(edad), None
+
+
+def _chat_parse_numero(texto: str, minimo: float, maximo: float) -> tuple[Any, str | None]:
+    try:
+        n = float(texto.replace(",", "."))
+    except ValueError:
+        return None, f"Debe ser un número entre {minimo:g} y {maximo:g}."
+    if not minimo <= n <= maximo:
+        return None, f"Debe estar entre {minimo:g} y {maximo:g}."
+    return n, None
+
+
+def _chat_parse_siono(texto: str) -> tuple[Any, str | None]:
+    t = texto.strip().lower()
+    if t in ("si", "sí", "s", "true", "1"):
+        return True, None
+    if t in ("no", "n", "false", "0"):
+        return False, None
+    return None, "Responde 'si' o 'no'."
+
+
+def _chat_parse_opcion(texto: str, opciones: list[dict]) -> tuple[Any, str | None]:
+    t = texto.strip().lower()
+    if not opciones:
+        return None, "No hay opciones disponibles para esta pregunta."
+    for o in opciones:
+        if t == o["clave"].lower() or t == o["nombre"].lower():
+            return o["clave"], None
+    nombres = ", ".join(o["clave"] for o in opciones)
+    return None, f"No reconozco '{texto}'. Opciones: {nombres}."
+
+
+def _chat_parse_multiselect(texto: str, opciones: list[dict]) -> tuple[Any, str | None]:
+    t = texto.strip().lower()
+    if t in _CHAT_NINGUNA:
+        return set(), None
+    if not opciones:
+        return None, "No hay opciones disponibles; escribe 'ninguna' para continuar."
+    claves: list[str] = []
+    for parte in re.split(r"[,;\s]+", t):
+        if not parte:
+            continue
+        if parte.isdigit():
+            idx = int(parte)
+            if not (1 <= idx <= len(opciones)):
+                return None, f"El número {parte} no es una opción válida (1-{len(opciones)})."
+            claves.append(opciones[idx - 1]["clave"])
+        else:
+            match = next(
+                (
+                    o
+                    for o in opciones
+                    if o["clave"].lower() == parte or o["nombre"].lower() == parte
+                ),
+                None,
+            )
+            if match is None:
+                return (
+                    None,
+                    f"No reconozco '{parte}'. Usa los números (1-{len(opciones)}) o los nombres de la lista.",
+                )
+            claves.append(match["clave"])
+    return set(claves), None
+
+
+def _chat_parse(paso: dict, mensaje: str) -> tuple[Any, str | None]:
+    """Devuelve (valor, error). En pasos opcionales, 'saltar' → (None, None)."""
+    texto = mensaje.strip()
+    if paso.get("opcional") and texto.lower() in ("saltar", "skip"):
+        return None, None
+    metodo = paso["parse"]
+    if metodo == "ubicacion":
+        return _chat_parse_ubicacion(texto)
+    if metodo == "edad":
+        return _chat_parse_edad(texto)
+    if metodo == "numero_rango":
+        return _chat_parse_numero(texto, *paso["rango"])
+    if metodo == "siono":
+        return _chat_parse_siono(texto)
+    if metodo == "opcion":
+        return _chat_parse_opcion(texto, _chat_opciones_paso(paso))
+    if metodo == "multiselect":
+        return _chat_parse_multiselect(texto, _chat_opciones_paso(paso))
+    if metodo == "grasa":
+        return _chat_parse_numero(texto, 0, 70)
+    return None, "Pregunta no implementada."
+
+
+def _chat_formato_valor(campo: str, valor, opciones: list[dict]) -> str:
+    """Texto legible del valor confirmado (para el eco de la respuesta)."""
+    if campo == "aclimatado":
+        return "Sí" if valor else "No"
+    if campo == "sexo":
+        return valor.title()
+    if campo == "duracion_actividad_h":
+        return f"{valor:g} h"
+    if campo == "hora_inicio":
+        return f"{valor:g} h"
+    if campo == "porcentaje_grasa":
+        return f"{valor:g}%"
+    if campo == "fototipo":
+        return f"Tipo {valor}"
+    if isinstance(valor, (set, list)):
+        if not valor:
+            return "Ninguna"
+        nombres = {o["clave"]: o["nombre"] for o in opciones}
+        return ", ".join(nombres.get(v, v) for v in sorted(valor))
+    return str(valor)
+
+
+def _chat_respuesta_pregunta(paso: int, perfil: dict, ubicacion: dict | None) -> dict:
+    """Respuesta con la pregunta del paso y el estado acumulado."""
+    p = _CHAT_PASOS[paso]
+    return {
+        "paso": paso,
+        "total": len(_CHAT_PASOS),
+        "campo": p["campo"],
+        "pregunta": p["pregunta"],
+        "opciones": _chat_opciones_paso(p),
+        "multiselect": bool(p.get("multiselect")),
+        "opcional": bool(p.get("opcional")),
+        "perfil": perfil,
+        "ubicacion": ubicacion,
+    }
+
+
+def _chat_predecir(perfil: dict, ubicacion: dict | None) -> dict:
+    """Mismo camino de predicción que /api/predict: normaliza y llama al ensemble."""
+    from climasafeai.models.ensemble import predict_ensemble
+
+    perfil = _normalize_perfil(perfil)
+    _aplicar_deporte_a_nivel(perfil)
+
+    lat = (ubicacion or {}).get("lat")
+    lon = (ubicacion or {}).get("lon")
+    provincia = (ubicacion or {}).get("provincia") or "Madrid"
+
+    result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil)
+
+    result["perfil_usuario"] = perfil
+    result["weather"] = _get_weather_summary(result)
+
+    for mod_name, mod_res in result.get("modelos", {}).items():
+        if isinstance(mod_res, dict):
+            mod_res.pop("_X", None)
+    if "error" in result.get("modelos", {}).get("LSTM", {}):
+        del result["modelos"]["LSTM"]["error"]
+
+    # Curva de riesgo por hora y recomendación de horario, como /api/predict.
+    try:
+        from climasafeai.features.personalizacion import (
+            pico_riesgo_actividad,
+            recomendar_horario,
+            riesgo_horario_acumulado,
+        )
+
+        _ph = result["weather"].get("perfil_horario") or []
+        _curva = riesgo_horario_acumulado(_ph, perfil)
+        result["riesgo_horario"] = _curva
+        result["riesgo_pico"] = pico_riesgo_actividad(_curva, perfil)
+        result["recomendacion_horario"] = recomendar_horario(_ph, perfil)
+    except Exception:
+        pass
+
+    return result
+
+
+def _chat_mensaje_final(resultado: dict, ubicacion: dict | None) -> str:
+    """Resumen del agente: frases del parte + recomendación contextual.
+
+    Las frases del parte son las mismas que redacta el bot (lineas_parte) y la
+    recomendación es la de una línea adaptada al canal dominante. Si el
+    formateo falla (resultado mínimo), se degrada a la clase y las
+    recomendaciones crudas — el resultado de la predicción no se pierde.
+    """
+    try:
+        from climasafeai.llm.rag_qwen import lineas_parte
+        from climasafeai.models.recomendaciones import recomendacion_resumen
+
+        lugar = (ubicacion or {}).get("provincia")
+        lineas = list(lineas_parte(resultado, lugar))
+        lineas.append(recomendacion_resumen(resultado))
+        return "\n".join(lineas)
+    except Exception:
+        recs = resultado.get("recomendaciones") or []
+        nivel = resultado.get("clase_final_label") or "?"
+        texto = f"Nivel de riesgo: {nivel}."
+        if recs:
+            texto += "\n" + "\n".join(f"- {r}" for r in recs)
+        return texto
+
+
+@app.post("/api/chat")
+async def api_chat(body: dict):
+    """Turno de la conversación del agente web (UX-001).
+
+    Body: {"mensaje": str, "estado": {"paso", "perfil", "ubicacion"}}.
+    Sin mensaje devuelve la pregunta actual (la primera si no hay estado).
+    Al contestar la última pregunta devuelve "fin": true con el resultado de
+    predict_ensemble — el mismo camino que usa POST /api/predict.
+    """
+    mensaje = (body.get("mensaje") or "").strip()
+    estado = body.get("estado") or {}
+    try:
+        paso = int(estado.get("paso") or 0)
+    except (TypeError, ValueError):
+        paso = 0
+    perfil_raw = estado.get("perfil")
+    perfil = dict(perfil_raw) if isinstance(perfil_raw, dict) else {}
+    ubicacion = estado.get("ubicacion")
+
+    if not mensaje:
+        paso_actual = paso if 0 <= paso < len(_CHAT_PASOS) else 0
+        return _chat_respuesta_pregunta(paso_actual, perfil, ubicacion)
+
+    if mensaje.lower() in ("cancelar", "cancel", "salir", "exit"):
+        return {
+            "cancelado": True,
+            "respuesta": "✕ Conversación cancelada. Pulsa 'Empezar de nuevo' para reiniciar.",
+            "paso": 0,
+            "total": len(_CHAT_PASOS),
+            "perfil": {},
+            "ubicacion": None,
+        }
+
+    if not (0 <= paso < len(_CHAT_PASOS)):
+        return {"error": "La conversación ya terminó. Empieza una nueva."}
+
+    p = _CHAT_PASOS[paso]
+    valor, error = _chat_parse(p, mensaje)
+    if error:
+        return {**_chat_respuesta_pregunta(paso, perfil, ubicacion), "error": error}
+
+    campo = p["campo"]
+    if campo == "ubicacion":
+        ubicacion = valor
+        lugar = valor["provincia"] if valor["lat"] is None else f"{valor['lat']}, {valor['lon']}"
+        respuesta = f"✓ {_CHAT_CAMPOS_LABEL[campo]}: {lugar}"
+    elif valor is None:  # 'saltar' en un paso opcional
+        respuesta = f"✓ {_CHAT_CAMPOS_LABEL[campo]}: saltado"
+    else:
+        perfil[campo] = valor
+        respuesta = f"✓ {_CHAT_CAMPOS_LABEL[campo]}: {_chat_formato_valor(campo, valor, _chat_opciones_paso(p))}"
+
+    paso += 1
+
+    if paso >= len(_CHAT_PASOS):
+        try:
+            resultado = _chat_predecir(perfil, ubicacion)
+        except Exception as exc:
+            return {
+                "fin": True,
+                "respuesta": respuesta,
+                "error": f"No se pudo calcular el riesgo: {exc}",
+                "perfil": perfil,
+                "ubicacion": ubicacion,
+            }
+        return {
+            "fin": True,
+            "respuesta": respuesta,
+            "perfil": perfil,
+            "ubicacion": ubicacion,
+            "resultado": resultado,
+            "mensaje_final": _chat_mensaje_final(resultado, ubicacion),
+        }
+
+    return {**_chat_respuesta_pregunta(paso, perfil, ubicacion), "respuesta": respuesta}
 
 
 @app.post("/api/predict/semanal")
@@ -765,7 +1220,10 @@ async def api_predict_semanal(body: dict):
 
     try:
         return prediccion_semanal(
-            lat=lat, lon=lon, provincia=provincia, perfil=perfil,
+            lat=lat,
+            lon=lon,
+            provincia=provincia,
+            perfil=perfil,
             resolucion=resolucion,
         )
     except Exception as exc:
@@ -789,7 +1247,8 @@ async def api_curvas_edad(body: dict):
     """
     from climasafeai.features.personalizacion import riesgo_horario_acumulado
     from climasafeai.models.ensemble import (
-        PERS_THRESHOLD_PELIGRO, perfil_horario_desde_df,
+        PERS_THRESHOLD_PELIGRO,
+        perfil_horario_desde_df,
     )
     from climasafeai.models.predict_model import CLASS_THRESHOLDS_RECOMENDADOS
 
@@ -811,14 +1270,18 @@ async def api_curvas_edad(body: dict):
         if body.get("fecha"):
             try:
                 from datetime import date as date_type
+
                 target_date = date_type.fromisoformat(body["fecha"])
             except ValueError:
                 return {"error": f"Fecha inválida: '{body['fecha']}'. Usa formato ISO: YYYY-MM-DD"}
         try:
             from climasafeai.data.weather_fetcher import fetch_weather_data
+
             weather = fetch_weather_data(
-                lat=body.get("lat"), lon=body.get("lon"),
-                provincia=body.get("provincia", "Madrid"), target_date=target_date,
+                lat=body.get("lat"),
+                lon=body.get("lon"),
+                provincia=body.get("provincia", "Madrid"),
+                target_date=target_date,
             )
             perfil_horario = perfil_horario_desde_df(
                 weather.get("df_hora"), target_date=weather.get("target_date")
@@ -834,12 +1297,14 @@ async def api_curvas_edad(body: dict):
         if not curva:
             continue
         pico = max(curva, key=lambda e: e["riesgo"])
-        curvas.append({
-            "edad": edad,
-            "curva": curva,
-            "pico": round(pico["riesgo"], 4),
-            "hora_pico": pico["hora"],
-        })
+        curvas.append(
+            {
+                "edad": edad,
+                "curva": curva,
+                "pico": round(pico["riesgo"], 4),
+                "hora_pico": pico["hora"],
+            }
+        )
 
     return {
         "curvas": curvas,
@@ -904,6 +1369,7 @@ def _calcular_riesgo_colectivo(body: dict) -> dict:
     if target_date:
         try:
             from datetime import date as date_type
+
             date_obj = date_type.fromisoformat(target_date)
         except ValueError:
             pass
@@ -933,9 +1399,7 @@ def _calcular_riesgo_colectivo(body: dict) -> dict:
             return 1.0
         return 1.0 + (pct / 100.0) * (coef - 1.0)
 
-    rangos_edad = [
-        (18, 30), (30, 45), (45, 60), (60, 75), (75, 90)
-    ]
+    rangos_edad = [(18, 30), (30, 45), (45, 60), (60, 75), (75, 90)]
     rangos_edad = [(a, b) for a, b in rangos_edad if a < edad_max and b > edad_min]
     if not rangos_edad:
         rangos_edad = [(edad_min, edad_max)]
@@ -970,13 +1434,15 @@ def _calcular_riesgo_colectivo(body: dict) -> dict:
         mult = _factor_grupo(pct, cfg["coef"])
         factor_extra *= mult
         if mult > 1.001:
-            factores_detalle.append({
-                "clave": k,
-                "nombre": cfg["label"],
-                "pct": round(pct, 1),
-                "coef": cfg["coef"],
-                "multiplicador": round(mult, 3),
-            })
+            factores_detalle.append(
+                {
+                    "clave": k,
+                    "nombre": cfg["label"],
+                    "pct": round(pct, 1),
+                    "coef": cfg["coef"],
+                    "multiplicador": round(mult, 3),
+                }
+            )
     factor_extra = min(factor_extra, 2.5)
 
     resultados_rangos = []
@@ -1016,7 +1482,9 @@ def _calcular_riesgo_colectivo(body: dict) -> dict:
             _aplicar_deporte_a_nivel(perfil)
 
             try:
-                pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj)
+                pred = predict_ensemble(
+                    lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj
+                )
                 if primer_pred_num is None:
                     primer_pred_num = pred
                 clase = pred.get("clase_final", 0)
@@ -1036,16 +1504,18 @@ def _calcular_riesgo_colectivo(body: dict) -> dict:
             else:
                 total_seguros += n_sexo
 
-            resultados_rangos.append({
-                "rango": f"{edad_med}a {sexo[0]}",
-                "edad": edad_med,
-                "sexo": sexo,
-                "seguros": n_sexo if clase == 0 else 0,
-                "precaucion": n_sexo if clase == 1 else 0,
-                "peligro": n_sexo if clase == 2 else 0,
-                "prob": round(prob, 4),
-                "n_personas": n_sexo,
-            })
+            resultados_rangos.append(
+                {
+                    "rango": f"{edad_med}a {sexo[0]}",
+                    "edad": edad_med,
+                    "sexo": sexo,
+                    "seguros": n_sexo if clase == 0 else 0,
+                    "precaucion": n_sexo if clase == 1 else 0,
+                    "peligro": n_sexo if clase == 2 else 0,
+                    "prob": round(prob, 4),
+                    "n_personas": n_sexo,
+                }
+            )
 
     total = total_seguros + total_precaucion + total_peligro
     pct_peligro = round(total_peligro / total * 100, 1) if total else 0
@@ -1077,7 +1547,9 @@ async def api_riesgo_colectivo(body: dict):
     """Calcula riesgo para un grupo."""
     tipo = body.get("tipo", "numero")
     from climasafeai.features.personalizacion import (
-        riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad,
+        riesgo_horario_acumulado,
+        recomendar_horario,
+        pico_riesgo_actividad,
     )
 
     if tipo == "numero":
@@ -1125,7 +1597,9 @@ async def api_riesgo_colectivo(body: dict):
             perfil_mapa["deporte"] = body["deporte"]
         _aplicar_deporte_a_nivel(perfil_mapa)
 
-        _hourly_num = primer_pred_num.get("weather", {}).get("perfil_horario", []) if primer_pred_num else []
+        _hourly_num = (
+            primer_pred_num.get("weather", {}).get("perfil_horario", []) if primer_pred_num else []
+        )
         grp_curva = riesgo_horario_acumulado(_hourly_num, perfil_mapa)
         grp_reco = recomendar_horario(_hourly_num, perfil_mapa)
 
@@ -1137,14 +1611,25 @@ async def api_riesgo_colectivo(body: dict):
             "en_precaucion": total_precaucion,
             "en_peligro": total_peligro,
             "pct_peligro": pct_peligro,
-            "clase": "PELIGRO" if pct_peligro > 20 else ("PRECAUCION" if pct_peligro > 5 else "SEGURO"),
+            "clase": "PELIGRO"
+            if pct_peligro > 20
+            else ("PRECAUCION" if pct_peligro > 5 else "SEGURO"),
             "factor_extra": round(factor_extra, 3),
             "factores_grupo": factores_activos,
             "factores_detalle": c["factores_detalle"],
-            "mensaje": f"De {total} personas, ~{total_peligro} en peligro, ~{total_precaucion} en precaución" + sufijo_extra,
+            "mensaje": f"De {total} personas, ~{total_peligro} en peligro, ~{total_precaucion} en precaución"
+            + sufijo_extra,
             "rangos": resultados_rangos,
             "demografico": demografico,
-            "resumen": _generar_resumen(pct_peligro, total_peligro, total_precaucion, total_seguros, factor_extra, c["factores_detalle"], c["actividad"]),
+            "resumen": _generar_resumen(
+                pct_peligro,
+                total_peligro,
+                total_precaucion,
+                total_seguros,
+                factor_extra,
+                c["factores_detalle"],
+                c["actividad"],
+            ),
             "perfil_mapa": perfil_mapa,
             "riesgo_horario": grp_curva,
             "recomendacion_horario": grp_reco,
@@ -1166,6 +1651,7 @@ async def api_riesgo_colectivo(body: dict):
         if body.get("fecha"):
             try:
                 from datetime import date as date_type
+
                 date_obj = date_type.fromisoformat(body["fecha"])
             except ValueError:
                 pass
@@ -1182,11 +1668,15 @@ async def api_riesgo_colectivo(body: dict):
         perfiles = _db.buscar_por_tag(tag)
         resultados = []
         primer_pred = None
-        perfil_mapa = None          # perfil más restrictivo (para el mapa de zona)
+        perfil_mapa = None  # perfil más restrictivo (para el mapa de zona)
         peor_prob_mapa = -1.0
         for p in perfiles:
             try:
-                perfil = {k: v for k, v in p.items() if k not in ("id", "alias", "tags", "created_at", "updated_at")}
+                perfil = {
+                    k: v
+                    for k, v in p.items()
+                    if k not in ("id", "alias", "tags", "created_at", "updated_at")
+                }
                 if hora_inicio is not None:
                     perfil["hora_inicio"] = float(hora_inicio)
                 if duracion is not None:
@@ -1211,7 +1701,9 @@ async def api_riesgo_colectivo(body: dict):
                             perfil.setdefault("nivel_actividad", "moderada")
                 # El MET del deporte fija la intensidad antes de predecir (igual que el bot)
                 _aplicar_deporte_a_nivel(perfil)
-                pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj)
+                pred = predict_ensemble(
+                    lat=lat, lon=lon, provincia=provincia, perfil=perfil, target_date=date_obj
+                )
                 hourly = pred.get("weather", {}).get("perfil_horario", [])
                 if primer_pred is None:
                     primer_pred = pred
@@ -1221,20 +1713,24 @@ async def api_riesgo_colectivo(body: dict):
                     perfil_mapa = dict(perfil)
                     perfil_mapa["_alias"] = p.get("alias", "?")
                 _curva = riesgo_horario_acumulado(hourly, perfil)
-                resultados.append({
-                    "alias": p.get("alias", "?"),
-                    "edad": p.get("edad"),
-                    "sexo": p.get("sexo"),
-                    "clase": pred.get("clase_final_label", "SEGURO"),
-                    "prob_riesgo": pred.get("perfil", {}).get("calor", {}).get("prob_personalizada", 0),
-                    "riesgo_pico": pico_riesgo_actividad(_curva, perfil),
-                    "perfil_horario": hourly,
-                    "riesgo_horario": _curva,
-                    "recomendacion_horario": recomendar_horario(hourly, perfil),
-                    "explicacion": pred.get("explicacion"),
-                    "recomendaciones": pred.get("recomendaciones", []),
-                    "factores": pred.get("perfil", {}).get("calor", {}).get("factores", []),
-                })
+                resultados.append(
+                    {
+                        "alias": p.get("alias", "?"),
+                        "edad": p.get("edad"),
+                        "sexo": p.get("sexo"),
+                        "clase": pred.get("clase_final_label", "SEGURO"),
+                        "prob_riesgo": pred.get("perfil", {})
+                        .get("calor", {})
+                        .get("prob_personalizada", 0),
+                        "riesgo_pico": pico_riesgo_actividad(_curva, perfil),
+                        "perfil_horario": hourly,
+                        "riesgo_horario": _curva,
+                        "recomendacion_horario": recomendar_horario(hourly, perfil),
+                        "explicacion": pred.get("explicacion"),
+                        "recomendaciones": pred.get("recomendaciones", []),
+                        "factores": pred.get("perfil", {}).get("calor", {}).get("factores", []),
+                    }
+                )
             except Exception as e:
                 resultados.append({"alias": p.get("alias", "?"), "error": str(e)})
 
@@ -1244,7 +1740,9 @@ async def api_riesgo_colectivo(body: dict):
 
         # Curva y recomendación de horario del GRUPO, según el perfil más
         # restrictivo (protege al más vulnerable de la cuadrilla).
-        _hourly_grp = primer_pred.get("weather", {}).get("perfil_horario", []) if primer_pred else []
+        _hourly_grp = (
+            primer_pred.get("weather", {}).get("perfil_horario", []) if primer_pred else []
+        )
         grp_curva = riesgo_horario_acumulado(_hourly_grp, perfil_mapa) if perfil_mapa else []
         grp_reco = recomendar_horario(_hourly_grp, perfil_mapa) if perfil_mapa else None
 
@@ -1255,8 +1753,8 @@ async def api_riesgo_colectivo(body: dict):
             "en_peligro": peligro,
             "pct_peligro": round(peligro / len(resultados) * 100, 1) if resultados else 0,
             "detalle": resultados,
-            "perfil_mapa": perfil_mapa,   # el más restrictivo: el mapa de zona lo usa
-            "riesgo_horario": grp_curva,        # curva del peor caso del grupo
+            "perfil_mapa": perfil_mapa,  # el más restrictivo: el mapa de zona lo usa
+            "riesgo_horario": grp_curva,  # curva del peor caso del grupo
             "recomendacion_horario": grp_reco,  # horario óptimo del grupo
             "weather": _get_weather_summary(primer_pred) if primer_pred else None,
         }
@@ -1271,8 +1769,13 @@ async def api_riesgo_colectivo(body: dict):
 
 CSV_COLUMNAS_REQUERIDAS = ("nombre", "edad", "sexo")
 _VALORES_ACLMATADO = {
-    "si": True, "sí": True, "true": True, "1": True,
-    "no": False, "false": False, "0": False,
+    "si": True,
+    "sí": True,
+    "true": True,
+    "1": True,
+    "no": False,
+    "false": False,
+    "0": False,
 }
 
 
@@ -1316,7 +1819,8 @@ def _parsear_csv_personas(texto: str) -> list[dict]:
     faltantes = [c for c in CSV_COLUMNAS_REQUERIDAS if c not in cabecera]
     if faltantes:
         raise ValueError(
-            "Faltan columnas en el CSV: " + ", ".join(faltantes)
+            "Faltan columnas en el CSV: "
+            + ", ".join(faltantes)
             + f". Columnas mínimas: {', '.join(CSV_COLUMNAS_REQUERIDAS)}."
         )
 
@@ -1331,11 +1835,22 @@ def _parsear_csv_personas(texto: str) -> list[dict]:
         sexo = (fila.get("sexo") or "").strip().lower()
         if sexo not in ("hombre", "mujer"):
             errores.append("'sexo' debe ser 'hombre' o 'mujer'")
-        grasa = _leer_numero(fila.get("grasa") or fila.get("porcentaje_grasa"), "grasa", errores, minimo=0, maximo=100)
-        hora_inicio = _leer_numero(fila.get("hora_inicio"), "hora_inicio", errores, minimo=0, maximo=24)
+        grasa = _leer_numero(
+            fila.get("grasa") or fila.get("porcentaje_grasa"),
+            "grasa",
+            errores,
+            minimo=0,
+            maximo=100,
+        )
+        hora_inicio = _leer_numero(
+            fila.get("hora_inicio"), "hora_inicio", errores, minimo=0, maximo=24
+        )
         duracion = _leer_numero(
             fila.get("duracion") or fila.get("duracion_h") or fila.get("duracion_actividad_h"),
-            "duracion", errores, minimo=0, maximo=24,
+            "duracion",
+            errores,
+            minimo=0,
+            maximo=24,
         )
 
         aclimatado = None
@@ -1347,7 +1862,8 @@ def _parsear_csv_personas(texto: str) -> list[dict]:
                 aclimatado = _VALORES_ACLMATADO[texto_acl]
 
         comorbilidades = {
-            c.strip() for c in (fila.get("comorbilidades") or "").replace(";", "|").split("|")
+            c.strip()
+            for c in (fila.get("comorbilidades") or "").replace(";", "|").split("|")
             if c.strip()
         }
 
@@ -1402,13 +1918,16 @@ async def api_riesgo_colectivo_csv(body: dict):
     lat = body.get("lat")
     lon = body.get("lon")
     if lat is None or lon is None:
-        raise HTTPException(400, "Faltan lat y lon: hacen falta la ubicación y la fecha para predecir.")
+        raise HTTPException(
+            400, "Faltan lat y lon: hacen falta la ubicación y la fecha para predecir."
+        )
     provincia = body.get("provincia", "Madrid")
 
     date_obj = None
     if body.get("fecha"):
         try:
             from datetime import date as date_type
+
             date_obj = date_type.fromisoformat(body["fecha"])
         except ValueError:
             pass
@@ -1426,23 +1945,30 @@ async def api_riesgo_colectivo_csv(body: dict):
     for p in personas:
         try:
             pred = predict_ensemble(
-                lat=lat, lon=lon, provincia=provincia,
-                perfil=p["perfil"], target_date=date_obj,
+                lat=lat,
+                lon=lon,
+                provincia=provincia,
+                perfil=p["perfil"],
+                target_date=date_obj,
             )
         except Exception as exc:
-            raise HTTPException(400, f"No se pudo predecir el riesgo de {p['nombre']}: {exc}") from exc
+            raise HTTPException(
+                400, f"No se pudo predecir el riesgo de {p['nombre']}: {exc}"
+            ) from exc
         if primer_pred is None:
             primer_pred = pred
         prob_base = pred.get("perfil", {}).get("calor", {}).get("prob_personalizada", 0) or 0
         prob, factor = _aplicar_orgullo_colectivo(prob_base, tipo_actividad)
-        resultados.append({
-            "nombre": p["nombre"],
-            "edad": p["perfil"].get("edad"),
-            "sexo": p["perfil"].get("sexo"),
-            "clase": pred.get("clase_final_label", "SEGURO"),
-            "prob_riesgo": round(prob, 4),
-            "factor_orgullo": factor,
-        })
+        resultados.append(
+            {
+                "nombre": p["nombre"],
+                "edad": p["perfil"].get("edad"),
+                "sexo": p["perfil"].get("sexo"),
+                "clase": pred.get("clase_final_label", "SEGURO"),
+                "prob_riesgo": round(prob, 4),
+                "factor_orgullo": factor,
+            }
+        )
 
     seguros = sum(1 for r in resultados if r["clase"] == "SEGURO")
     precaucion = sum(1 for r in resultados if r["clase"] == "PRECAUCION")
@@ -1454,7 +1980,9 @@ async def api_riesgo_colectivo_csv(body: dict):
         "en_precaucion": precaucion,
         "en_peligro": peligro,
         "pct_peligro": round(peligro / len(resultados) * 100, 1) if resultados else 0,
-        "clase": "PELIGRO" if peligro and peligro / len(resultados) > 0.2 else ("PRECAUCION" if precaucion else "SEGURO"),
+        "clase": "PELIGRO"
+        if peligro and peligro / len(resultados) > 0.2
+        else ("PRECAUCION" if precaucion else "SEGURO"),
         "tipo_actividad": tipo_actividad or None,
         "orgullo_colectivo": {
             "aplicado": tipo_actividad in TIPOS_ACTIVIDAD_COMPETICION,
@@ -1593,7 +2121,9 @@ async def api_crear_rutina(perfil_id: int, body: dict):
     try:
         nums = sorted({int(d) for d in dias.split(",") if d.strip()})
     except ValueError:
-        raise HTTPException(400, "dias deben ser números separados por comas (1=lunes ... 7=domingo)")
+        raise HTTPException(
+            400, "dias deben ser números separados por comas (1=lunes ... 7=domingo)"
+        )
     if not nums or not all(1 <= d <= 7 for d in nums):
         raise HTTPException(400, "dias deben estar entre 1 y 7 (1=lunes, 7=domingo)")
     if not (0 <= hora_inicio < 24 and 0 < hora_fin <= 24 and hora_fin > hora_inicio):
@@ -1663,7 +2193,10 @@ async def api_pronostico_dia(perfil_id: int, body: dict):
     if perfil is None:
         raise HTTPException(404, "Perfil no encontrado")
     if perfil.get("lat") is None or perfil.get("lon") is None:
-        raise HTTPException(400, "El perfil no tiene ubicación (lat/lon). Guarda la ubicación antes de pedir el pronóstico del día.")
+        raise HTTPException(
+            400,
+            "El perfil no tiene ubicación (lat/lon). Guarda la ubicación antes de pedir el pronóstico del día.",
+        )
 
     chat_id = _chat_id_de_perfil(perfil_id)
     weekday = body.get("weekday")
@@ -1688,34 +2221,44 @@ async def api_pronostico_dia(perfil_id: int, body: dict):
                 perfil=perfil_pred,
             )
         except Exception as exc:
-            ventanas.append({
-                "rutina_id": r["id"],
-                "nombre": r["nombre"],
-                "hora_inicio": r["hora_inicio"],
-                "hora_fin": r["hora_fin"],
-                "error": str(exc),
-            })
+            ventanas.append(
+                {
+                    "rutina_id": r["id"],
+                    "nombre": r["nombre"],
+                    "hora_inicio": r["hora_inicio"],
+                    "hora_fin": r["hora_fin"],
+                    "error": str(exc),
+                }
+            )
             continue
         temps = _temps_en_ventana(
             result.get("weather", {}).get("perfil_horario") or [],
-            {"hora_inicio": r["hora_inicio"], "duracion_actividad_h": r["hora_fin"] - r["hora_inicio"]},
+            {
+                "hora_inicio": r["hora_inicio"],
+                "duracion_actividad_h": r["hora_fin"] - r["hora_inicio"],
+            },
         )
-        ventanas.append({
-            "rutina_id": r["id"],
-            "nombre": r["nombre"],
-            "dias": r["dias"],
-            "hora_inicio": r["hora_inicio"],
-            "hora_fin": r["hora_fin"],
-            "ocupacion": r.get("ocupacion"),
-            "deporte": r.get("deporte"),
-            "clase": result.get("clase_final_label", "SEGURO"),
-            "prob_riesgo": round(result.get("perfil", {}).get("calor", {}).get("prob_personalizada") or 0, 4),
-            "temp_media": round(sum(temps) / len(temps), 1) if temps else None,
-        })
+        ventanas.append(
+            {
+                "rutina_id": r["id"],
+                "nombre": r["nombre"],
+                "dias": r["dias"],
+                "hora_inicio": r["hora_inicio"],
+                "hora_fin": r["hora_fin"],
+                "ocupacion": r.get("ocupacion"),
+                "deporte": r.get("deporte"),
+                "clase": result.get("clase_final_label", "SEGURO"),
+                "prob_riesgo": round(
+                    result.get("perfil", {}).get("calor", {}).get("prob_personalizada") or 0, 4
+                ),
+                "temp_media": round(sum(temps) / len(temps), 1) if temps else None,
+            }
+        )
     return {"weekday": weekday, "rutinas": ventanas}
 
 
 # ── Tags disponibles ────────────────────────────────────────────────
+
 
 @app.get("/api/tags-disponibles")
 async def api_list_tags_disponibles():
@@ -1748,34 +2291,50 @@ def _calc_demografico(rangos: list, total: int) -> dict | None:
         pct_pob = r.get("n_personas", 0) / total * 100
         pct_riesgo = r.get("peligro", 0) / total_peligro * 100 if total_peligro else 0
         if pct_riesgo > pct_pob * 1.2:
-            contribuciones.append({
-                "rango": r["rango"],
-                "pct_poblacion": round(pct_pob, 1),
-                "pct_del_riesgo": round(pct_riesgo, 1),
-                "desproporcion": round(pct_riesgo / pct_pob, 2) if pct_pob > 0 else 0,
-            })
+            contribuciones.append(
+                {
+                    "rango": r["rango"],
+                    "pct_poblacion": round(pct_pob, 1),
+                    "pct_del_riesgo": round(pct_riesgo, 1),
+                    "desproporcion": round(pct_riesgo / pct_pob, 2) if pct_pob > 0 else 0,
+                }
+            )
     return contribuciones[:5] if contribuciones else None
 
 
 def _generar_resumen(
-    pct_peligro: float, total_peligro: int, total_precaucion: int,
-    total_seguros: int, factor_extra: float,
-    factores_detalle: list, actividad: str,
+    pct_peligro: float,
+    total_peligro: int,
+    total_precaucion: int,
+    total_seguros: int,
+    factor_extra: float,
+    factores_detalle: list,
+    actividad: str,
 ) -> str:
     partes = []
     if pct_peligro > 15:
         partes.append(f"Riesgo alto: {pct_peligro}% del grupo en peligro")
     elif pct_peligro > 5:
-        partes.append(f"Riesgo moderado: {pct_peligro}% en peligro, {total_precaucion} personas en precaución")
+        partes.append(
+            f"Riesgo moderado: {pct_peligro}% en peligro, {total_precaucion} personas en precaución"
+        )
     else:
         partes.append(f"Riesgo bajo: mayoría del grupo ({total_seguros} personas) en nivel seguro")
 
     if factor_extra > 1.1 and factores_detalle:
         top = max(factores_detalle, key=lambda f: f["multiplicador"])
-        partes.append(f"Factor más influyente: {top['nombre']} (afecta al {top['pct']:.0f}% del grupo, ×{top['multiplicador']})")
+        partes.append(
+            f"Factor más influyente: {top['nombre']} (afecta al {top['pct']:.0f}% del grupo, ×{top['multiplicador']})"
+        )
 
     if actividad:
-        etiqueta_act = {"reposo": "reposo", "ligera": "ligera", "moderada": "moderada", "intensa": "intensa", "muy_intensa": "muy intensa"}.get(actividad, actividad)
+        etiqueta_act = {
+            "reposo": "reposo",
+            "ligera": "ligera",
+            "moderada": "moderada",
+            "intensa": "intensa",
+            "muy_intensa": "muy intensa",
+        }.get(actividad, actividad)
         partes.append(f"Actividad: {etiqueta_act}")
 
     return " · ".join(partes) if partes else ""
@@ -1836,6 +2395,7 @@ async def api_contrafactuales(body: dict):
     perfil = _normalize_perfil(raw_perfil)
 
     from climasafeai.models.ensemble import predict_ensemble
+
     result = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil)
 
     cfs = generar_contrafactuales(result)
@@ -1859,7 +2419,9 @@ async def api_contrafactuales(body: dict):
         "probabilidad_personalizada": round(prob_pers, 4),
         "contrafactuales": cfs,
         "total": len(cfs),
-        "nota": "La 'clase_final_sistema' puede incluir un override por HI/UV que prevalece sobre la probabilidad personalizada." if result.get("override_fisico") else None,
+        "nota": "La 'clase_final_sistema' puede incluir un override por HI/UV que prevalece sobre la probabilidad personalizada."
+        if result.get("override_fisico")
+        else None,
     }
 
 
@@ -1880,12 +2442,15 @@ async def api_riesgo_zona(
     if fecha:
         try:
             from datetime import date as date_type
+
             date_obj = date_type.fromisoformat(fecha)
         except ValueError:
             return {"error": f"Fecha inválida: '{fecha}'. Usa ISO: YYYY-MM-DD"}
 
     try:
-        result = riesgo_zona_grid(lat=lat, lon=lon, radio_km=radio_km, perfil_id=perfil, target_date=date_obj)
+        result = riesgo_zona_grid(
+            lat=lat, lon=lon, radio_km=radio_km, perfil_id=perfil, target_date=date_obj
+        )
         if "error" in result:
             return result
         return result
@@ -1910,14 +2475,18 @@ def _riesgo_zona_resultado(body: dict) -> dict:
     if fecha:
         try:
             from datetime import date as date_type
+
             date_obj = date_type.fromisoformat(fecha)
         except ValueError:
             return {"error": f"Fecha inválida: '{fecha}'. Usa ISO: YYYY-MM-DD"}
 
     try:
         result = riesgo_zona_grid(
-            lat=lat, lon=lon, radio_km=radio_km,
-            perfil_id=perfil_id, target_date=date_obj,
+            lat=lat,
+            lon=lon,
+            radio_km=radio_km,
+            perfil_id=perfil_id,
+            target_date=date_obj,
             perfil=perfil,
         )
         if "error" in result:
@@ -1994,6 +2563,7 @@ async def api_riesgo_volumen(body: dict):
     if target_date:
         try:
             from datetime import date as date_type
+
             date_obj = date_type.fromisoformat(target_date)
         except ValueError:
             pass
@@ -2018,6 +2588,7 @@ async def api_riesgo_volumen(body: dict):
     horas_actividad = []
     if hourly_data:
         import pandas as pd
+
         for row in hourly_data:
             dt = pd.to_datetime(row.get("datetime"))
             hi = row.get("heat_index_c")
@@ -2072,15 +2643,17 @@ async def websocket_endpoint(ws: WebSocket):
             try:
                 data = await ws.receive_json()
             except WebSocketDisconnect:
-                raise   # propagar para que el outer except lo capture
+                raise  # propagar para que el outer except lo capture
             except Exception:
                 # Mensaje malformado (no JSON) — ignorar y seguir
                 try:
-                    await ws.send_json({"type": "bot", "text": " ✕ Mensaje no válido. Usa texto plano."})
+                    await ws.send_json(
+                        {"type": "bot", "text": " ✕ Mensaje no válido. Usa texto plano."}
+                    )
                 except Exception:
                     pass
                 continue
-            msg   = data.get("text", "").strip()
+            msg = data.get("text", "").strip()
             reply = await process_message(msg, session)
             await ws.send_json({"type": "bot", "text": reply})
     except WebSocketDisconnect:

@@ -227,6 +227,44 @@
   .btn-date.active { background: #fff; color: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
   .btn-date:hover:not(.active) { color: var(--text); }
 
+  /* UX-001: agente conversacional (burbujas de chat) */
+  .chat-box {
+    max-height: 340px; overflow-y: auto; padding: 8px 0; margin-bottom: 8px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .chat-msg {
+    max-width: 82%; padding: 8px 12px; border-radius: 12px;
+    font-size: 0.9rem; line-height: 1.45; white-space: pre-wrap;
+  }
+  .chat-msg.agent {
+    background: var(--bg); border: 1px solid var(--border);
+    align-self: flex-start; border-bottom-left-radius: 4px;
+  }
+  .chat-msg.user {
+    background: var(--accent); color: #fff;
+    align-self: flex-end; border-bottom-right-radius: 4px;
+  }
+  .chat-opciones { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip {
+    background: #ebf5fb; border: 1px solid var(--accent); color: var(--accent);
+    padding: 6px 14px; border-radius: 50px; font-size: 0.85rem; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .chip:hover { background: var(--accent); color: #fff; }
+  .chip.on { background: var(--accent); color: #fff; }
+  .chip-done { background: var(--seguro); border-color: var(--seguro); color: #fff; }
+  .chip-done:hover { background: #1e8449; }
+  .chip-skip { background: transparent; border-color: var(--text-light); color: var(--text-light); }
+  .chip-skip:hover { background: var(--text-light); color: #fff; }
+  .chip-cancel { background: transparent; border-color: var(--peligro); color: var(--peligro); }
+  .chip-cancel:hover { background: var(--peligro); color: #fff; }
+  .chat-input-row { display: flex; gap: 8px; }
+  .chat-input-row input {
+    flex: 1; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 0.9rem;
+  }
+  .chat-input-row input:focus { outline: none; border-color: var(--accent); }
+
   @media (max-width: 600px) {
     .form-group { min-width: 100%; }
     header h1 { font-size: 1.3rem; }
@@ -283,6 +321,23 @@
       <div class="form-row" style="gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
         <button class="btn-mode active" data-mode="individual" onclick="setModoPaso1('individual')" style="flex:1;padding:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Individual</button>
         <button class="btn-mode" data-mode="grupo" onclick="setModoPaso1('grupo')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Grupo / Evento</button>
+        <button class="btn-mode" data-mode="chat" onclick="setModoPaso1('chat')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">💬 Chat</button>
+      </div>
+
+      <div id="step1-chat" style="display:none">
+        <div class="card">
+          <div class="card-title">Agente conversacional</div>
+          <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
+            El asistente te hace las preguntas de una en una y construye tu perfil;
+            al terminar calcula tu riesgo con el mismo sistema de predicción del formulario.
+          </p>
+          <div id="chat-box" class="chat-box"></div>
+          <div id="chat-opciones" class="chat-opciones"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="Escribe tu respuesta..." autocomplete="off" onkeydown="if(event.key==='Enter')enviarChat()">
+            <button class="btn" onclick="enviarChat()" style="padding:8px 20px">Enviar</button>
+          </div>
+        </div>
       </div>
 
       <div id="step1-individual-controls" class="form-row" style="gap:8px;margin-bottom:8px">
@@ -1163,9 +1218,11 @@ function setModoPaso1(modo) {
   document.getElementById('step1-individual-controls').style.display = modo === 'individual' ? 'flex' : 'none';
   document.getElementById('step1-individual').style.display = modo === 'individual' ? 'block' : 'none';
   document.getElementById('step1-grupo').style.display = modo === 'grupo' ? 'block' : 'none';
+  document.getElementById('step1-chat').style.display = modo === 'chat' ? 'block' : 'none';
   const mapEl = document.getElementById('map');
   mapEl.classList.remove('mapa-mode');
   if (map) setTimeout(() => map.invalidateSize(), 100);
+  if (modo === 'chat' && !chatAbierto) abrirChat();
 }
 
 function setSubModoPaso2(modo) {
@@ -3369,6 +3426,140 @@ function cargarPerfilSeleccionado() {
     _precargarRutinas();
     irPaso2();
   }).catch(() => alert('Error al cargar perfil'));
+}
+
+// ── UX-001: agente conversacional (estilo SymptomAI) ─────────────────────
+
+let chatEstado = null;        // {paso, perfil, ubicacion} que el backend devuelve
+let chatAbierto = false;
+let chatMultiselect = [];     // selección acumulada de la pregunta multiselect en curso
+
+function anadirMensaje(quien, texto) {
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + quien;
+  div.textContent = texto;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function chip(texto, cls, onclick) {
+  const b = document.createElement('button');
+  b.className = 'chip' + (cls ? ' ' + cls : '');
+  b.textContent = texto;
+  b.onclick = onclick;
+  return b;
+}
+
+function pintarOpcionesChat(data) {
+  const cont = document.getElementById('chat-opciones');
+  cont.innerHTML = '';
+  if (data.multiselect) chatMultiselect = [];
+
+  if (data.opciones && data.opciones.length) {
+    for (const o of data.opciones) {
+      const btn = chip(o.nombre, null, () => {
+        if (data.multiselect) {
+          const i = chatMultiselect.indexOf(o.clave);
+          if (i >= 0) { chatMultiselect.splice(i, 1); btn.classList.remove('on'); }
+          else { chatMultiselect.push(o.clave); btn.classList.add('on'); }
+        } else {
+          enviarChat(o.clave);
+        }
+      });
+      cont.appendChild(btn);
+    }
+    if (data.multiselect) {
+      cont.appendChild(chip('Terminar', 'chip-done', () => enviarChat(chatMultiselect.join(','))));
+    }
+  }
+  if (data.opcional) cont.appendChild(chip('Saltar', 'chip-skip', () => enviarChat('saltar')));
+  cont.appendChild(chip('Cancelar', 'chip-cancel', () => enviarChat('cancelar')));
+}
+
+async function abrirChat() {
+  chatEstado = { paso: 0, perfil: {}, ubicacion: null };
+  chatAbierto = true;
+  document.getElementById('chat-box').innerHTML = '';
+  document.getElementById('chat-opciones').innerHTML = '';
+  anadirMensaje('agent',
+    'Soy el asistente de ClimaSafeAI. Te haré unas preguntas de una en una ' +
+    'y al terminar calcularé tu riesgo por calor con la recomendación.');
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mensaje: '', estado: chatEstado }),
+    });
+    const data = await res.json();
+    if (data.error) { anadirMensaje('agent', data.error); return; }
+    chatEstado = { paso: data.paso, perfil: data.perfil || {}, ubicacion: data.ubicacion || null };
+    anadirMensaje('agent', data.pregunta);
+    pintarOpcionesChat(data);
+  } catch (e) {
+    anadirMensaje('agent', 'Error al conectar con el servidor: ' + e.message);
+  }
+}
+
+async function enviarChat(texto) {
+  const input = document.getElementById('chat-input');
+  const mensaje = (texto !== undefined) ? texto : input.value.trim();
+  if (!mensaje || !chatEstado) return;
+  anadirMensaje('user', mensaje);
+  input.value = '';
+  let data;
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mensaje, estado: chatEstado }),
+    });
+    data = await res.json();
+  } catch (e) {
+    anadirMensaje('agent', 'Error al conectar con el servidor: ' + e.message);
+    return;
+  }
+
+  if (data.cancelado) {
+    chatAbierto = false;
+    anadirMensaje('agent', data.respuesta);
+    const cont = document.getElementById('chat-opciones');
+    cont.innerHTML = '';
+    cont.appendChild(chip('Empezar de nuevo', 'chip-done', abrirChat));
+    return;
+  }
+
+  if (data.fin) {
+    chatEstado = { paso: data.paso || -1, perfil: data.perfil || {}, ubicacion: data.ubicacion || null };
+    anadirMensaje('agent', data.respuesta);
+    const cont = document.getElementById('chat-opciones');
+    cont.innerHTML = '';
+    if (data.error) {
+      anadirMensaje('agent', data.error);
+      cont.appendChild(chip('Empezar de nuevo', 'chip-done', abrirChat));
+      return;
+    }
+    if (data.mensaje_final) anadirMensaje('agent', data.mensaje_final);
+    cont.appendChild(chip('Ver detalle completo', 'chip-done', () => {
+      if (data.resultado) {
+        mostrarResultados(data.resultado);
+        irPaso2();
+      }
+    }));
+    cont.appendChild(chip('Nueva consulta', 'chip-skip', abrirChat));
+    return;
+  }
+
+  if (data.error) {
+    anadirMensaje('agent', data.error);
+    pintarOpcionesChat(data);
+    return;
+  }
+
+  chatEstado = { paso: data.paso, perfil: data.perfil || {}, ubicacion: data.ubicacion || null };
+  anadirMensaje('agent', data.respuesta);
+  anadirMensaje('agent', data.pregunta);
+  pintarOpcionesChat(data);
 }
 
 document.addEventListener('DOMContentLoaded', function() {

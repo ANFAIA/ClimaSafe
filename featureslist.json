@@ -190,11 +190,12 @@
         "Integrado con el sistema de prediccion existente",
         "make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-12",
       "owner": "opencode-web",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-12"
     },
     {
       "id": "RESEARCH-001",
