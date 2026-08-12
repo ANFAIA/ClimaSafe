@@ -982,11 +982,12 @@
         "make test pasa y el servidor MCP actual sigue sirviendo JSON para clientes sin soporte de apps (degradacion: host sin UI recibe texto)",
         "no se toca la web ni se migran las otras 10 tools mas alla del estudio"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-12",
       "owner": "opencode-mcp",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-12"
     },
     {
       "id": "ARNES-011",

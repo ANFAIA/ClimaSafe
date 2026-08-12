@@ -60,7 +60,11 @@ def _ensure_self_signed_cert(host: str = "localhost") -> tuple[str, str]:
     """Genera un certificado SSL autofirmado con cryptography si no existe.
     Devuelve (cert_path, key_path)."""
     _SELF_SIGNED_DIR.mkdir(parents=True, exist_ok=True)
-    safe_host = "localhost" if host in ("0.0.0.0", "127.0.0.1") else host.replace("*", "_").replace(".", "_")
+    safe_host = (
+        "localhost"
+        if host in ("0.0.0.0", "127.0.0.1")
+        else host.replace("*", "_").replace(".", "_")
+    )
     cert_file = _SELF_SIGNED_DIR / f"{safe_host}.cert.pem"
     key_file = _SELF_SIGNED_DIR / f"{safe_host}.key.pem"
 
@@ -77,11 +81,13 @@ def _ensure_self_signed_cert(host: str = "localhost") -> tuple[str, str]:
         key_size=2048,
     )
 
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, "ES"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ClimaSafeAI"),
-        x509.NameAttribute(NameOID.COMMON_NAME, host if host != "0.0.0.0" else "localhost"),
-    ])
+    subject = issuer = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "ES"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ClimaSafeAI"),
+            x509.NameAttribute(NameOID.COMMON_NAME, host if host != "0.0.0.0" else "localhost"),
+        ]
+    )
 
     san_names = ["localhost", "127.0.0.1"]
     if host not in ("0.0.0.0", "localhost", "127.0.0.1"):
@@ -110,11 +116,13 @@ def _ensure_self_signed_cert(host: str = "localhost") -> tuple[str, str]:
     )
 
     with open(key_file, "wb") as f:
-        f.write(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption(),
-        ))
+        f.write(
+            key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
     with open(cert_file, "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
 
@@ -166,34 +174,50 @@ def _calc_demografico(rangos: list, total: int) -> dict | None:
         pct_pob = r.get("n_personas", 0) / total * 100
         pct_riesgo = r.get("peligro", 0) / total_peligro * 100 if total_peligro else 0
         if pct_riesgo > pct_pob * 1.2:
-            contribuciones.append({
-                "rango": r["rango"],
-                "pct_poblacion": round(pct_pob, 1),
-                "pct_del_riesgo": round(pct_riesgo, 1),
-                "desproporcion": round(pct_riesgo / pct_pob, 2) if pct_pob > 0 else 0,
-            })
+            contribuciones.append(
+                {
+                    "rango": r["rango"],
+                    "pct_poblacion": round(pct_pob, 1),
+                    "pct_del_riesgo": round(pct_riesgo, 1),
+                    "desproporcion": round(pct_riesgo / pct_pob, 2) if pct_pob > 0 else 0,
+                }
+            )
     return contribuciones[:5] if contribuciones else None
 
 
 def _generar_resumen(
-    pct_peligro: float, total_peligro: int, total_precaucion: int,
-    total_seguros: int, factor_extra: float,
-    factores_detalle: list, actividad: str,
+    pct_peligro: float,
+    total_peligro: int,
+    total_precaucion: int,
+    total_seguros: int,
+    factor_extra: float,
+    factores_detalle: list,
+    actividad: str,
 ) -> str:
     partes = []
     if pct_peligro > 15:
         partes.append(f"Riesgo alto: {pct_peligro}% del grupo en peligro")
     elif pct_peligro > 5:
-        partes.append(f"Riesgo moderado: {pct_peligro}% en peligro, {total_precaucion} personas en precaución")
+        partes.append(
+            f"Riesgo moderado: {pct_peligro}% en peligro, {total_precaucion} personas en precaución"
+        )
     else:
         partes.append(f"Riesgo bajo: mayoría del grupo ({total_seguros} personas) en nivel seguro")
 
     if factor_extra > 1.1 and factores_detalle:
         top = max(factores_detalle, key=lambda f: f["multiplicador"])
-        partes.append(f"Factor más influyente: {top['nombre']} (afecta al {top['pct']:.0f}% del grupo, ×{top['multiplicador']})")
+        partes.append(
+            f"Factor más influyente: {top['nombre']} (afecta al {top['pct']:.0f}% del grupo, ×{top['multiplicador']})"
+        )
 
     if actividad:
-        etiqueta_act = {"reposo": "reposo", "ligera": "ligera", "moderada": "moderada", "intensa": "intensa", "muy_intensa": "muy intensa"}.get(actividad, actividad)
+        etiqueta_act = {
+            "reposo": "reposo",
+            "ligera": "ligera",
+            "moderada": "moderada",
+            "intensa": "intensa",
+            "muy_intensa": "muy intensa",
+        }.get(actividad, actividad)
         partes.append(f"Actividad: {etiqueta_act}")
 
     return " · ".join(partes) if partes else ""
@@ -203,22 +227,37 @@ def _generar_resumen(
 
 
 def _try_prediction(
-    lat: float, lon: float, provincia: str,
-    perfil: dict, target_date: date_type | None = None,
+    lat: float,
+    lon: float,
+    provincia: str,
+    perfil: dict,
+    target_date: date_type | None = None,
     resolucion: int = 60,
 ) -> dict:
     from climasafeai.models.ensemble import predict_ensemble
-    return predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil,
-                            target_date=target_date, resolucion=resolucion)
+
+    return predict_ensemble(
+        lat=lat,
+        lon=lon,
+        provincia=provincia,
+        perfil=perfil,
+        target_date=target_date,
+        resolucion=resolucion,
+    )
 
 
-def _weather_for_date(lat: float, lon: float, provincia: str, target_date: date_type | None = None) -> dict:
+def _weather_for_date(
+    lat: float, lon: float, provincia: str, target_date: date_type | None = None
+) -> dict:
     from climasafeai.data.weather_fetcher import fetch_weather_data
+
     return fetch_weather_data(lat=lat, lon=lon, provincia=provincia, target_date=target_date)
 
 
 def _hi_peak_from_weather(
-    weather: dict, hora_inicio: int | None = None, duracion_h: int | None = None,
+    weather: dict,
+    hora_inicio: int | None = None,
+    duracion_h: int | None = None,
 ) -> float | None:
     from climasafeai.features.weather_indices import heat_index
     import numpy as np
@@ -293,13 +332,19 @@ def _aplicar_deporte_a_perfil(perfil: dict) -> dict:
 
 
 def predict_risk(
-    lat: float, lon: float, provincia: str = "Madrid",
-    edad: int = 40, sexo: str = "hombre",
+    lat: float,
+    lon: float,
+    provincia: str = "Madrid",
+    edad: int = 40,
+    sexo: str = "hombre",
     nivel_actividad: str = "ligera",
-    hora_inicio: int = 10, duracion_h: float = 2.0,
+    hora_inicio: int = 10,
+    duracion_h: float = 2.0,
     aclimatado: bool | None = None,
-    grasa: float | None = None, entrenado: bool | None = None,
-    ocupacion: str | None = None, deporte: str | None = None,
+    grasa: float | None = None,
+    entrenado: bool | None = None,
+    ocupacion: str | None = None,
+    deporte: str | None = None,
     comorbilidades: list[str] | None = None,
     medicacion: list[str] | None = None,
     fototipo: str | None = None,
@@ -317,7 +362,9 @@ def predict_risk(
     except ValueError as exc:
         return {"error": str(exc)}
     from climasafeai.features.personalizacion import (
-        riesgo_horario_acumulado, recomendar_horario, pico_riesgo_actividad,
+        riesgo_horario_acumulado,
+        recomendar_horario,
+        pico_riesgo_actividad,
     )
 
     perfil: dict[str, Any] = {
@@ -365,6 +412,7 @@ def predict_risk(
     if incluir_contrafactuales:
         try:
             from climasafeai.models.explicabilidad import generar_contrafactuales
+
             cfs = generar_contrafactuales(result)
             result["contrafactuales"] = cfs
         except Exception as e:
@@ -373,6 +421,7 @@ def predict_risk(
     if incluir_recomendaciones:
         try:
             from climasafeai.models.recomendaciones import generar_recomendaciones
+
             recs = generar_recomendaciones(perfil, result)
             result["recomendaciones"] = recs
         except Exception as e:
@@ -383,7 +432,8 @@ def predict_risk(
 
 
 def predict_volume_risk(
-    lat: float, lon: float,
+    lat: float,
+    lon: float,
     total_personas: int = 5000,
     pct_mayores_50: float = 30.0,
     tipo_evento: str = "deporte",
@@ -412,7 +462,8 @@ def predict_volume_risk(
 
 
 def predict_zone_risk(
-    lat: float, lon: float,
+    lat: float,
+    lon: float,
     radio_km: float = 5.0,
     perfil_id: str = "adulto",
     fecha: str | None = None,
@@ -427,14 +478,18 @@ def predict_zone_risk(
     if perfil:
         _aplicar_deporte_a_perfil(perfil)
     return riesgo_zona_grid(
-        lat=lat, lon=lon, radio_km=radio_km,
-        perfil_id=perfil_id, target_date=target_date,
+        lat=lat,
+        lon=lon,
+        radio_km=radio_km,
+        perfil_id=perfil_id,
+        target_date=target_date,
         perfil=perfil,
     )
 
 
 def predict_group_risk(
-    lat: float, lon: float,
+    lat: float,
+    lon: float,
     tipo: str = "numero",
     provincia: str = "Madrid",
     cantidad: int = 100,
@@ -469,7 +524,11 @@ def predict_group_risk(
         resultados = []
         for p in perfiles:
             try:
-                perfil = {k: v for k, v in p.items() if k not in ("id", "alias", "tags", "created_at", "updated_at")}
+                perfil = {
+                    k: v
+                    for k, v in p.items()
+                    if k not in ("id", "alias", "tags", "created_at", "updated_at")
+                }
                 if hora_inicio is not None:
                     perfil["hora_inicio"] = float(hora_inicio)
                 if duracion is not None:
@@ -491,8 +550,16 @@ def predict_group_risk(
             except Exception as e:
                 resultados.append({"_alias": p.get("alias", f"ID {p['id']}"), "error": str(e)})
 
-        en_peligro = sum(1 for r in resultados if r.get("clase_final_label") == "PELIGRO" or r.get("clase_final") == 2)
-        en_precaucion = sum(1 for r in resultados if r.get("clase_final_label") == "PRECAUCION" or r.get("clase_final") == 1)
+        en_peligro = sum(
+            1
+            for r in resultados
+            if r.get("clase_final_label") == "PELIGRO" or r.get("clase_final") == 2
+        )
+        en_precaucion = sum(
+            1
+            for r in resultados
+            if r.get("clase_final_label") == "PRECAUCION" or r.get("clase_final") == 1
+        )
 
         return {
             "tipo": "etiqueta",
@@ -506,9 +573,7 @@ def predict_group_risk(
     from climasafeai.features.personalizacion import riesgo_horario_acumulado, recomendar_horario
     from climasafeai.models.ensemble import predict_ensemble
 
-    rangos_edad = [
-        (18, 30), (30, 45), (45, 60), (60, 75), (75, 90)
-    ]
+    rangos_edad = [(18, 30), (30, 45), (45, 60), (60, 75), (75, 90)]
     rangos_edad = [(a, b) for a, b in rangos_edad if a < edad_max and b > edad_min]
     if not rangos_edad:
         rangos_edad = [(edad_min, edad_max)]
@@ -532,11 +597,15 @@ def predict_group_risk(
         mult = 1.0 + (pct / 100.0) * (cfg["coef"] - 1.0) if pct > 0 else 1.0
         factor_extra *= mult
         if mult > 1.001:
-            factores_detalle.append({
-                "clave": k, "nombre": cfg["label"],
-                "pct": round(pct, 1), "coef": cfg["coef"],
-                "multiplicador": round(mult, 3),
-            })
+            factores_detalle.append(
+                {
+                    "clave": k,
+                    "nombre": cfg["label"],
+                    "pct": round(pct, 1),
+                    "coef": cfg["coef"],
+                    "multiplicador": round(mult, 3),
+                }
+            )
     factor_extra = min(factor_extra, 2.5)
 
     resultados_rangos: list[dict] = []
@@ -552,9 +621,12 @@ def predict_group_risk(
         edad_med = (max(a, edad_min) + min(b, edad_max)) / 2
         pct_h = pct_hombres
         perfil_rango = {
-            "edad": int(edad_med), "sexo": "hombre" if pct_h >= 50 else "mujer",
-            "nivel_actividad": actividad, "hora_inicio": hora_inicio,
-            "duracion_actividad_h": duracion, "aclimatado": aclimatado in ("si", None, ""),
+            "edad": int(edad_med),
+            "sexo": "hombre" if pct_h >= 50 else "mujer",
+            "nivel_actividad": actividad,
+            "hora_inicio": hora_inicio,
+            "duracion_actividad_h": duracion,
+            "aclimatado": aclimatado in ("si", None, ""),
         }
         if ocupacion:
             perfil_rango["ocupacion"] = ocupacion
@@ -562,7 +634,9 @@ def predict_group_risk(
             perfil_rango["deporte"] = deporte
         _aplicar_deporte_a_perfil(perfil_rango)
         try:
-            pred = predict_ensemble(lat=lat, lon=lon, provincia=provincia, perfil=perfil_rango, target_date=target_date)
+            pred = predict_ensemble(
+                lat=lat, lon=lon, provincia=provincia, perfil=perfil_rango, target_date=target_date
+            )
         except Exception:
             continue
         if primer_pred is None:
@@ -583,11 +657,16 @@ def predict_group_risk(
         total_peligro += n_peligro
         total_precaucion += n_precaucion
         total_seguros += n_seguro
-        resultados_rangos.append({
-            "rango": f"{max(a, edad_min)}-{min(b, edad_max)}",
-            "edad_media": int(edad_med), "n_personas": n_rango,
-            "peligro": n_peligro, "precaucion": n_precaucion, "seguro": n_seguro,
-        })
+        resultados_rangos.append(
+            {
+                "rango": f"{max(a, edad_min)}-{min(b, edad_max)}",
+                "edad_media": int(edad_med),
+                "n_personas": n_rango,
+                "peligro": n_peligro,
+                "precaucion": n_precaucion,
+                "seguro": n_seguro,
+            }
+        )
 
     total = total_seguros + total_precaucion + total_peligro
     pct_peligro = total_peligro / total * 100 if total else 0
@@ -606,12 +685,21 @@ def predict_group_risk(
         "factores_grupo": factores_activos,
         "factores_detalle": factores_detalle,
         "demografico": demografico,
-        "resumen": _generar_resumen(pct_peligro, total_peligro, total_precaucion, total_seguros, factor_extra, factores_detalle, actividad),
+        "resumen": _generar_resumen(
+            pct_peligro,
+            total_peligro,
+            total_precaucion,
+            total_seguros,
+            factor_extra,
+            factores_detalle,
+            actividad,
+        ),
     }
 
 
 def predict_age_curves(
-    lat: float, lon: float,
+    lat: float,
+    lon: float,
     provincia: str = "Madrid",
     edad: int = 40,
     sexo: str = "hombre",
@@ -676,24 +764,32 @@ def system_health() -> dict:
     }
     try:
         from climasafeai.models.ensemble import PERS_THRESHOLD_PELIGRO
+
         info["umbral_peligro"] = PERS_THRESHOLD_PELIGRO
     except Exception:
         info["ensemble"] = "no disponible"
 
     try:
         from climasafeai.models.volumen import estimar_afectados
+
         info["volumen"] = "disponible"
     except Exception:
         info["volumen"] = "no disponible"
 
     try:
         from climasafeai.data.grid_risk import riesgo_zona_grid, PERFILES_DISPONIBLES
+
         info["perfiles_zona"] = list(PERFILES_DISPONIBLES.keys())
     except Exception:
         info["grid_risk"] = "no disponible"
 
     try:
-        from climasafeai.models.ensemble import PERS_THRESHOLD_PELIGRO, _edad_a_estrato, _aplicar_factor_edad
+        from climasafeai.models.ensemble import (
+            PERS_THRESHOLD_PELIGRO,
+            _edad_a_estrato,
+            _aplicar_factor_edad,
+        )
+
         info["personalizacion"] = "disponible"
     except Exception:
         info["personalizacion"] = "no disponible"
@@ -761,6 +857,7 @@ def grafica_riesgo_horario_png(
         return None
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -779,33 +876,63 @@ def grafica_riesgo_horario_png(
 
     # Ventana de actividad: sombreado gris de fondo.
     if hora_inicio is not None and duracion_h:
-        ax.axvspan(float(hora_inicio), float(hora_inicio) + float(duracion_h),
-                   color="#2c3e50", alpha=0.10, zorder=0,
-                   label=f"Tu actividad ({int(hora_inicio)}:00-{int(float(hora_inicio) + float(duracion_h))}:00)")
+        ax.axvspan(
+            float(hora_inicio),
+            float(hora_inicio) + float(duracion_h),
+            color="#2c3e50",
+            alpha=0.10,
+            zorder=0,
+            label=f"Tu actividad ({int(hora_inicio)}:00-{int(float(hora_inicio) + float(duracion_h))}:00)",
+        )
 
     # Franja recomendada por el backend (recomendar_horario), en verde.
     rec = result.get("recomendacion_horario") or {}
     if rec.get("hora_inicio") is not None and rec.get("hora_fin") is not None:
-        ax.axvspan(float(rec["hora_inicio"]), float(rec["hora_fin"]),
-                   color="#27ae60", alpha=0.14, zorder=0,
-                   label=f"Recomendado ({int(rec['hora_inicio'])}:00-{int(rec['hora_fin'])}:00)")
+        ax.axvspan(
+            float(rec["hora_inicio"]),
+            float(rec["hora_fin"]),
+            color="#27ae60",
+            alpha=0.14,
+            zorder=0,
+            label=f"Recomendado ({int(rec['hora_inicio'])}:00-{int(rec['hora_fin'])}:00)",
+        )
 
-    ax.plot(horas, niveles, color="#2c3e50", linewidth=2.0, marker="o",
-            markersize=3.5, label="Peligrosidad ambiental (HI)", zorder=3)
+    ax.plot(
+        horas,
+        niveles,
+        color="#2c3e50",
+        linewidth=2.0,
+        marker="o",
+        markersize=3.5,
+        label="Peligrosidad ambiental (HI)",
+        zorder=3,
+    )
     etiqueta_riesgo = f"Tu riesgo ({edad} años)" if edad is not None else "Tu riesgo"
-    ax2.plot(horas, riesgos, color="#e74c3c", linewidth=2.5,
-             label=etiqueta_riesgo, zorder=4)
+    ax2.plot(horas, riesgos, color="#e74c3c", linewidth=2.5, label=etiqueta_riesgo, zorder=4)
 
     # Pico de la curva personal, con etiqueta directa.
     validos = [(h, r) for h, r in zip(horas, riesgos) if r == r]  # descarta NaN
     if validos:
         hora_pico, pico = max(validos, key=lambda hr: hr[1])
-        ax2.plot([hora_pico], [pico], marker="o", markersize=8,
-                 color="#e74c3c", markeredgecolor="white", markeredgewidth=2, zorder=5)
-        ax2.annotate(f"pico {pico:.0f}% a las {hora_pico}:00",
-                     xy=(hora_pico, pico), xytext=(0, 12),
-                     textcoords="offset points", ha="center",
-                     fontsize=9, color="#c0392b")
+        ax2.plot(
+            [hora_pico],
+            [pico],
+            marker="o",
+            markersize=8,
+            color="#e74c3c",
+            markeredgecolor="white",
+            markeredgewidth=2,
+            zorder=5,
+        )
+        ax2.annotate(
+            f"pico {pico:.0f}% a las {hora_pico}:00",
+            xy=(hora_pico, pico),
+            xytext=(0, 12),
+            textcoords="offset points",
+            ha="center",
+            fontsize=9,
+            color="#c0392b",
+        )
 
     ax.set_xlabel("Hora del día", fontsize=10)
     ax.set_ylabel("Nivel de peligro (1-10)", fontsize=10, color="#2c3e50")
@@ -833,8 +960,15 @@ def grafica_riesgo_horario_png(
     etiquetas = ax.get_legend_handles_labels()[1] + ax2.get_legend_handles_labels()[1]
     # Fondo semitransparente: la leyenda va arriba a la izquierda y ahí puede
     # cruzarse con las curvas cuando el riesgo ya es alto de mañana.
-    ax.legend(manejadores, etiquetas, loc="upper left", fontsize=8, ncol=2,
-              framealpha=0.85, edgecolor="none").set_zorder(10)
+    ax.legend(
+        manejadores,
+        etiquetas,
+        loc="upper left",
+        fontsize=8,
+        ncol=2,
+        framealpha=0.85,
+        edgecolor="none",
+    ).set_zorder(10)
 
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
@@ -980,7 +1114,8 @@ def _temps_en_ventana(perfil_horario: list[dict], perfil_usuario: dict) -> list[
     duracion = perfil_usuario.get("duracion_actividad_h")
     if inicio is not None and duracion is not None:
         en_ventana = [
-            h["temp"] for h in perfil_horario
+            h["temp"]
+            for h in perfil_horario
             if inicio <= h["hora"] < inicio + duracion and h.get("temp") is not None
         ]
         if en_ventana:
@@ -1032,7 +1167,7 @@ def _token_del_transporte() -> str | None:
         peticion = getattr(request_ctx.get(), "request", None)
         cabecera = peticion.headers.get("authorization") if peticion is not None else None
         if cabecera and cabecera.lower().startswith("bearer "):
-            bearer = cabecera[len("bearer "):].strip()
+            bearer = cabecera[len("bearer ") :].strip()
             if bearer:
                 return bearer
     except (ImportError, LookupError, AttributeError):
@@ -1094,6 +1229,7 @@ def _requiere_identidad(nivel: str, sujeto: tuple[str, ...] = _CLAVES_SUJETO):
     Devuelve el error como JSON en un string, nunca lanza: es la convención del
     fichero y los tests hacen ``_json(...)["error"]``.
     """
+
     def decorador(fn):
         firma = inspect.signature(fn)
         inyectables = [k for k in _ORDEN_INYECCION if k in sujeto and k in firma.parameters]
@@ -1117,7 +1253,8 @@ def _requiere_identidad(nivel: str, sujeto: tuple[str, ...] = _CLAVES_SUJETO):
             argumentos = dict(ligados.arguments)
 
             nombrados = [
-                (clave, argumentos[clave]) for clave in sujeto
+                (clave, argumentos[clave])
+                for clave in sujeto
                 if argumentos.get(clave) is not None and argumentos.get(clave) != ""
             ]
 
@@ -1137,8 +1274,11 @@ def _requiere_identidad(nivel: str, sujeto: tuple[str, ...] = _CLAVES_SUJETO):
             # Un solo sujeto por llamada, y la pregunta desaparece.
             if len(nombrados) > 1:
                 return json.dumps(
-                    {"error": ERROR_SUJETO_AMBIGUO.format(
-                        claves=", ".join(c for c, _ in nombrados))},
+                    {
+                        "error": ERROR_SUJETO_AMBIGUO.format(
+                            claves=", ".join(c for c, _ in nombrados)
+                        )
+                    },
                     ensure_ascii=False,
                 )
 
@@ -1147,8 +1287,10 @@ def _requiere_identidad(nivel: str, sujeto: tuple[str, ...] = _CLAVES_SUJETO):
 
             for clave in inyectables:
                 propio = (
-                    solicitante["id"] if clave == "perfil_id"
-                    else solicitante.get("uid") if clave == "uid"
+                    solicitante["id"]
+                    if clave == "perfil_id"
+                    else solicitante.get("uid")
+                    if clave == "uid"
                     else solicitante.get("telegram_chat_id")
                 )
                 if propio is None:
@@ -1206,6 +1348,7 @@ def _requiere_token_escritura(fn):
     BD. La marca ``__climasafe_escritura__`` deja la clasificación
     lectura/escritura explícita y auditable, igual que ``__climasafe_acceso__``.
     """
+
     @functools.wraps(fn)
     def envoltorio(*args, **kwargs):
         if not (os.environ.get(ENV_TOKEN_ESCRITURA) or "").strip():
@@ -1228,14 +1371,54 @@ def _perfil_publico(perfil: dict) -> dict:
     return {k: v for k, v in perfil.items() if k not in _CAMPOS_FUERA_DEL_PERFIL}
 
 
+# ── Vista MCP App (MCP-APPS-001) ─────────────────────────────────────
+#
+# predict_risk_mcp declara `_meta.ui.resourceUri` apuntando al recurso
+# `ui://prediccion-riesgo`. Un host con soporte de MCP Apps (extensión
+# `io.modelcontextprotocol/ui`) lee ese recurso tras la llamada y renderiza el
+# HTML en el chat; un host sin soporte ignora el meta y recibe el JSON normal.
+#
+# La vista es una plantilla HTML autocontenida que vive en el backend Python
+# (agents/tools/mcp_apps_vista.py) con el CSS y el JS inline: no hay fichero
+# `.js` suelto en el repositorio. Las funciones de visualización
+# (mostrarFinal y mostrarGraficaRiesgo) son las mismas firmas que usa la web
+# (chat/static/index.html) para que el parte pinte igual en ambos sitios.
+#
+# Estado: el recurso pinta el ÚLTIMO resultado de predict_risk_mcp. Es el
+# patrón mínimo de la spec (la tool deja el dato y el recurso lo renderiza);
+# con varias llamadas seguidas se vería el último, igual que el ejemplo del
+# reloj de la doc oficial de MCP Apps.
+
+_UI_RESOURCE_URI = "ui://prediccion-riesgo"
+_UI_ESTADO: dict[str, Any] = {"ultimo": None}
+
+
+def _html_vista_predict_risk(result: dict) -> str:
+    """HTML autocontenido del recurso ui:// (módulo mcp_apps_vista)."""
+    from agents.tools.mcp_apps_vista import html_vista_predict_risk
+
+    return html_vista_predict_risk(result)
+
+
 # ── MCP Server ───────────────────────────────────────────────────────
 
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.types import ImageContent
+
     _mcp = FastMCP("ClimaSafeAI Predicción de Riesgo")
 
-    @_mcp.tool()
+    @_mcp.resource(_UI_RESOURCE_URI, mime_type="text/html;profile=mcp-app")
+    def recurso_vista_predict_risk() -> str:
+        """Vista HTML del último resultado de predict_risk_mcp (MCP Apps)."""
+        ultimo = _UI_ESTADO.get("ultimo")
+        if not ultimo:
+            from agents.tools.mcp_apps_vista import html_vista_sin_resultado
+
+            return html_vista_sin_resultado()
+        return _html_vista_predict_risk(ultimo)
+
+    @_mcp.tool(meta={"ui": {"resourceUri": _UI_RESOURCE_URI}})
     @_acceso_publico
     def predict_risk_mcp(
         lat: float,
@@ -1263,39 +1446,51 @@ try:
     ) -> str:
         """Predice riesgo cardiovascular para 1 persona.
 
-hora_inicio, duracion_h, nivel_actividad y ubicación son de ESTA salida, no del
-perfil. `aclimatado` es al CALOR ambiental, no a un deporte. Del cuerpo solo se usa
-`grasa` (%): si el usuario no la sabe, omítela.
+        hora_inicio, duracion_h, nivel_actividad y ubicación son de ESTA salida, no del
+        perfil. `aclimatado` es al CALOR ambiental, no a un deporte. Del cuerpo solo se usa
+        `grasa` (%): si el usuario no la sabe, omítela.
 
-`ocupacion` describe ESTA salida, no el oficio del usuario: mándala SOLO si sale a
-trabajar (reparto, mantenimiento, construccion, campo; oficina si es bajo techo).
-Un peón de campo que sale a pasear el domingo NO lleva ocupacion — pesa hasta ×2.7.
-`entrenado` es si está acostumbrado a ESA actividad: reduce a la mitad el extra de
-esfuerzo. `deporte` es solo la etiqueta ("senderismo").
+        `ocupacion` describe ESTA salida, no el oficio del usuario: mándala SOLO si sale a
+        trabajar (reparto, mantenimiento, construccion, campo; oficina si es bajo techo).
+        Un peón de campo que sale a pasear el domingo NO lleva ocupacion — pesa hasta ×2.7.
+        `entrenado` es si está acostumbrado a ESA actividad: reduce a la mitad el extra de
+        esfuerzo. `deporte` es solo la etiqueta ("senderismo").
 
-`resolucion` es la resolución del perfil horario en minutos por punto (5, 15, 30
-o 60; por defecto 60 = 1 punto por hora). Con menos minutos se interpolan los
-puntos intermedios (DATA-007): mismo contrato de salida, más puntos.
+        `resolucion` es la resolución del perfil horario en minutos por punto (5, 15, 30
+        o 60; por defecto 60 = 1 punto por hora). Con menos minutos se interpolan los
+        puntos intermedios (DATA-007): mismo contrato de salida, más puntos.
 
-`situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
-vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
+        `situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
+        vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
         comorb_list = [c.strip() for c in comorbilidades.split(",")] if comorbilidades else None
         med_list = [m.strip() for m in medicacion.split(",")] if medicacion else None
         sit_list = [s.strip() for s in situacion_social.split(",")] if situacion_social else None
         result = predict_risk(
-            lat=lat, lon=lon, provincia=provincia,
-            edad=edad, sexo=sexo, nivel_actividad=nivel_actividad,
-            hora_inicio=hora_inicio, duracion_h=duracion_h,
-            aclimatado=aclimatado, grasa=grasa,
-            ocupacion=ocupacion, entrenado=entrenado, deporte=deporte,
-            comorbilidades=comorb_list, medicacion=med_list,
-            fototipo=fototipo, situacion_social=sit_list,
-            falta_sueno=falta_sueno, enfermedad_reciente=enfermedad_reciente,
+            lat=lat,
+            lon=lon,
+            provincia=provincia,
+            edad=edad,
+            sexo=sexo,
+            nivel_actividad=nivel_actividad,
+            hora_inicio=hora_inicio,
+            duracion_h=duracion_h,
+            aclimatado=aclimatado,
+            grasa=grasa,
+            ocupacion=ocupacion,
+            entrenado=entrenado,
+            deporte=deporte,
+            comorbilidades=comorb_list,
+            medicacion=med_list,
+            fototipo=fototipo,
+            situacion_social=sit_list,
+            falta_sueno=falta_sueno,
+            enfermedad_reciente=enfermedad_reciente,
             fiesta=fiesta,
             fecha=fecha,
             resolucion=resolucion if resolucion is not None else 60,
         )
         _sanitize(result)
+        _UI_ESTADO["ultimo"] = result
         return json.dumps(result, indent=2, default=str, ensure_ascii=False)
 
     @_mcp.tool()
@@ -1303,22 +1498,25 @@ vivienda_fria. `fototipo` escala Fitzpatrick 1-6."""
     def listar_usuarios_mcp() -> str:
         """Lista los perfiles guardados: uid, alias, edad, sexo. SOLO ADMINISTRACIÓN.
 
-Un llamante con rol 'usuario' recibe error: enumerar perfiles es justo lo que el
-control de acceso impide. Para ver el tuyo usa `cargar_perfil_mcp` sin uid."""
+        Un llamante con rol 'usuario' recibe error: enumerar perfiles es justo lo que el
+        control de acceso impide. Para ver el tuyo usa `cargar_perfil_mcp` sin uid."""
         from climasafeai.db.manager import DBManager
+
         db = DBManager()
         perfiles = db.listar_perfiles()
         datos = []
         for p in perfiles:
-            datos.append({
-                "uid": p.get("uid"),
-                "alias": p.get("alias") or f"(sin alias) {p.get('uid')}",
-                "rol": p.get("rol"),
-                "edad": p.get("edad"),
-                "sexo": p.get("sexo"),
-                "provincia": p.get("provincia"),
-                "tags": p.get("tags"),
-            })
+            datos.append(
+                {
+                    "uid": p.get("uid"),
+                    "alias": p.get("alias") or f"(sin alias) {p.get('uid')}",
+                    "rol": p.get("rol"),
+                    "edad": p.get("edad"),
+                    "sexo": p.get("sexo"),
+                    "provincia": p.get("provincia"),
+                    "tags": p.get("tags"),
+                }
+            )
         return json.dumps(datos, indent=2, ensure_ascii=False, default=str)
 
     @_mcp.tool()
@@ -1326,12 +1524,13 @@ control de acceso impide. Para ver el tuyo usa `cargar_perfil_mcp` sin uid."""
     def cargar_perfil_mcp(uid: Optional[str] = None) -> str:
         """Carga TU perfil. Sin `uid` carga el del token con el que llamas.
 
-El `uid` es el identificador público opaco ('usr_...'); alias y chat_id ya no
-sirven como llave. Pedir el uid de otra persona devuelve error, no datos.
+        El `uid` es el identificador público opaco ('usr_...'); alias y chat_id ya no
+        sirven como llave. Pedir el uid de otra persona devuelve error, no datos.
 
-Su nivel_actividad, hora_inicio y duracion son genéricos: no valen para la
-predicción, pide los de esta salida."""
+        Su nivel_actividad, hora_inicio y duracion son genéricos: no valen para la
+        predicción, pide los de esta salida."""
         from climasafeai.db.manager import DBManager
+
         db = DBManager()
         match = db.buscar_por_uid(uid) if uid else None
         if not match:
@@ -1346,16 +1545,25 @@ predicción, pide los de esta salida."""
     def cargar_perfil_por_chat_id_mcp(chat_id: str) -> str:
         """Carga TU perfil a partir de tu chat_id de Telegram.
 
-Solo funciona con el chat vinculado a tu propio perfil: el chat_id dejó de ser
-llave de acceso."""
+        Solo funciona con el chat vinculado a tu propio perfil: el chat_id dejó de ser
+        llave de acceso."""
         from climasafeai.db.manager import DBManager
+
         db = DBManager()
         match = db.buscar_por_telegram(chat_id)
         if not match:
-            return json.dumps({"encontrado": False, "mensaje": "No hay perfil vinculado a este chat. Pregunta al usuario si tiene un alias o si quiere crear un perfil nuevo."}, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "encontrado": False,
+                    "mensaje": "No hay perfil vinculado a este chat. Pregunta al usuario si tiene un alias o si quiere crear un perfil nuevo.",
+                },
+                ensure_ascii=False,
+            )
         perfil = db.obtener_perfil(match["id"])
         if not perfil:
-            return json.dumps({"encontrado": False, "mensaje": "Perfil no encontrado"}, ensure_ascii=False)
+            return json.dumps(
+                {"encontrado": False, "mensaje": "Perfil no encontrado"}, ensure_ascii=False
+            )
         datos = _perfil_publico(perfil)
         datos["encontrado"] = True
         return json.dumps(datos, indent=2, ensure_ascii=False, default=str)
@@ -1366,13 +1574,14 @@ llave de acceso."""
     def vincular_chat_id_mcp(chat_id: str, uid: Optional[str] = None) -> str:
         """Vincula un chat de Telegram a TU perfil (el del token con el que llamas).
 
-Antes aceptaba cualquier alias, y eso era escalada de privilegios en dos pasos:
-reasignabas el perfil ajeno a tu chat y luego lo leías como propio. Ahora solo
-se vincula el perfil propio, y nunca un chat que ya sea de otro.
+        Antes aceptaba cualquier alias, y eso era escalada de privilegios en dos pasos:
+        reasignabas el perfil ajeno a tu chat y luego lo leías como propio. Ahora solo
+        se vincula el perfil propio, y nunca un chat que ya sea de otro.
 
-Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
-servidor está en modo solo lectura y esta llamada no modifica nada."""
+        Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+        servidor está en modo solo lectura y esta llamada no modifica nada."""
         from climasafeai.db.manager import DBManager
+
         db = DBManager()
         match = db.buscar_por_uid(uid) if uid else None
         if not match:
@@ -1386,30 +1595,57 @@ servidor está en modo solo lectura y esta llamada no modifica nada."""
                 ensure_ascii=False,
             )
         db.actualizar_perfil(match["id"], {"telegram_chat_id": chat_id})
-        return json.dumps({"success": True, "uid": match["uid"], "chat_id": chat_id, "mensaje": "Chat vinculado a tu perfil"}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "success": True,
+                "uid": match["uid"],
+                "chat_id": chat_id,
+                "mensaje": "Chat vinculado a tu perfil",
+            },
+            ensure_ascii=False,
+        )
 
     @_mcp.tool()
     @_requiere_identidad("identidad")
     @_requiere_token_escritura
-    def crear_perfil_mcp(alias: str, edad: int, sexo: str, grasa: Optional[float] = None, aclimatado: bool = False, comorbilidades: Optional[str] = None, medicacion: Optional[str] = None, nivel_actividad: Optional[str] = None, fototipo: Optional[str] = None, situacion_social: Optional[str] = None, chat_id: Optional[str] = None) -> str:
+    def crear_perfil_mcp(
+        alias: str,
+        edad: int,
+        sexo: str,
+        grasa: Optional[float] = None,
+        aclimatado: bool = False,
+        comorbilidades: Optional[str] = None,
+        medicacion: Optional[str] = None,
+        nivel_actividad: Optional[str] = None,
+        fototipo: Optional[str] = None,
+        situacion_social: Optional[str] = None,
+        chat_id: Optional[str] = None,
+    ) -> str:
         """Crea un perfil y opcionalmente lo vincula a un chat de Telegram.
 
-`grasa` es el % graso; si no lo sabe, omítela. `comorbilidades` y `medicacion` van
-separadas por comas, p. ej.
-"cardiovascular,diabetes" y "diureticos_asa,antipsicoticos".
+        `grasa` es el % graso; si no lo sabe, omítela. `comorbilidades` y `medicacion` van
+        separadas por comas, p. ej.
+        "cardiovascular,diabetes" y "diureticos_asa,antipsicoticos".
 
-`situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
-vivienda_fria. `fototipo` escala Fitzpatrick 1-6.
+        `situacion_social` separada por comas: vive_solo, no_sale, sin_aire_acondicionado,
+        vivienda_fria. `fototipo` escala Fitzpatrick 1-6.
 
-Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
-servidor está en modo solo lectura y esta llamada no modifica nada."""
+        Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+        servidor está en modo solo lectura y esta llamada no modifica nada."""
         from climasafeai.db.manager import DBManager
+
         db = DBManager()
         exist = db.buscar_por_alias(alias)
         if exist:
-            return json.dumps({"success": False, "error": f"Ya existe un perfil con alias '{alias}'"}, ensure_ascii=False)
+            return json.dumps(
+                {"success": False, "error": f"Ya existe un perfil con alias '{alias}'"},
+                ensure_ascii=False,
+            )
         if chat_id and db.buscar_por_telegram(str(chat_id)):
-            return json.dumps({"success": False, "error": "Ese chat ya está vinculado a otro perfil"}, ensure_ascii=False)
+            return json.dumps(
+                {"success": False, "error": "Ese chat ya está vinculado a otro perfil"},
+                ensure_ascii=False,
+            )
         datos = {"alias": alias, "edad": edad, "sexo": sexo}
         # La tabla `perfiles` guarda porcentaje_grasa; no hay columna de peso ni altura.
         if grasa is not None:
@@ -1430,10 +1666,15 @@ servidor está en modo solo lectura y esta llamada no modifica nada."""
         pid = db.crear_perfil(datos)
         creado = db.obtener_perfil(pid) or {}
         return json.dumps(
-            {"success": True, "uid": creado.get("uid"), "alias": alias,
-             "mensaje": f"Perfil '{alias}' creado. Para que pueda usar el MCP hay que "
-                        f"emitirle un token: make mcp-token ALIAS='{alias}'"},
-            indent=2, ensure_ascii=False,
+            {
+                "success": True,
+                "uid": creado.get("uid"),
+                "alias": alias,
+                "mensaje": f"Perfil '{alias}' creado. Para que pueda usar el MCP hay que "
+                f"emitirle un token: make mcp-token ALIAS='{alias}'",
+            },
+            indent=2,
+            ensure_ascii=False,
         )
 
     @_mcp.tool()
@@ -1445,8 +1686,8 @@ servidor está en modo solo lectura y esta llamada no modifica nada."""
     ) -> str:
         """Lista las rutinas semanales de un perfil, por alias, perfil_id o chat_id.
 
-Cada rutina trae: id, nombre, dias (1-7, 1=lunes), hora_inicio, hora_fin y
-opcionalmente ocupacion o deporte."""
+        Cada rutina trae: id, nombre, dias (1-7, 1=lunes), hora_inicio, hora_fin y
+        opcionalmente ocupacion o deporte."""
         chat, err = _resolver_chat(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
@@ -1456,7 +1697,10 @@ opcionalmente ocupacion o deporte."""
         for r in rutinas:
             r.pop("chat_id", None)
         if not rutinas:
-            return json.dumps({"rutinas": [], "mensaje": "Este perfil/chat no tiene rutinas todavía"}, ensure_ascii=False)
+            return json.dumps(
+                {"rutinas": [], "mensaje": "Este perfil/chat no tiene rutinas todavía"},
+                ensure_ascii=False,
+            )
         return json.dumps(rutinas, indent=2, ensure_ascii=False, default=str)
 
     @_mcp.tool()
@@ -1475,33 +1719,56 @@ opcionalmente ocupacion o deporte."""
     ) -> str:
         """Crea una rutina semanal para un perfil/chat y devuelve su id.
 
-`dias` es una cadena con los días 1-7 separados por coma (1=lunes, 7=domingo),
-p. ej. "1,2,3,4,5". `hora_inicio` y `hora_fin` en formato 24h (8.5 = 8:30).
-`deporte` solo si la rutina es un deporte conocido (correr, senderismo, futbol,
-ciclismo, tenis...): su intensidad se deriva del MET del Compendium.
+        `dias` es una cadena con los días 1-7 separados por coma (1=lunes, 7=domingo),
+        p. ej. "1,2,3,4,5". `hora_inicio` y `hora_fin` en formato 24h (8.5 = 8:30).
+        `deporte` solo si la rutina es un deporte conocido (correr, senderismo, futbol,
+        ciclismo, tenis...): su intensidad se deriva del MET del Compendium.
 
-Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
-servidor está en modo solo lectura y esta llamada no modifica nada."""
+        Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+        servidor está en modo solo lectura y esta llamada no modifica nada."""
         chat, err = _resolver_chat(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
         nums = _validar_dias(dias)
         if nums is None:
-            return json.dumps({"success": False, "error": f"dias inválido '{dias}': usa números 1-7 separados por coma (1=lunes)"}, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"dias inválido '{dias}': usa números 1-7 separados por coma (1=lunes)",
+                },
+                ensure_ascii=False,
+            )
         if not (0 <= hora_inicio < 24 and 0 < hora_fin <= 24 and hora_fin > hora_inicio):
-            return json.dumps({"success": False, "error": f"ventana inválida {hora_inicio}-{hora_fin}: hora_fin debe ser mayor que hora_inicio y ambas entre 0 y 24"}, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"ventana inválida {hora_inicio}-{hora_fin}: hora_fin debe ser mayor que hora_inicio y ambas entre 0 y 24",
+                },
+                ensure_ascii=False,
+            )
         from climasafeai.db.manager import DBManager
 
         rid = DBManager().crear_rutina(
-            chat, nombre.strip(), ",".join(str(n) for n in nums),
-            float(hora_inicio), float(hora_fin),
-            ocupacion=ocupacion, deporte=deporte,
+            chat,
+            nombre.strip(),
+            ",".join(str(n) for n in nums),
+            float(hora_inicio),
+            float(hora_fin),
+            ocupacion=ocupacion,
+            deporte=deporte,
         )
         return json.dumps(
-            {"success": True, "id": rid, "nombre": nombre.strip(), "dias": ",".join(str(n) for n in nums),
-             "hora_inicio": hora_inicio, "hora_fin": hora_fin,
-             "mensaje": f"Rutina '{nombre.strip()}' creada (id {rid})"},
-            indent=2, ensure_ascii=False,
+            {
+                "success": True,
+                "id": rid,
+                "nombre": nombre.strip(),
+                "dias": ",".join(str(n) for n in nums),
+                "hora_inicio": hora_inicio,
+                "hora_fin": hora_fin,
+                "mensaje": f"Rutina '{nombre.strip()}' creada (id {rid})",
+            },
+            indent=2,
+            ensure_ascii=False,
         )
 
     @_mcp.tool()
@@ -1515,11 +1782,11 @@ servidor está en modo solo lectura y esta llamada no modifica nada."""
     ) -> str:
         """Borra una rutina propia por su id (los ids salen en listar_rutinas_mcp).
 
-Hay que identificar al dueño con alias, perfil_id o chat_id: solo se borran
-rutinas de ese perfil/chat.
+        Hay que identificar al dueño con alias, perfil_id o chat_id: solo se borran
+        rutinas de ese perfil/chat.
 
-Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
-servidor está en modo solo lectura y esta llamada no modifica nada."""
+        Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar): sin él el
+        servidor está en modo solo lectura y esta llamada no modifica nada."""
         chat, err = _resolver_chat(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
@@ -1533,7 +1800,9 @@ servidor está en modo solo lectura y esta llamada no modifica nada."""
                 ensure_ascii=False,
             )
         db.eliminar_rutina(rid)
-        return json.dumps({"success": True, "id": rid, "mensaje": "Rutina eliminada"}, ensure_ascii=False)
+        return json.dumps(
+            {"success": True, "id": rid, "mensaje": "Rutina eliminada"}, ensure_ascii=False
+        )
 
     @_mcp.tool()
     @_requiere_identidad("perfil_propio")
@@ -1546,12 +1815,12 @@ servidor está en modo solo lectura y esta llamada no modifica nada."""
     ) -> str:
         """Configura o consulta la hora de aviso diario de un perfil/chat.
 
-`hora` en formato HH:MM (p. ej. "08:00") configura el aviso; "off" lo desactiva;
-si se omite, solo consulta la hora actual.
+        `hora` en formato HH:MM (p. ej. "08:00") configura el aviso; "off" lo desactiva;
+        si se omite, solo consulta la hora actual.
 
-Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar) para
-configurar o desactivar el aviso: sin él el servidor está en modo solo lectura y
-esta llamada no modifica nada."""
+        Requiere token de escritura (`CLIMASAFE_MCP_WRITE_TOKEN` al arrancar) para
+        configurar o desactivar el aviso: sin él el servidor está en modo solo lectura y
+        esta llamada no modifica nada."""
         chat, err = _resolver_chat(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
@@ -1561,16 +1830,43 @@ esta llamada no modifica nada."""
         if hora is not None and hora.strip().lower() != "off":
             norm = _validar_hora_aviso(hora)
             if norm is None:
-                return json.dumps({"success": False, "error": f"Hora inválida '{hora}': usa HH:MM entre 00:00 y 23:59, u 'off' para desactivar"}, ensure_ascii=False)
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": f"Hora inválida '{hora}': usa HH:MM entre 00:00 y 23:59, u 'off' para desactivar",
+                    },
+                    ensure_ascii=False,
+                )
             db.guardar_hora_aviso(chat, norm)
-            return json.dumps({"success": True, "chat_id": chat, "hora": norm, "mensaje": f"Aviso diario configurado a las {norm}"}, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "success": True,
+                    "chat_id": chat,
+                    "hora": norm,
+                    "mensaje": f"Aviso diario configurado a las {norm}",
+                },
+                ensure_ascii=False,
+            )
         if hora is not None and hora.strip().lower() == "off":
             db.guardar_hora_aviso(chat, None)
-            return json.dumps({"success": True, "chat_id": chat, "hora": None, "mensaje": "Aviso diario desactivado"}, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "success": True,
+                    "chat_id": chat,
+                    "hora": None,
+                    "mensaje": "Aviso diario desactivado",
+                },
+                ensure_ascii=False,
+            )
         actual = db.obtener_hora_aviso(chat)
         return json.dumps(
-            {"chat_id": chat, "hora": actual,
-             "mensaje": f"Aviso diario configurado a las {actual}" if actual else "No hay hora de aviso configurada"},
+            {
+                "chat_id": chat,
+                "hora": actual,
+                "mensaje": f"Aviso diario configurado a las {actual}"
+                if actual
+                else "No hay hora de aviso configurada",
+            },
             ensure_ascii=False,
         )
 
@@ -1585,23 +1881,33 @@ esta llamada no modifica nada."""
     ) -> str:
         """Calcula el riesgo de cada rutina de un perfil para un día de la semana.
 
-`weekday` usa 1=lunes ... 7=domingo; si se omite usa el día actual. Para cada
-rutina del día calcula con predict_ensemble el riesgo de su ventana
-(hora_inicio-hora_fin) y devuelve clase, probabilidad, temperatura media y
-recomendación por ventana."""
+        `weekday` usa 1=lunes ... 7=domingo; si se omite usa el día actual. Para cada
+        rutina del día calcula con predict_ensemble el riesgo de su ventana
+        (hora_inicio-hora_fin) y devuelve clase, probabilidad, temperatura media y
+        recomendación por ventana."""
         perfil, err = _resolver_perfil(alias, perfil_id, chat_id)
         if err:
             return json.dumps(err, ensure_ascii=False)
         if perfil.get("lat") is None or perfil.get("lon") is None:
             return json.dumps(
-                {"error": "El perfil no tiene ubicación (lat/lon): configura lat, lon y provincia en el perfil antes de calcular el riesgo por rutinas"},
+                {
+                    "error": "El perfil no tiene ubicación (lat/lon): configura lat, lon y provincia en el perfil antes de calcular el riesgo por rutinas"
+                },
                 ensure_ascii=False,
             )
         chat = perfil.get("telegram_chat_id")
         if not chat:
-            return json.dumps({"error": "El perfil no tiene un chat de Telegram vinculado: no hay rutinas asociadas"}, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "error": "El perfil no tiene un chat de Telegram vinculado: no hay rutinas asociadas"
+                },
+                ensure_ascii=False,
+            )
         if weekday is not None and int(weekday) not in range(1, 8):
-            return json.dumps({"error": f"weekday inválido {weekday}: usa 1=lunes ... 7=domingo"}, ensure_ascii=False)
+            return json.dumps(
+                {"error": f"weekday inválido {weekday}: usa 1=lunes ... 7=domingo"},
+                ensure_ascii=False,
+            )
         wd = int(weekday) if weekday is not None else date_type.today().isoweekday()
         try:
             target_date = _parse_date(fecha)
@@ -1617,35 +1923,44 @@ recomendación por ventana."""
             perfil_pred = _perfil_prediccion_desde_rutina(perfil, r)
             try:
                 pred = _try_prediction(
-                    lat=perfil["lat"], lon=perfil["lon"],
+                    lat=perfil["lat"],
+                    lon=perfil["lon"],
                     provincia=perfil.get("provincia") or "Madrid",
-                    perfil=perfil_pred, target_date=target_date,
+                    perfil=perfil_pred,
+                    target_date=target_date,
                 )
             except Exception as exc:
-                ventanas.append({
-                    "id": r["id"], "nombre": r["nombre"],
-                    "ventana": f"{_fmt_hora(r['hora_inicio'])}-{_fmt_hora(r['hora_fin'])}",
-                    "error": str(exc),
-                })
+                ventanas.append(
+                    {
+                        "id": r["id"],
+                        "nombre": r["nombre"],
+                        "ventana": f"{_fmt_hora(r['hora_inicio'])}-{_fmt_hora(r['hora_fin'])}",
+                        "error": str(exc),
+                    }
+                )
                 continue
-            temps = _temps_en_ventana(pred.get("weather", {}).get("perfil_horario") or [], perfil_pred)
-            ventanas.append({
-                "id": r["id"],
-                "nombre": r["nombre"],
-                "dias": r["dias"],
-                "hora_inicio": r["hora_inicio"],
-                "hora_fin": r["hora_fin"],
-                "ventana": f"{_fmt_hora(r['hora_inicio'])}-{_fmt_hora(r['hora_fin'])}",
-                "deporte": r.get("deporte"),
-                "ocupacion": r.get("ocupacion"),
-                "nivel_actividad": perfil_pred.get("nivel_actividad"),
-                "clase_final": pred.get("clase_final"),
-                "clase_final_label": pred.get("clase_final_label"),
-                "prob_calor": pred.get("perfil", {}).get("calor", {}).get("prob_personalizada"),
-                "prob_frio": pred.get("perfil", {}).get("frio", {}).get("prob_personalizada"),
-                "temp_media_ventana_c": round(sum(temps) / len(temps), 1) if temps else None,
-                "recomendacion": recomendacion_resumen(pred),
-            })
+            temps = _temps_en_ventana(
+                pred.get("weather", {}).get("perfil_horario") or [], perfil_pred
+            )
+            ventanas.append(
+                {
+                    "id": r["id"],
+                    "nombre": r["nombre"],
+                    "dias": r["dias"],
+                    "hora_inicio": r["hora_inicio"],
+                    "hora_fin": r["hora_fin"],
+                    "ventana": f"{_fmt_hora(r['hora_inicio'])}-{_fmt_hora(r['hora_fin'])}",
+                    "deporte": r.get("deporte"),
+                    "ocupacion": r.get("ocupacion"),
+                    "nivel_actividad": perfil_pred.get("nivel_actividad"),
+                    "clase_final": pred.get("clase_final"),
+                    "clase_final_label": pred.get("clase_final_label"),
+                    "prob_calor": pred.get("perfil", {}).get("calor", {}).get("prob_personalizada"),
+                    "prob_frio": pred.get("perfil", {}).get("frio", {}).get("prob_personalizada"),
+                    "temp_media_ventana_c": round(sum(temps) / len(temps), 1) if temps else None,
+                    "recomendacion": recomendacion_resumen(pred),
+                }
+            )
 
         return json.dumps(
             {
@@ -1658,7 +1973,9 @@ recomendación por ventana."""
                 "num_rutinas": len(ventanas),
                 "ventanas": ventanas,
             },
-            indent=2, ensure_ascii=False, default=str,
+            indent=2,
+            ensure_ascii=False,
+            default=str,
         )
 
     @_mcp.tool(structured_output=False)
@@ -1689,26 +2006,37 @@ recomendación por ventana."""
     ) -> ImageContent | str:
         """Devuelve la curva de riesgo por hora como IMAGEN PNG, no como JSON.
 
-Misma gráfica que enseña la web: eje izquierdo la peligrosidad ambiental 1-10
-derivada del Heat Index, eje derecho tu riesgo personal en % hora a hora, con la
-ventana de actividad sombreada, la franja recomendada en verde y el pico marcado.
+        Misma gráfica que enseña la web: eje izquierdo la peligrosidad ambiental 1-10
+        derivada del Heat Index, eje derecho tu riesgo personal en % hora a hora, con la
+        ventana de actividad sombreada, la franja recomendada en verde y el pico marcado.
 
-Los parámetros son los mismos que `predict_risk_mcp` (incluido `resolucion`, la
-resolución del perfil horario en minutos por punto: 5, 15, 30 o 60, default 60):
-úsala cuando el usuario pida ver, dibujar o graficar el riesgo del día. Si quieres
-los números en vez del dibujo, usa `predict_risk_mcp`."""
+        Los parámetros son los mismos que `predict_risk_mcp` (incluido `resolucion`, la
+        resolución del perfil horario en minutos por punto: 5, 15, 30 o 60, default 60):
+        úsala cuando el usuario pida ver, dibujar o graficar el riesgo del día. Si quieres
+        los números en vez del dibujo, usa `predict_risk_mcp`."""
         comorb_list = [c.strip() for c in comorbilidades.split(",")] if comorbilidades else None
         med_list = [m.strip() for m in medicacion.split(",")] if medicacion else None
         sit_list = [s.strip() for s in situacion_social.split(",")] if situacion_social else None
         result = predict_risk(
-            lat=lat, lon=lon, provincia=provincia,
-            edad=edad, sexo=sexo, nivel_actividad=nivel_actividad,
-            hora_inicio=hora_inicio, duracion_h=duracion_h,
-            aclimatado=aclimatado, grasa=grasa,
-            ocupacion=ocupacion, entrenado=entrenado, deporte=deporte,
-            comorbilidades=comorb_list, medicacion=med_list,
-            fototipo=fototipo, situacion_social=sit_list,
-            falta_sueno=falta_sueno, enfermedad_reciente=enfermedad_reciente,
+            lat=lat,
+            lon=lon,
+            provincia=provincia,
+            edad=edad,
+            sexo=sexo,
+            nivel_actividad=nivel_actividad,
+            hora_inicio=hora_inicio,
+            duracion_h=duracion_h,
+            aclimatado=aclimatado,
+            grasa=grasa,
+            ocupacion=ocupacion,
+            entrenado=entrenado,
+            deporte=deporte,
+            comorbilidades=comorb_list,
+            medicacion=med_list,
+            fototipo=fototipo,
+            situacion_social=sit_list,
+            falta_sueno=falta_sueno,
+            enfermedad_reciente=enfermedad_reciente,
             fiesta=fiesta,
             fecha=fecha,
             incluir_contrafactuales=False,
@@ -1720,8 +2048,11 @@ los números en vez del dibujo, usa `predict_risk_mcp`."""
             # el genérico "no hay perfil horario" (FORECAST-001).
             return "No se pudo calcular la curva: " + result["error"]
         png = grafica_riesgo_horario_png(
-            result, hora_inicio=hora_inicio, duracion_h=duracion_h,
-            edad=edad, fecha=fecha,
+            result,
+            hora_inicio=hora_inicio,
+            duracion_h=duracion_h,
+            edad=edad,
+            fecha=fecha,
         )
         if png is None:
             return (
@@ -1737,6 +2068,7 @@ los números en vez del dibujo, usa `predict_risk_mcp`."""
     _HAS_MCP = True
 except ImportError:
     _HAS_MCP = False
+
 
 def run_mcp_server(
     host: str = "0.0.0.0",
@@ -1768,7 +2100,11 @@ def run_mcp_server(
         try:
             ssl_certfile, ssl_keyfile = _ensure_self_signed_cert(host)
         except Exception as e:
-            print(f"   No se pudo generar certificado SSL ({e}), usando HTTP", file=sys.stderr, flush=True)
+            print(
+                f"   No se pudo generar certificado SSL ({e}), usando HTTP",
+                file=sys.stderr,
+                flush=True,
+            )
 
     proto = "https" if ssl_certfile else "http"
     display_host = _local_ip() if host == "0.0.0.0" else host
@@ -1821,12 +2157,25 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8101, help="Puerto (SSE mode, default 8101)")
     parser.add_argument("--ssl-keyfile", help="Ruta a clave privada SSL")
     parser.add_argument("--ssl-certfile", help="Ruta a certificado SSL")
-    parser.add_argument("--insecure", action="store_true", help="HTTP plano en vez de HTTPS (SSE mode)")
-    parser.add_argument("--stdio", action="store_true", help="Usar transporte stdio (para Claude Desktop)")
-    parser.add_argument("--identidad", help=f"Token del llamante en stdio (alternativa a {ENV_TOKEN_MCP})")
-    parser.add_argument("--token-escritura", help=f"Token que habilita las tools de escritura (alternativa a {ENV_TOKEN_ESCRITURA})")
-    parser.add_argument("--emitir-token", metavar="ALIAS", help="Emite un token MCP para ese perfil y sale")
-    parser.add_argument("--rol", choices=("usuario", "admin"), help="Rol a fijar al emitir el token")
+    parser.add_argument(
+        "--insecure", action="store_true", help="HTTP plano en vez de HTTPS (SSE mode)"
+    )
+    parser.add_argument(
+        "--stdio", action="store_true", help="Usar transporte stdio (para Claude Desktop)"
+    )
+    parser.add_argument(
+        "--identidad", help=f"Token del llamante en stdio (alternativa a {ENV_TOKEN_MCP})"
+    )
+    parser.add_argument(
+        "--token-escritura",
+        help=f"Token que habilita las tools de escritura (alternativa a {ENV_TOKEN_ESCRITURA})",
+    )
+    parser.add_argument(
+        "--emitir-token", metavar="ALIAS", help="Emite un token MCP para ese perfil y sale"
+    )
+    parser.add_argument(
+        "--rol", choices=("usuario", "admin"), help="Rol a fijar al emitir el token"
+    )
     args = parser.parse_args()
 
     if args.emitir_token:
