@@ -258,7 +258,7 @@ def _perfil_para_modelo(perfil: dict) -> dict:
     return p
 
 
-def predecir(perfil: dict) -> dict:
+def predecir(perfil: dict, weather: dict | None = None) -> dict:
     """Ejecuta la predicción REAL de ClimaSafeAI. Si no puede, revienta.
 
     Antes esto tenía un `except ImportError` que caía en `_predecir_fake`, y como
@@ -273,6 +273,12 @@ def predecir(perfil: dict) -> dict:
     OpenUV tiene cupo/caché, y 384 de 400 ejemplos saldrían con un input que
     dice UV pero un output que no lo usó — el mismo fallo que esta feature
     corrige. El parte del input se calcula del mismo `weather` que ve el pipeline.
+
+    `weather` opcional: si se pasa (p. ej. construido desde el parquet de frío por
+    `generar_dataset_frio._construir_weather`), se usa tal cual — sin cache ni
+    descarga — y el ejemplo sale del pipeline sobre ESE weather. Sin él, se
+    descarga con fetch_weather_data (comportamiento histórico del generador de
+    calor).
     """
     from climasafeai.data.weather_fetcher import fetch_weather_data
     from climasafeai.models.ensemble import predict_ensemble
@@ -281,12 +287,13 @@ def predecir(perfil: dict) -> dict:
     fin = inicio + max(1, round(float(perfil.get("duracion_h") or 1)))
 
     key = (perfil["lat"], perfil["lon"])
-    if key not in _WEATHER_CACHE:
-        _WEATHER_CACHE[key] = fetch_weather_data(
-            lat=perfil["lat"], lon=perfil["lon"], provincia=perfil["provincia"],
-        )
-        _WEATHER_CACHE[key]["uv_horario"] = _uv_horario(*key)
-    weather = _WEATHER_CACHE[key]
+    if weather is None:
+        if key not in _WEATHER_CACHE:
+            _WEATHER_CACHE[key] = fetch_weather_data(
+                lat=perfil["lat"], lon=perfil["lon"], provincia=perfil["provincia"],
+            )
+            _WEATHER_CACHE[key]["uv_horario"] = _uv_horario(*key)
+        weather = _WEATHER_CACHE[key]
 
     perfil_modelo = _perfil_para_modelo(perfil)
     uv = _uv_de_la_ventana(weather, inicio, fin)
@@ -303,15 +310,23 @@ def predecir(perfil: dict) -> dict:
     # `predict_ensemble` reconstruye su propio dict de weather (solo coge unas
     # claves) y el parte del input tiene que leer el mismo UV que se inyectó.
     resultado["weather"]["uv_horario"] = weather.get("uv_horario")
+    # La clase final la decide el canal con más riesgo personalizado
+    # (prob_pers = max(calor, frío) en predict_ensemble). Antes se reportaba
+    # SIEMPRE el canal calor: en el dataset de calor (agosto) no se notaba,
+    # pero en un día de frío decía "RIESGO: PELIGRO" con un índice de 0.03
+    # (el de calor) — incoherente y el modelo lo aprendería. Se reporta el
+    # canal que de verdad movió la clase.
     calor = (resultado.get("perfil") or {}).get("calor") or {}
+    frio = (resultado.get("perfil") or {}).get("frio") or {}
+    canal = frio if frio.get("prob_personalizada", 0.0) > calor.get("prob_personalizada", 0.0) else calor
     return {
         "clase": resultado.get("clase_final_label", "DESCONOCIDO"),
-        "indice_personalizado": calor.get("prob_personalizada", 0.0),
-        "indice_base": calor.get("prob_poblacional", 0.0),
-        "factor_total": calor.get("factor_total", 1.0),
-        "producto_bruto": calor.get("producto_bruto"),
-        "capado": bool(calor.get("capado")),
-        "factores": calor.get("factores") or [],
+        "indice_personalizado": canal.get("prob_personalizada", 0.0),
+        "indice_base": canal.get("prob_poblacional", 0.0),
+        "factor_total": canal.get("factor_total", 1.0),
+        "producto_bruto": canal.get("producto_bruto"),
+        "capado": bool(canal.get("capado")),
+        "factores": canal.get("factores") or [],
         "recomendaciones": resultado.get("recomendaciones") or [],
         "clima": _clima_de_la_ventana(resultado, perfil),
         "perfil": perfil,
