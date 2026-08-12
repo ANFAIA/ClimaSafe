@@ -779,11 +779,12 @@
         "Hay umbral de distancia: si nada supera el umbral no se inyecta contexto irrelevante y se cae a ask_raw, y se demuestra con la pregunta de SPF que hoy devuelve factores de frio",
         "make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-12",
       "owner": "opencode-rag",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-12"
     },
     {
       "id": "RAG-004",

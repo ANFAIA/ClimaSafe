@@ -61,14 +61,15 @@ def _docs(tmp_path, cuerpo: str) -> tuple:
 
 
 _CUERPO = "Este es el cuerpo original de la seccion con palabras suficientes para pasar el filtro."
-_CUERPO_2 = "Cuerpo REESCRITO por completo, con contenido distinto y palabras suficientes para indexar."
+_CUERPO_2 = (
+    "Cuerpo REESCRITO por completo, con contenido distinto y palabras suficientes para indexar."
+)
 
 
 # ── Documentos: cambia el cuerpo, no el título ──────────────────────────
 
 
 class TestDocumentos:
-
     def test_editar_el_cuerpo_sin_tocar_el_titulo_reindexa(self, tmp_path, rag_db):
         root, fichero = _docs(tmp_path, _CUERPO)
         rag = rag_db.rag
@@ -116,13 +117,13 @@ class TestDocumentos:
 
 
 class TestFactores:
-
     def _un_factor(self, rag):
         with rag._conn() as conn:
-            return dict(conn.execute(
-                "SELECT factor_id, texto, hash FROM factores_vec_src ORDER BY factor_id LIMIT 1"
-            ).fetchone())
-
+            return dict(
+                conn.execute(
+                    "SELECT factor_id, texto, hash FROM factores_vec_src ORDER BY factor_id LIMIT 1"
+                ).fetchone()
+            )
 
     def test_cambiar_el_coeficiente_reembebe_el_factor(self, rag_db):
         rag = rag_db.rag
@@ -168,3 +169,92 @@ class TestFactores:
 
         assert antes["embedded"] == despues["embedded"]
         assert despues["pending"] == 0
+
+
+# ── RAG-003: colecciones — el índice mezcla dominio con metodología ML ───
+
+
+_CUERPO_PAPER = "El índice de calor y la mortalidad por calor en olas de calor de verano."
+_CUERPO_ML = "N-BEATS y GNN para forecasting de series temporales fotovoltaico y financiero."
+_CUERPO_INTERNO = "Roadmap interno con tareas pendientes del proyecto."
+
+
+class TestColeccion:
+    def test_clasificacion_por_carpeta(self):
+        from climasafeai.db.rag import _coleccion_desde_ruta
+
+        # Conocimiento del dominio: recuperable en preguntas de usuario
+        assert _coleccion_desde_ruta("documentacion/papers/foo.md") == "papers"
+        assert _coleccion_desde_ruta("/abs/documentacion/papers/indices/utci.md") == "papers"
+        assert _coleccion_desde_ruta("/abs/documentacion/riesgo/formulas.md") == "riesgo"
+        # Metodología ML: se indexa pero no se recupera
+        assert _coleccion_desde_ruta("/abs/documentacion/ml/ablacion.md") == "ml"
+        assert _coleccion_desde_ruta("/abs/documentacion/modelos/nbeats/x.md") == "ml"
+        assert _coleccion_desde_ruta("/abs/documentacion/arquitectura/diseño.md") == "ml"
+        assert _coleccion_desde_ruta("/abs/documentacion/llm/guia.md") == "ml"
+        # Notas internas del proyecto (documentos raíz)
+        assert _coleccion_desde_ruta("/abs/documentacion/prd.md") == "interna"
+        assert _coleccion_desde_ruta("/abs/documentacion/README.md") == "interna"
+        # Rutas fuera de documentacion/ no revientan
+        assert _coleccion_desde_ruta("/abs/otra/ruta.md") == "interna"
+
+    def test_sync_etiqueta_la_coleccion_de_cada_fragmento(self, tmp_path, rag_db):
+        docs = tmp_path / "documentacion"
+        for sub, cuerpo in (("papers", _CUERPO_PAPER), ("ml", _CUERPO_ML)):
+            d = docs / sub
+            d.mkdir(parents=True)
+            (d / "doc.md").write_text(f"# Doc\n\n## Seccion\n\n{cuerpo}\n", encoding="utf-8")
+        rag = rag_db.rag
+        assert rag.sync_documentos(project_root=tmp_path) == 2
+
+        with rag._conn() as conn:
+            filas = {
+                r["ruta"].split("/")[-2]: r["coleccion"]
+                for r in conn.execute("SELECT ruta, coleccion FROM docs_vec_src").fetchall()
+            }
+        assert filas["papers"] == "papers"
+        assert filas["ml"] == "ml"
+
+    def test_search_documentos_solo_devuelve_colecciones_de_usuario(self, tmp_path, rag_db):
+        """La pregunta de usuario sobre N-BEATS/GNN ya no recupera el doc ml:
+        se filtra por colección en la búsqueda."""
+        docs = tmp_path / "documentacion"
+        for sub, cuerpo in (("papers", _CUERPO_PAPER), ("ml", _CUERPO_ML)):
+            d = docs / sub
+            d.mkdir(parents=True)
+            (d / "doc.md").write_text(f"# Doc\n\n## Seccion\n\n{cuerpo}\n", encoding="utf-8")
+        rag = rag_db.rag
+        rag.sync_documentos(project_root=tmp_path)
+
+        # Una pregunta sobre el paper del dominio lo recupera
+        res = rag.search_documentos("mortalidad por calor en olas de calor", k=5)
+        assert len(res) == 1
+        assert "papers" in res[0]["ruta"]
+
+        # Una pregunta sobre arquitectura de forecasting NO devuelve el doc ml
+        res = rag.search_documentos("N-BEATS GNN forecasting fotovoltaico financiero", k=5)
+        assert all("ml" not in r["ruta"] for r in res)
+
+    def test_backfill_rellena_la_coleccion_de_filas_existentes(self, tmp_path, rag_db):
+        """Bases creadas antes de RAG-003: las filas sin coleccion se rellenan
+        desde la ruta al arrancar (migración de initialize())."""
+        docs = tmp_path / "documentacion"
+        for sub, cuerpo in (("papers", _CUERPO_PAPER), ("riesgo", _CUERPO_PAPER)):
+            d = docs / sub
+            d.mkdir(parents=True)
+            (d / "doc.md").write_text(f"# Doc\n\n## Seccion\n\n{cuerpo}\n", encoding="utf-8")
+        rag = rag_db.rag
+        rag.sync_documentos(project_root=tmp_path)
+        with rag._conn() as conn:
+            conn.execute("UPDATE docs_vec_src SET coleccion = NULL")
+
+        with rag._conn() as conn:
+            rag._backfill_coleccion(conn)
+
+        with rag._conn() as conn:
+            filas = {
+                r["ruta"].split("/")[-2]: r["coleccion"]
+                for r in conn.execute("SELECT ruta, coleccion FROM docs_vec_src").fetchall()
+            }
+        assert filas["papers"] == "papers"
+        assert filas["riesgo"] == "riesgo"

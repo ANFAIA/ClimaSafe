@@ -15,6 +15,14 @@ EMBEDDING_DIM = 384
 DOCS_DIR = "documentacion"
 DOCS_GLOB = "**/*.md"
 DOCS_EXCLUDE = {"llm"}  # subcarpetas que excluir (aún no indexadas)
+
+# RAG-003: de las colecciones de documentacion/, solo papers (literatura del
+# dominio) y riesgo (coeficientes y fórmulas) son conocimiento recuperable en
+# preguntas de usuario. La metodología ML (ml/, modelos/, arquitectura/) y las
+# notas internas del proyecto (documentos raíz) se siguen indexando — para
+# stats y reindexado — pero se filtran en la búsqueda.
+DOCS_COLECCION_USUARIO = ("papers", "riesgo")
+
 _embedder: Any = None
 _llm_client: Any = None
 
@@ -42,6 +50,7 @@ def _get_embedder():
     global _embedder
     if _embedder is None:
         from sentence_transformers import SentenceTransformer
+
         _embedder = SentenceTransformer("all-MiniLM-L6-v2")
     return _embedder
 
@@ -63,13 +72,21 @@ def _get_llm_client() -> Any | None:
     configs = [
         ("GROQ_API_KEY", "GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
         ("OPENAI_API_KEY", "OPENAI_BASE_URL", None),
-        ("GEMINI_API_KEY", "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+        (
+            "GEMINI_API_KEY",
+            "GEMINI_BASE_URL",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        ),
     ]
 
     for key_var, url_var, default_url in configs:
         api_key = os.getenv(key_var)
         if api_key:
-            base_url = os.getenv(url_var, default_url) if default_url else os.getenv(url_var, "https://api.openai.com/v1")
+            base_url = (
+                os.getenv(url_var, default_url)
+                if default_url
+                else os.getenv(url_var, "https://api.openai.com/v1")
+            )
             if base_url:
                 _llm_client = OpenAI(api_key=api_key, base_url=base_url, timeout=30)
                 return _llm_client
@@ -85,6 +102,31 @@ def _hash_texto(texto: str) -> str:
     y no con la clave (ruta::sección o factor_id): editar el cuerpo sin tocar
     el título dejaba el fragmento viejo indexado para siempre."""
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
+def _coleccion_desde_ruta(ruta: str) -> str:
+    """Clasifica un fragmento de documentacion/ en una colección.
+
+    La colección sale de la carpeta siguiente a ``documentacion/``:
+    - ``papers/**`` → papers (literatura del dominio)
+    - ``riesgo/**`` → riesgo (coeficientes y fórmulas)
+    - ``ml|modelos|arquitectura|llm/**`` → ml (metodología ML)
+    - el resto (documentos raíz: PRD, roadmap, notas...) → interna
+
+    Solo ``papers`` y ``riesgo`` se recuperan en preguntas de usuario
+    (``DOCS_COLECCION_USUARIO``); el resto se indexa pero no se busca.
+    """
+    partes = Path(ruta).parts
+    try:
+        idx = next(i for i, p in enumerate(partes) if p == DOCS_DIR)
+    except StopIteration:
+        return "interna"
+    primera = partes[idx + 1] if idx + 1 < len(partes) else ""
+    if primera in DOCS_COLECCION_USUARIO:
+        return primera
+    if primera in ("ml", "modelos", "arquitectura", "llm"):
+        return "ml"
+    return "interna"
 
 
 def _factor_text(f: dict) -> str:
@@ -149,7 +191,8 @@ class RAG:
                     seccion TEXT,
                     texto TEXT NOT NULL,
                     palabras INTEGER NOT NULL DEFAULT 0,
-                    hash TEXT
+                    hash TEXT,
+                    coleccion TEXT
                 )
             """)
             # Bases ya creadas antes de RAG-005 no tienen la columna. Sin hash
@@ -159,8 +202,27 @@ class RAG:
                 columnas = {r["name"] for r in conn.execute(f"PRAGMA table_info({tabla})")}
                 if "hash" not in columnas:
                     conn.execute(f"ALTER TABLE {tabla} ADD COLUMN hash TEXT")
+            # RAG-003: bases creadas antes no tienen la colección. Sin ella, la
+            # búsqueda no sabe qué filtrar, así que se rellena desde la ruta.
+            columnas = {r["name"] for r in conn.execute("PRAGMA table_info(docs_vec_src)")}
+            if "coleccion" not in columnas:
+                conn.execute("ALTER TABLE docs_vec_src ADD COLUMN coleccion TEXT")
+            self._backfill_coleccion(conn)
         self.sync_factores()
         self.sync_documentos()
+
+    def _backfill_coleccion(self, conn) -> None:
+        """Rellena la colección de filas creadas antes de RAG-003 (o sin ella).
+
+        La colección se deriva de la ruta: solo hace falta una vez, en la
+        migración; las filas nuevas ya la traen del chunker."""
+        for fila in conn.execute(
+            "SELECT vec_rowid, ruta FROM docs_vec_src WHERE coleccion IS NULL"
+        ).fetchall():
+            conn.execute(
+                "UPDATE docs_vec_src SET coleccion = ? WHERE vec_rowid = ?",
+                (_coleccion_desde_ruta(fila["ruta"]), fila["vec_rowid"]),
+            )
 
     def sync_factores(self) -> int:
         """Indexa los factores nuevos y REINDEXA los que cambiaron de contenido
@@ -189,13 +251,13 @@ class RAG:
                 # contaría el factor dos veces.
                 if vec_rowid_previo is not None:
                     conn.execute("DELETE FROM factores_vec WHERE rowid = ?", (vec_rowid_previo,))
-                    conn.execute("DELETE FROM factores_vec_src WHERE vec_rowid = ?", (vec_rowid_previo,))
+                    conn.execute(
+                        "DELETE FROM factores_vec_src WHERE vec_rowid = ?", (vec_rowid_previo,)
+                    )
 
                 emb = model.encode(texto)
                 emb_bytes = struct.pack(f"{len(emb)}f", *emb)
-                cur = conn.execute(
-                    "INSERT INTO factores_vec (embedding) VALUES (?)", (emb_bytes,)
-                )
+                cur = conn.execute("INSERT INTO factores_vec (embedding) VALUES (?)", (emb_bytes,))
                 vec_rowid = cur.lastrowid
                 conn.execute(
                     "INSERT INTO factores_vec_src (vec_rowid, factor_id, tipo, categoria, clave, texto, hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -209,7 +271,6 @@ class RAG:
             conn.execute("DELETE FROM factores_vec")
             conn.execute("DELETE FROM factores_vec_src")
         return self.sync_factores()
-
 
     # ── Indexado de documentos ──────────────────────────────────────
 
@@ -231,13 +292,18 @@ class RAG:
                 if parrafos:
                     cuerpo = " ".join(p.strip() for p in parrafos if p.strip())
                     if len(cuerpo.split()) >= 10:
-                        secciones.append({
-                            "ruta": str(ruta),
-                            "titulo": titulo.split(" — ")[0] if " — " in titulo else titulo or ruta.stem,
-                            "seccion": seccion_actual,
-                            "texto": cuerpo,
-                            "palabras": len(cuerpo.split()),
-                        })
+                        secciones.append(
+                            {
+                                "ruta": str(ruta),
+                                "titulo": titulo.split(" — ")[0]
+                                if " — " in titulo
+                                else titulo or ruta.stem,
+                                "seccion": seccion_actual,
+                                "texto": cuerpo,
+                                "palabras": len(cuerpo.split()),
+                                "coleccion": _coleccion_desde_ruta(str(ruta)),
+                            }
+                        )
                     parrafos = []
                 seccion_actual = line.lstrip("## ").strip()
             else:
@@ -246,13 +312,18 @@ class RAG:
         if parrafos:
             cuerpo = " ".join(p.strip() for p in parrafos if p.strip())
             if len(cuerpo.split()) >= 10:
-                secciones.append({
-                    "ruta": str(ruta),
-                    "titulo": titulo.split(" — ")[0] if " — " in titulo else titulo or ruta.stem,
-                    "seccion": seccion_actual,
-                    "texto": cuerpo,
-                    "palabras": len(cuerpo.split()),
-                })
+                secciones.append(
+                    {
+                        "ruta": str(ruta),
+                        "titulo": titulo.split(" — ")[0]
+                        if " — " in titulo
+                        else titulo or ruta.stem,
+                        "seccion": seccion_actual,
+                        "texto": cuerpo,
+                        "palabras": len(cuerpo.split()),
+                        "coleccion": _coleccion_desde_ruta(str(ruta)),
+                    }
+                )
         return secciones
 
     def _documentos_nuevos(self, project_root: Path) -> list[dict[str, Any]]:
@@ -302,16 +373,25 @@ class RAG:
                 vec_rowid_previo = c.get("_vec_rowid")
                 if vec_rowid_previo is not None:
                     conn.execute("DELETE FROM docs_vec WHERE rowid = ?", (vec_rowid_previo,))
-                    conn.execute("DELETE FROM docs_vec_src WHERE vec_rowid = ?", (vec_rowid_previo,))
+                    conn.execute(
+                        "DELETE FROM docs_vec_src WHERE vec_rowid = ?", (vec_rowid_previo,)
+                    )
 
                 emb = model.encode(c["texto"])
                 emb_bytes = struct.pack(f"{len(emb)}f", *emb)
-                cur = conn.execute(
-                    "INSERT INTO docs_vec (embedding) VALUES (?)", (emb_bytes,)
-                )
+                cur = conn.execute("INSERT INTO docs_vec (embedding) VALUES (?)", (emb_bytes,))
                 conn.execute(
-                    "INSERT INTO docs_vec_src (vec_rowid, ruta, titulo, seccion, texto, palabras, hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (cur.lastrowid, c["ruta"], c["titulo"], c["seccion"], c["texto"], c["palabras"], c["hash"]),
+                    "INSERT INTO docs_vec_src (vec_rowid, ruta, titulo, seccion, texto, palabras, hash, coleccion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        cur.lastrowid,
+                        c["ruta"],
+                        c["titulo"],
+                        c["seccion"],
+                        c["texto"],
+                        c["palabras"],
+                        c["hash"],
+                        c["coleccion"],
+                    ),
                 )
         return len(chunks)
 
@@ -325,18 +405,31 @@ class RAG:
     # ── Búsquedas ───────────────────────────────────────────────────
 
     def search_documentos(self, query: str, k: int = 5) -> list[dict]:
-        """Busca fragmentos de documentacion/ por similitud semántica."""
+        """Busca fragmentos de documentacion/ por similitud semántica.
+
+        Solo devuelve las colecciones de conocimiento del dominio (papers y
+        riesgo): la metodología ML y las notas internas del proyecto se
+        indexan, pero no se recuperan en preguntas de usuario (RAG-003).
+        """
         emb = _get_embedder().encode(query)
         emb_bytes = struct.pack(f"{len(emb)}f", *emb)
+        # Se piden k×3 candidatos y se filtra después: el índice vectorial
+        # devuelve el top-k global y el filtro por colección se aplica sobre
+        # ese top-k. Con solo k candidatos, una pregunta de usuario perdería
+        # resultados válidos de papers/riesgo que quedasen por detrás de
+        # fragmentos ml/internos más cercanos.
         with self._conn() as conn:
-            rows = conn.execute("""
-                SELECT s.ruta, s.titulo, s.seccion, s.texto, s.palabras, v.distance
+            rows = conn.execute(
+                """
+                SELECT s.ruta, s.titulo, s.seccion, s.texto, s.palabras, s.coleccion, v.distance
                 FROM docs_vec v
                 JOIN docs_vec_src s ON v.rowid = s.vec_rowid
                 WHERE v.embedding MATCH ? AND k=?
                 ORDER BY v.distance
-            """, (emb_bytes, k)).fetchall()
-            return [dict(r) for r in rows]
+            """,
+                (emb_bytes, k * 3),
+            ).fetchall()
+            return [dict(r) for r in rows if r["coleccion"] in DOCS_COLECCION_USUARIO][:k]
 
     def search_all(self, query: str, k: int = 5) -> dict:
         """Busca en factores y documentos, combina resultados."""
@@ -349,13 +442,16 @@ class RAG:
         emb = _get_embedder().encode(query)
         emb_bytes = struct.pack(f"{len(emb)}f", *emb)
         with self._conn() as conn:
-            rows = conn.execute("""
+            rows = conn.execute(
+                """
                 SELECT s.tipo, s.categoria, s.clave, s.texto, v.distance
                 FROM factores_vec v
                 JOIN factores_vec_src s ON v.rowid = s.vec_rowid
                 WHERE v.embedding MATCH ? AND k=?
                 ORDER BY v.distance
-            """, (emb_bytes, k)).fetchall()
+            """,
+                (emb_bytes, k),
+            ).fetchall()
             return [dict(r) for r in rows]
 
     def stats(self) -> dict:
@@ -363,12 +459,10 @@ class RAG:
             total_factores_emb = conn.execute(
                 "SELECT COUNT(*) as n FROM factores_vec_src"
             ).fetchone()["n"]
-            total_factores = conn.execute(
-                "SELECT COUNT(*) as n FROM factores_riesgo"
-            ).fetchone()["n"]
-            total_docs = conn.execute(
-                "SELECT COUNT(*) as n FROM docs_vec_src"
-            ).fetchone()["n"]
+            total_factores = conn.execute("SELECT COUNT(*) as n FROM factores_riesgo").fetchone()[
+                "n"
+            ]
+            total_docs = conn.execute("SELECT COUNT(*) as n FROM docs_vec_src").fetchone()["n"]
             total_docs_palabras = conn.execute(
                 "SELECT COALESCE(SUM(palabras), 0) as n FROM docs_vec_src"
             ).fetchone()["n"]
@@ -410,8 +504,7 @@ class RAG:
 
         # Prompt de usuario: contexto recuperado + pregunta
         ctx = "\n".join(
-            f"{i}. {r['texto']} (distancia: {r['distance']:.3f})"
-            for i, r in enumerate(results, 1)
+            f"{i}. {r['texto']} (distancia: {r['distance']:.3f})" for i, r in enumerate(results, 1)
         )
         user_prompt = f"""Factores de riesgo recuperados:\n{ctx}\n\nPregunta: {query}\n\nResponde basándote exclusivamente en los factores de riesgo listados. Si no hay información suficiente, dilo. Menciona factores concretos cuando sea relevante."""
 

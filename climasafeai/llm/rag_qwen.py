@@ -66,9 +66,7 @@ def _debug_payload(messages: list[dict[str, str]], config: LLMConfig) -> str:
 
     # Desglose por parte: system / contexto RAG recuperado / historial.
     system_msgs = [m for m in messages if m.get("role") == "system"]
-    ultimo_user = next(
-        (m for m in reversed(messages) if m.get("role") == "user"), None
-    )
+    ultimo_user = next((m for m in reversed(messages) if m.get("role") == "user"), None)
     tokens_system = sum(_estimar_tokens(m.get("content", "")) for m in system_msgs)
 
     tokens_rag = 0
@@ -103,6 +101,7 @@ def _debug_payload(messages: list[dict[str, str]], config: LLMConfig) -> str:
     )
     return "\n".join(partes)
 
+
 # ── Constantes de modelo ────────────────────────────────────────────────
 
 # Strings LiteLLM: "proveedor/nombre_modelo"
@@ -111,6 +110,20 @@ MODELO_LOCAL_QWEN3 = "ollama/qwen3:1.7b"
 MODELO_LOCAL_GPU = "ollama/qwen2.5:7b"
 MODELO_FINE_TUNED = "ollama/qwen2.5:climasafe"
 MODELO_API_DEFECTO = "groq/llama-3.3-70b-versatile"
+
+# RAG-003: distancia coseno máxima (sqlite-vec: 0 = idéntico, 2 = opuesto)
+# para inyectar contexto en una pregunta de usuario. Lo que queda por encima
+# es ruido semántico. Calibrado contra data/climasafe.db (all-MiniLM-L6-v2):
+#   - relevantes (entran): antipsicoticos 0.340, diabetes 0.419, diureticos 0.458
+#   - ruido de la pregunta de SPF (factores de frío): vive_solo 0.547,
+#     encamado 0.561, no_sale 0.595 — con 0.50 ninguno entra (margen 0.047)
+#   - efecto lateral: algunos papers del dominio (hajat 0.504, semenza 0.524)
+#     y factores marginales (sin_aire_acondicionado 0.535) quedan también por
+#     encima y no se inyectan. Es el coste de un umbral único con este
+#     embedder: la banda entre lo relevante y el ruido es de ~0.01. Para un
+#     asistente de salud se prefiere no inyectar contexto dudoso a arriesgar
+#     el ruido de frío en una pregunta de calor.
+UMBRAL_DISTANCIA = 0.50
 
 
 @dataclass
@@ -123,6 +136,7 @@ class LLMConfig:
       - OpenAI:        "gpt-4o"
       - Gemini:        "gemini/gemini-1.5-flash"
     """
+
     model: str = MODELO_LOCAL_CPU
     temperature: float = 0.3
     max_tokens: int = 1024
@@ -148,7 +162,12 @@ class LLMConfig:
         es inservible, así que qwen3:1.7b va por delante pese a pesar lo mismo.
         """
         modelos = _modelos_ollama()
-        for candidate in [MODELO_FINE_TUNED, MODELO_LOCAL_GPU, MODELO_LOCAL_QWEN3, MODELO_LOCAL_CPU]:
+        for candidate in [
+            MODELO_FINE_TUNED,
+            MODELO_LOCAL_GPU,
+            MODELO_LOCAL_QWEN3,
+            MODELO_LOCAL_CPU,
+        ]:
             # fine-tuned: "ollama/qwen2.5:climasafe" → Ollama lo ve como "qwen2.5:climasafe"
             nombre_corto = candidate.split("/", 1)[1] if "/" in candidate else candidate
             if nombre_corto in modelos:
@@ -200,6 +219,7 @@ def _modelos_ollama() -> list[str]:
     """Lista los modelos disponibles en Ollama (vacía si no responde)."""
     try:
         import httpx
+
         r = httpx.get("http://localhost:11434/api/tags", timeout=5)
         return [m["name"] for m in r.json().get("models", [])]
     except Exception:
@@ -214,7 +234,8 @@ Eres un asistente experto en riesgo térmico (calor y frío) para ClimaSafeAI.
 Tu función es responder preguntas basándote EXCLUSIVAMENTE en el contexto
 proporcionado abajo, que incluye:
 - **Factores de riesgo** extraídos de la literatura científica (con DOI).
-- **Documentación del proyecto** (arquitectura, modelos, decisiones técnicas).
+- **Literatura del dominio** (papers de riesgo térmico y coeficientes de la
+  base de conocimiento), no documentación interna del proyecto.
 
 NORMAS:
 1. No inventes información que no esté en el contexto.
@@ -292,9 +313,7 @@ def _format_factores(results: list[dict]) -> str:
         clave = r.get("clave", "?")
         texto = r.get("texto", "")
         dist = r.get("distance", "?")
-        lines.append(
-            f"{i}. [{tipo}/{cat}] {clave}: {texto[:300]} (distancia: {dist:.3f})"
-        )
+        lines.append(f"{i}. [{tipo}/{cat}] {clave}: {texto[:300]} (distancia: {dist:.3f})")
     return "\n".join(lines)
 
 
@@ -311,9 +330,7 @@ def _format_docs(results: list[dict]) -> str:
         # primer `##` (ver RAG._chunks_desde_md), no una sección real. Colándose
         # aquí, el modelo lo citaba tal cual: "Fuente: __intro__".
         etiqueta = titulo if seccion in ("__intro__", "?", "", None) else f"{titulo} / {seccion}"
-        lines.append(
-            f"{i}. [{etiqueta}]: {texto[:400]} (distancia: {dist:.3f})"
-        )
+        lines.append(f"{i}. [{etiqueta}]: {texto[:400]} (distancia: {dist:.3f})")
     return "\n".join(lines)
 
 
@@ -375,15 +392,26 @@ def ask_with_rag(
 
     Returns:
         dict con answer, sources_factores, sources_docs, model, error.
+
+    RAG-003: solo se inyecta lo que pasa el umbral de distancia
+    (``UMBRAL_DISTANCIA``). Si ni factores ni documentos lo superan, la
+    pregunta cae a ``ask_raw`` (sin contexto aumentado).
     """
     if config is None:
         config = LLMConfig()
 
-    # 1. Buscar en RAG
+    # 1. Buscar en RAG y quedarse con lo que supera el umbral de distancia.
+    # Lo que queda por encima es ruido semántico: la pregunta de SPF recuperaba
+    # factores de frío (vive_solo 0.547, encamado 0.561, no_sale 0.595) que no
+    # tenían nada que ver con fotoprotección.
     db = DBManager()
     db.init_rag()
-    factores = db.search_factores(question, k=k_factores)
-    docs = db.search_documentos(question, k=k_docs)
+    factores = [
+        r for r in db.search_factores(question, k=k_factores) if r["distance"] <= UMBRAL_DISTANCIA
+    ]
+    docs = [
+        r for r in db.search_documentos(question, k=k_docs) if r["distance"] <= UMBRAL_DISTANCIA
+    ]
 
     # 2. Construir contexto
     factores_ctx = _format_factores(factores)
@@ -400,7 +428,7 @@ def ask_with_rag(
     )
     if contexto:
         user_prompt = f"=== SITUACIÓN DEL USUARIO ===\n{contexto}\n\n{user_prompt}"
-    
+
     # Si tenemos un perfil, incluirlo para adaptación contextual
     if perfil:
         perfil_ctx = _format_perfil(perfil)
@@ -496,6 +524,7 @@ def _cabecera_parte(resultado_prediccion: dict) -> str:
         )
     return f"Clasificación: {clase} — probabilidad de riesgo personalizada por calor: n/d."
 
+
 # El nivel NO se deduce del porcentaje: sale de `apply_class_thresholds` con los
 # umbrales de la provincia y de los overrides físicos de `predict_ensemble`
 # (HI>=39 → PELIGRO, HI>=27 + UV>3 → PRECAUCION). Enseñar los dos números
@@ -508,9 +537,7 @@ LINEA_CLASE_VS_PORCENTAJE = (
 )
 
 _CONFIANZA_LLANA = {
-    "alta": (
-        "El modelo está seguro de este nivel: con los datos de hoy no le encaja otro."
-    ),
+    "alta": ("El modelo está seguro de este nivel: con los datos de hoy no le encaja otro."),
     "media": (
         "El modelo duda entre este nivel y el de al lado, así que tómatelo como "
         "una orientación, no como una medida exacta."
@@ -564,8 +591,7 @@ def _coeficiente_llano(coef: float) -> str:
 def _linea_factor_dominante(factores: list) -> str | None:
     """El factor que más pesa, en llano y CON LÍNEA BASE (contra quién se compara)."""
     candidatos = [
-        f for f in factores
-        if isinstance(f, dict) and isinstance(f.get("factor"), (int, float))
+        f for f in factores if isinstance(f, dict) and isinstance(f.get("factor"), (int, float))
     ]
     if not candidatos:
         return None
@@ -577,7 +603,7 @@ def _linea_factor_dominante(factores: list) -> str | None:
     if nombre.lower().startswith("trabajo "):
         # "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)"
         # → "construcción": la etiqueta larga es del pipeline, no del parte.
-        oficio = nombre[len("trabajo "):].split("(")[0].split("/")[0].strip().lower()
+        oficio = nombre[len("trabajo ") :].split("(")[0].split("/")[0].strip().lower()
         return (
             "Lo que más pesa en tu caso no es el tiempo, es tu trabajo: en "
             f"{oficio} tu riesgo es {llano} que el de alguien como tú a cubierto."
@@ -637,12 +663,12 @@ def lineas_parte(resultado_prediccion: dict, lugar: str | None = None) -> list[s
 # pequeños cambian una palabra ("como hoy" por "como el de hoy") al copiar.
 _MARCAS_REPONIBLES = (
     "probabilidad de riesgo personalizada por calor",  # la cabecera (BOT-020)
-    "te pasaría factura",           # la frecuencia natural: es LA cifra del parte
+    "te pasaría factura",  # la frecuencia natural: es LA cifra del parte
     "no es lo que decide tu nivel",  # el nivel no sale del porcentaje
-    "Lo que más pesa",              # el factor dominante con su línea base
-    "El modelo está seguro",        # confianza alta
-    "duda entre este nivel",        # confianza media
-    "poca confianza",               # confianza baja: es un aviso de seguridad
+    "Lo que más pesa",  # el factor dominante con su línea base
+    "El modelo está seguro",  # confianza alta
+    "duda entre este nivel",  # confianza media
+    "poca confianza",  # confianza baja: es un aviso de seguridad
 )
 
 
@@ -703,10 +729,13 @@ def ask_con_perfil(
         reverse=True,
     )
     resto = [f for f in factores if f not in ordenados]
-    factores_ctx = ", ".join(
-        f"{f['nombre']} (x{f['factor']})" if isinstance(f, dict) else str(f)
-        for f in [*ordenados, *resto]
-    ) or "ninguno"
+    factores_ctx = (
+        ", ".join(
+            f"{f['nombre']} (x{f['factor']})" if isinstance(f, dict) else str(f)
+            for f in [*ordenados, *resto]
+        )
+        or "ninguno"
+    )
 
     # Ocupación del perfil con su etiqueta y coeficiente (si está en la tabla
     # _OCUPACION_NIVELES). Quien trabaja en obra no recibe consejos de oficina.
@@ -730,8 +759,7 @@ def ask_con_perfil(
             )
         pico_h = max(perfil_h, key=lambda h: h["HI"])
         lineas_franja.append(
-            f"Pico de calor (evitar si puedes): {pico_h['hora']:.0f}:00 "
-            f"(HI {pico_h['HI']:.1f}°C)"
+            f"Pico de calor (evitar si puedes): {pico_h['hora']:.0f}:00 (HI {pico_h['HI']:.1f}°C)"
         )
         franja_ctx = "\n".join(lineas_franja)
     bloque_franja = f"\n{franja_ctx}" if franja_ctx else ""
@@ -751,9 +779,9 @@ porcentaje: abajo te la damos ya redactada)
 Temperatura: {(cur.get("t2m_c") or 0):.1f}°C (HI pico: {hi:.1f}°C)
 Índice UV: {uv_label}
 Humedad: {(cur.get("rh") or 0):.0f}%
-Ocupación: {ocupacion_ctx or 'n/d'}
+Ocupación: {ocupacion_ctx or "n/d"}
 Factores de riesgo: {factores_ctx}{bloque_franja}
-Confianza del modelo: {confianza or 'no medida'}
+Confianza del modelo: {confianza or "no medida"}
 Recomendación contextual: {resumen}
 
 Escribe el parte así: copia TAL CUAL las FRASES OBLIGATORIAS, en su orden y una

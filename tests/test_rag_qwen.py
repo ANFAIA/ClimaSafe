@@ -11,6 +11,7 @@ from climasafeai.llm.rag_qwen import (
     LLMConfig,
     MODELO_FINE_TUNED,
     MODELO_LOCAL_CPU,
+    UMBRAL_DISTANCIA,
     _format_factores,
     _format_docs,
     ask_with_rag,
@@ -25,16 +26,25 @@ from climasafeai.llm.rag_qwen import (
 @pytest.fixture
 def sample_factores():
     return [
-        {"tipo": "calor", "categoria": "ambientales", "clave": "humedad",
-         "texto": "Alta humedad reduce la eficiencia del sudor", "distance": 0.15},
+        {
+            "tipo": "calor",
+            "categoria": "ambientales",
+            "clave": "humedad",
+            "texto": "Alta humedad reduce la eficiencia del sudor",
+            "distance": 0.15,
+        },
     ]
 
 
 @pytest.fixture
 def sample_docs():
     return [
-        {"titulo": "Arquitectura", "seccion": "Modelo de riesgo",
-         "texto": "El ensemble combina XGBoost, LSTM y fórmula", "distance": 0.22},
+        {
+            "titulo": "Arquitectura",
+            "seccion": "Modelo de riesgo",
+            "texto": "El ensemble combina XGBoost, LSTM y fórmula",
+            "distance": 0.22,
+        },
     ]
 
 
@@ -42,7 +52,6 @@ def sample_docs():
 
 
 class TestFormat:
-
     def test_format_factores_vacio(self):
         assert "(ninguno)" in _format_factores([])
 
@@ -66,7 +75,6 @@ class TestFormat:
 
 
 class TestLLMConfig:
-
     def test_default_model(self):
         cfg = LLMConfig()
         assert cfg.model == "ollama/qwen2.5:1.5b"
@@ -111,7 +119,6 @@ class TestMejorDisponible:
 
 
 class TestCheckOllama:
-
     @patch("climasafeai.llm.rag_qwen._modelos_ollama")
     def test_ollama_disponible(self, mock_list):
         mock_list.return_value = ["qwen2.5:1.5b", "qwen2.5:7b"]
@@ -130,7 +137,6 @@ class TestCheckOllama:
 
 
 class TestAskRaw:
-
     @patch("climasafeai.llm.rag_qwen._chat_litellm")
     def test_respuesta_ok(self, mock_chat):
         mock_chat.return_value = "El calor extremo es peligroso para la salud."
@@ -151,18 +157,26 @@ class TestAskRaw:
 
 
 class TestAskWithRag:
-
     @patch("climasafeai.llm.rag_qwen.DBManager")
     @patch("climasafeai.llm.rag_qwen._chat_litellm")
     def test_con_contexto(self, mock_chat, mock_db):
         mock_instance = MagicMock()
         mock_instance.search_factores.return_value = [
-            {"tipo": "calor", "categoria": "ambientales", "clave": "humedad",
-             "texto": "humedad relativa", "distance": 0.15},
+            {
+                "tipo": "calor",
+                "categoria": "ambientales",
+                "clave": "humedad",
+                "texto": "humedad relativa",
+                "distance": 0.15,
+            },
         ]
         mock_instance.search_documentos.return_value = [
-            {"titulo": "Arquitectura", "seccion": "Modelo",
-             "texto": "ensemble de modelos", "distance": 0.22},
+            {
+                "titulo": "Arquitectura",
+                "seccion": "Modelo",
+                "texto": "ensemble de modelos",
+                "distance": 0.22,
+            },
         ]
         mock_db.return_value = mock_instance
 
@@ -199,6 +213,95 @@ class TestAskWithRag:
         system_content = [m["content"] for m in call_args if m["role"] == "system"][0]
         assert "RAG" not in system_content  # no es el system RAG
 
+    @patch("climasafeai.llm.rag_qwen.DBManager")
+    @patch("climasafeai.llm.rag_qwen._chat_litellm")
+    def test_resultados_por_encima_del_umbral_caen_a_raw(self, mock_chat, mock_db):
+        """RAG-003: lo que no supera UMBRAL_DISTANCIA no se inyecta.
+
+        La pregunta de SPF recuperaba factores de frío a distancias 0.547+
+        (vive solo, encamado, no sale de casa — medidas reales sobre
+        data/climasafe.db). Con el umbral, nada pasa y la pregunta cae a
+        ask_raw, sin contexto.
+        """
+        mock_instance = MagicMock()
+        mock_instance.search_factores.return_value = [
+            {
+                "tipo": "frio",
+                "categoria": "situacional",
+                "clave": "vive_solo",
+                "texto": "vive solo. tipo: frio. coeficiente: 1.3",
+                "distance": 0.547,
+            },
+            {
+                "tipo": "frio",
+                "categoria": "situacional",
+                "clave": "encamado",
+                "texto": "encamado. tipo: frio. coeficiente: 1.5",
+                "distance": 0.561,
+            },
+        ]
+        mock_instance.search_documentos.return_value = [
+            {
+                "titulo": "PRD",
+                "seccion": "Problema",
+                "texto": "notas internas del proyecto",
+                "distance": 0.553,
+            },
+        ]
+        mock_db.return_value = mock_instance
+
+        mock_chat.return_value = "Respuesta sin contexto"
+        res = ask_with_rag("¿qué es SPF?", config=LLMConfig())
+        assert res["sources_factores"] == []
+        assert res["sources_docs"] == []
+        # Cae a raw: system RAW, no el de RAG
+        call_args = mock_chat.call_args[0][0]
+        system_content = [m["content"] for m in call_args if m["role"] == "system"][0]
+        assert "RAG" not in system_content
+
+    @patch("climasafeai.llm.rag_qwen.DBManager")
+    @patch("climasafeai.llm.rag_qwen._chat_litellm")
+    def test_mezcla_filtra_lo_que_no_supera_el_umbral(self, mock_chat, mock_db):
+        """RAG-003: por debajo del umbral se inyecta, por encima no, y cada
+        fuente se filtra por separado.
+
+        Distancias reales sobre data/climasafe.db: el factor diabetes entra a
+        0.419 (por debajo del umbral); el documento interno de ML
+        (Contrafactuales) no se recupera por colección y, aunque llegara a la
+        búsqueda, su distancia real para esta pregunta es 0.509 (por encima).
+        """
+        mock_instance = MagicMock()
+        mock_instance.search_factores.return_value = [
+            {
+                "tipo": "calor",
+                "categoria": "comorbilidades",
+                "clave": "diabetes",
+                "texto": "diabetes. tipo: calor. coeficiente: 1.2",
+                "distance": 0.419,
+            },
+        ]
+        mock_instance.search_documentos.return_value = [
+            {
+                "titulo": "Contrafactuales",
+                "seccion": "ML",
+                "texto": "notas internas de ML",
+                "distance": 0.509,
+            },
+        ]
+        mock_db.return_value = mock_instance
+
+        mock_chat.return_value = "La diabetes sube el riesgo"
+        res = ask_with_rag(
+            "tengo diabetes, cuanto me sube el riesgo con 38 grados", config=LLMConfig()
+        )
+        # El factor relevante (0.419 <= umbral) entra; el doc interno no
+        assert len(res["sources_factores"]) == 1
+        assert res["sources_docs"] == []
+        call_args = mock_chat.call_args[0][0]
+        user_content = [m["content"] for m in call_args if m["role"] == "user"][0]
+        assert "diabetes" in user_content
+        assert "Contrafactuales" not in user_content
+
     @patch("climasafeai.llm.rag_qwen._chat_litellm")
     def test_error_llm(self, mock_chat, monkeypatch):
         mock_db_instance = MagicMock()
@@ -220,12 +323,21 @@ class TestAskWithRag:
         (ocupación + factores con multiplicador) y prohíbe el consejo genérico."""
         mock_instance = MagicMock()
         mock_instance.search_factores.return_value = [
-            {"tipo": "calor", "categoria": "ambientales", "clave": "humedad",
-             "texto": "humedad relativa", "distance": 0.15},
+            {
+                "tipo": "calor",
+                "categoria": "ambientales",
+                "clave": "humedad",
+                "texto": "humedad relativa",
+                "distance": 0.15,
+            },
         ]
         mock_instance.search_documentos.return_value = [
-            {"titulo": "Arquitectura", "seccion": "Modelo",
-             "texto": "ensemble de modelos", "distance": 0.22},
+            {
+                "titulo": "Arquitectura",
+                "seccion": "Modelo",
+                "texto": "ensemble de modelos",
+                "distance": 0.22,
+            },
         ]
         mock_db.return_value = mock_instance
 
@@ -236,9 +348,14 @@ class TestAskWithRag:
             perfil={
                 "ocupacion": "construccion",
                 "perfil": {
-                    "calor": {"factores": [
-                        {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)", "factor": 2.2},
-                    ]},
+                    "calor": {
+                        "factores": [
+                            {
+                                "nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
+                                "factor": 2.2,
+                            },
+                        ]
+                    },
                     "frio": {"factores": []},
                 },
             },
@@ -253,7 +370,10 @@ class TestAskWithRag:
         assert "ADAPTACIÓN CONTEXTUAL" in user_content
         assert "Ocupación:" in user_content
         assert "Construcción / albañilería (carga pesada, PPE, sol directo) (x2.2)" in user_content
-        assert "trabajo Construcción / albañilería (carga pesada, PPE, sol directo) (x2.2)" in user_content
+        assert (
+            "trabajo Construcción / albañilería (carga pesada, PPE, sol directo) (x2.2)"
+            in user_content
+        )
         # Consejo genérico prohibido por el system prompt
         assert "reduce la exposición en interiores" in system_content
 
@@ -293,7 +413,10 @@ class TestAskConPerfil:
         y perfil con ocupación construcción (x2.2 en _OCUPACION_NIVELES)."""
         resultado = self._resultado()
         resultado["perfil"]["calor"]["factores"] = [
-            {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)", "factor": 2.2},
+            {
+                "nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
+                "factor": 2.2,
+            },
             {"nombre": "no aclimatado", "factor": 1.3},
         ]
         resultado["weather"]["perfil_horario"] = [
@@ -306,9 +429,7 @@ class TestAskConPerfil:
     def test_prompt_incluye_ubicacion_uv_y_recomendacion_contextual(self, mock_chat):
         from climasafeai.llm.rag_qwen import ask_con_perfil
 
-        mock_chat.return_value = (
-            "Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%). Mantente hidratado."
-        )
+        mock_chat.return_value = "Moaña, Pontevedra — Riesgo PRECAUCIÓN (20%). Mantente hidratado."
         texto = ask_con_perfil(
             {"hora_inicio": 15, "duracion_actividad_h": 1},
             self._resultado(),
@@ -388,11 +509,11 @@ class TestAskConPerfil:
         # LLM-005: normas del SYSTEM_PARTE
         assert "lenguaje" in system and "llano" in system  # términos técnicos (SPF, HI, WC)
         assert "reduce la exposición en interiores" in system  # consejo prohibido
-        assert "No inventes horas" in system       # horas reales, no inventadas
+        assert "No inventes horas" in system  # horas reales, no inventadas
         # BOT-013: el system ya no pide "multiplica el riesgo por N" — lo
         # prohíbe. El factor dominante va traducido a llano desde Python.
         assert "FRASES OBLIGATORIAS" in system
-        assert 'no le dice nada a quien lee' in system
+        assert "no le dice nada a quien lee" in system
 
 
 # ── BOT-013: el parte se entiende sin saber ML ─────────────────────────
@@ -437,22 +558,26 @@ class TestParteLlano:
     def test_coeficiente_llano_traduce_el_multiplicador(self):
         from climasafeai.llm.rag_qwen import _coeficiente_llano
 
-        assert _coeficiente_llano(2.2) == "algo más del doble"   # construcción
-        assert _coeficiente_llano(2.7) == "casi el triple"       # campo
+        assert _coeficiente_llano(2.2) == "algo más del doble"  # construcción
+        assert _coeficiente_llano(2.7) == "casi el triple"  # campo
         assert _coeficiente_llano(2.0) == "el doble"
         assert _coeficiente_llano(3.0) == "el triple"
-        assert _coeficiente_llano(1.3) == "un 30% más alto"      # no aclimatado
+        assert _coeficiente_llano(1.3) == "un 30% más alto"  # no aclimatado
         assert _coeficiente_llano(1.0) == "prácticamente el mismo"
         assert _coeficiente_llano(4.5) == "más de 4 veces mayor"
 
     def test_factor_dominante_lleva_linea_base(self):
         from climasafeai.llm.rag_qwen import _linea_factor_dominante
 
-        linea = _linea_factor_dominante([
-            {"nombre": "no aclimatado", "factor": 1.3},
-            {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
-             "factor": 2.2},
-        ])
+        linea = _linea_factor_dominante(
+            [
+                {"nombre": "no aclimatado", "factor": 1.3},
+                {
+                    "nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
+                    "factor": 2.2,
+                },
+            ]
+        )
         # El x2.2 no significa nada sin un "comparado con quién"
         assert linea == (
             "Lo que más pesa en tu caso no es el tiempo, es tu trabajo: en "
@@ -474,18 +599,23 @@ class TestParteLlano:
     def test_confianza_conformal_sale_del_ensemble_y_tolera_none(self):
         from climasafeai.llm.rag_qwen import _confianza_conformal
 
-        assert _confianza_conformal(
-            {"modelos": {"XGBoost_calor": {"conformal_confianza": "baja"}}}
-        ) == "baja"
+        assert (
+            _confianza_conformal({"modelos": {"XGBoost_calor": {"conformal_confianza": "baja"}}})
+            == "baja"
+        )
         # Sin artefacto conformal el ensemble deja None: no se inventa nada
-        assert _confianza_conformal(
-            {"modelos": {"XGBoost_calor": {"conformal_confianza": None}}}
-        ) is None
+        assert (
+            _confianza_conformal({"modelos": {"XGBoost_calor": {"conformal_confianza": None}}})
+            is None
+        )
         assert _confianza_conformal({}) is None
         # Si el canal de calor no la trae, vale la del canal de frío
-        assert _confianza_conformal(
-            {"modelos": {"RandomForest_frio": {"conformal_confianza": "alta"}}}
-        ) == "alta"
+        assert (
+            _confianza_conformal(
+                {"modelos": {"RandomForest_frio": {"conformal_confianza": "alta"}}}
+            )
+            == "alta"
+        )
 
     # ── el prompt del parte ────────────────────────────────────────────
 
@@ -493,18 +623,24 @@ class TestParteLlano:
         return {
             "clase_final": 1,
             "clase_final_label": "PRECAUCION",
-            "perfil": {"calor": {"prob_personalizada": prob, "factores": [
-                {"nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
-                 "factor": 2.2},
-                {"nombre": "no aclimatado", "factor": 1.3},
-            ]}},
+            "perfil": {
+                "calor": {
+                    "prob_personalizada": prob,
+                    "factores": [
+                        {
+                            "nombre": "trabajo Construcción / albañilería (carga pesada, PPE, sol directo)",
+                            "factor": 2.2,
+                        },
+                        {"nombre": "no aclimatado", "factor": 1.3},
+                    ],
+                }
+            },
             "weather": {
                 "provincia": "Pontevedra",
                 "current": {"t2m_c": 28.0, "rh": 70},
                 "uv_index": 6,
                 "perfil_horario": [
-                    {"hora": h, "HI": 25.0 + (5 if h == 15 else 0), "temp": 24.0}
-                    for h in range(24)
+                    {"hora": h, "HI": 25.0 + (5 if h == 15 else 0), "temp": 24.0} for h in range(24)
                 ],
             },
             "modelos": {
@@ -541,7 +677,10 @@ class TestParteLlano:
         # 2. el porcentaje como frecuencia natural
         assert "en unos 19 el calor te pasaría factura" in prompt
         # 3. el factor dominante en llano y con línea base
-        assert "en construcción tu riesgo es algo más del doble que el de alguien como tú a cubierto" in prompt
+        assert (
+            "en construcción tu riesgo es algo más del doble que el de alguien como tú a cubierto"
+            in prompt
+        )
         # el multiplicador crudo ya no se le pide al LLM como frase
         assert "multiplica el riesgo por 2.2" not in prompt
 
@@ -704,17 +843,24 @@ class TestDebugLLM:
         from climasafeai.llm.rag_qwen import SYSTEM_RAG
 
         monkeypatch.setenv("CLIMASAFE_DEBUG_LLM", "1")
-        mock_completion.return_value = self._mock_completion(
-            "La humedad alta empeora el calor."
-        )
+        mock_completion.return_value = self._mock_completion("La humedad alta empeora el calor.")
         mock_instance = MagicMock()
         mock_instance.search_factores.return_value = [
-            {"tipo": "calor", "categoria": "ambientales", "clave": "humedad",
-             "texto": "humedad relativa", "distance": 0.15},
+            {
+                "tipo": "calor",
+                "categoria": "ambientales",
+                "clave": "humedad",
+                "texto": "humedad relativa",
+                "distance": 0.15,
+            },
         ]
         mock_instance.search_documentos.return_value = [
-            {"titulo": "Arquitectura", "seccion": "Modelo",
-             "texto": "ensemble de modelos", "distance": 0.22},
+            {
+                "titulo": "Arquitectura",
+                "seccion": "Modelo",
+                "texto": "ensemble de modelos",
+                "distance": 0.22,
+            },
         ]
         mock_db.return_value = mock_instance
 
@@ -740,13 +886,16 @@ class TestDebugLLM:
 
     @patch("climasafeai.llm.rag_qwen.DBManager")
     @patch("litellm.completion")
-    def test_caso_spf_muestra_factores_de_frio_inyectados(
+    def test_caso_spf_cae_a_ask_raw_sin_contexto(
         self, mock_completion, mock_db, caplog, monkeypatch
     ):
-        """Caso conocido: '¿qué es SPF?' recupera factores de frío como contexto.
+        """Caso conocido: '¿qué es SPF?' recuperaba factores de frío como contexto.
 
-        Es la reproducción de lo que devuelve el DB real (ver
-        data/climasafe.db): 4 de los 5 primeros factores son de frío.
+        Reproduce lo que devuelve el DB real (ver data/climasafe.db): 4 de los
+        5 primeros factores son de frío con distancias 0.547+ (vive_solo 0.547,
+        encamado 0.561, no_sale 0.595). Con el umbral de distancia (RAG-003)
+        nada supera 0.50 y la pregunta cae a ask_raw, sin inyectar contexto
+        irrelevante.
         """
         monkeypatch.setenv("CLIMASAFE_DEBUG_LLM", "1")
         mock_completion.return_value = self._mock_completion(
@@ -754,12 +903,27 @@ class TestDebugLLM:
         )
         mock_instance = MagicMock()
         mock_instance.search_factores.return_value = [
-            {"tipo": "frio", "categoria": "situacional", "clave": "vive_solo",
-             "texto": "vive solo. tipo: frio. coeficiente: 1.3", "distance": 0.547},
-            {"tipo": "frio", "categoria": "situacional", "clave": "encamado",
-             "texto": "encamado. tipo: frio. coeficiente: 1.5", "distance": 0.561},
-            {"tipo": "frio", "categoria": "situacional", "clave": "no_sale",
-             "texto": "no sale de casa. tipo: frio. coeficiente: 1.3", "distance": 0.595},
+            {
+                "tipo": "frio",
+                "categoria": "situacional",
+                "clave": "vive_solo",
+                "texto": "vive solo. tipo: frio. coeficiente: 1.3",
+                "distance": 0.547,
+            },
+            {
+                "tipo": "frio",
+                "categoria": "situacional",
+                "clave": "encamado",
+                "texto": "encamado. tipo: frio. coeficiente: 1.5",
+                "distance": 0.561,
+            },
+            {
+                "tipo": "frio",
+                "categoria": "situacional",
+                "clave": "no_sale",
+                "texto": "no sale de casa. tipo: frio. coeficiente: 1.3",
+                "distance": 0.595,
+            },
         ]
         mock_instance.search_documentos.return_value = []
         mock_db.return_value = mock_instance
@@ -768,12 +932,16 @@ class TestDebugLLM:
             res = ask_with_rag("¿qué es SPF?", config=LLMConfig())
 
         assert res["error"] is None
-        # El payload registrado muestra la inyección: factores de frío como
-        # contexto RAG para una pregunta de fotoprotección.
+        # Nada supera el umbral: las fuentes quedan vacías y no se inyecta
+        # contexto (la llamada es ask_raw, con el system RAW).
+        assert res["sources_factores"] == []
+        assert res["sources_docs"] == []
+        # El payload que se registra es el de ask_raw: sin bloque RAG ni los
+        # factores de frío que antes se colaban en la pregunta.
         assert "[CLIMASAFE_DEBUG_LLM]" in caplog.text
-        assert "=== FACTORES DE RIESGO RELEVANTES ===" in caplog.text
-        assert "vive_solo" in caplog.text
-        assert "encamado" in caplog.text
-        assert "no_sale" in caplog.text
-        assert "=== PREGUNTA ===" in caplog.text
+        assert "=== FACTORES DE RIESGO RELEVANTES ===" not in caplog.text
+        assert "vive_solo" not in caplog.text
+        assert "encamado" not in caplog.text
+        assert "no_sale" not in caplog.text
+        assert "=== PREGUNTA ===" not in caplog.text
         assert "¿qué es SPF?" in caplog.text
