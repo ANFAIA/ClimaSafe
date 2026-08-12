@@ -81,6 +81,7 @@ models/**/*.pkl
 models/**/*.pt
 models/**/*.pth
 models/**/*.onnx
+models/**/*.gguf
 !models/**/.gitkeep
 
 # --- Artefactos ML ---
