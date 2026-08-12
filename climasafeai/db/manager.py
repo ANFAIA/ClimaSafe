@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -158,6 +159,11 @@ class DBManager:
                 c.execute("ALTER TABLE perfiles ADD COLUMN mcp_token_hash TEXT")
             if "rol" not in cols:
                 c.execute("ALTER TABLE perfiles ADD COLUMN rol TEXT NOT NULL DEFAULT 'usuario'")
+            # BOT-017: la última salida usada del chat, para ofrecer repetirla.
+            # Se guarda como JSON en una columna TEXT: el perfil no necesita una
+            # tabla propia para un único blob que se sobreescribe en cada /start.
+            if "ultima_salida" not in cols:
+                c.execute("ALTER TABLE perfiles ADD COLUMN ultima_salida TEXT")
             c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_perfiles_uid ON perfiles(uid)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_perfiles_mcp_token ON perfiles(mcp_token_hash)")
             # Backfill obligatorio: NULL no colisiona con UNIQUE en SQLite, así
@@ -278,6 +284,15 @@ class DBManager:
             if "entrenado" in perfil:
                 perfil["entrenado"] = perfil["entrenado"] == "si"
 
+            # BOT-017: la última salida se guarda como JSON; se devuelve como
+            # dict. JSON roto o NULL se degrada a None (mejor perder el atajo
+            # que romper el perfil por un blob corrupto).
+            if perfil.get("ultima_salida"):
+                try:
+                    perfil["ultima_salida"] = json.loads(perfil["ultima_salida"])
+                except (ValueError, TypeError):
+                    perfil.pop("ultima_salida", None)
+
             # Arrays
             for campo, tabla in (
                 ("comorbilidades", "perfil_comorbilidades"),
@@ -318,6 +333,11 @@ class DBManager:
 
         if "entrenado" in escalares:
             escalares["entrenado"] = "si" if escalares["entrenado"] else "no"
+
+        # BOT-017: la última salida es un dict y se guarda serializada en la
+        # columna TEXT; `_validar_campos_perfil` ya la acepta como columna.
+        if isinstance(escalares.get("ultima_salida"), dict):
+            escalares["ultima_salida"] = json.dumps(escalares["ultima_salida"], ensure_ascii=False)
 
         with self.conn() as c:
             if escalares:

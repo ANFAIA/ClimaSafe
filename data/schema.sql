@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS perfiles (
     lat             REAL,
     lon             REAL,
     provincia       TEXT,
+    ultima_salida   TEXT,                            -- JSON (BOT-017): actividad u ocupación, intensidad, duración, hora y ubicación de la última predicción
     tags            TEXT,                            -- coma-separadas: electricista,fontanero
     telegram_chat_id TEXT UNIQUE,                    -- chat_id de Telegram para vincular conversación
 
