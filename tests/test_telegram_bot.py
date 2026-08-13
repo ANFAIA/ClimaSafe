@@ -1306,6 +1306,85 @@ class TestEnviarMensajeMarkdown:
         assert "parse_mode" not in intentos[1]
         assert intentos[1]["text"] == "hidratación *importante_ y suelto"
 
+    @pytest.mark.asyncio
+    async def test_doble_400_por_longitud_se_parte_el_mensaje(self, monkeypatch):
+        """BOT-022: el doble 400 del 13-08 (Markdown + >4096 chars) no se pierde.
+
+        El reenvío en plano estaba fuera del try: si Telegram volvía a dar 400
+        por longitud, la excepción subía hasta el polling_loop y el usuario no
+        recibía nada. Ahora el texto se parte en mensajes de ≤ MAX_TG_LEN y
+        todos llegan; el texto unido de los trozos es idéntico al original.
+        """
+        import httpx
+        import climasafeai.bot.telegram_bot as mod
+
+        intentos: list[dict] = []
+        texto_largo = "\n".join(
+            f"Línea {i} con relleno para que el texto supere el límite de Telegram"
+            for i in range(100)
+        )
+        assert len(texto_largo) > mod.MAX_TG_LEN
+
+        async def _fake_tg(method: str, **kwargs):
+            intentos.append(kwargs)
+            if "parse_mode" in kwargs:
+                raise httpx.HTTPStatusError(
+                    "bad entities",
+                    request=httpx.Request("POST", "http://x"),
+                    response=httpx.Response(400),
+                )
+            if len(kwargs.get("text", "")) > mod.MAX_TG_LEN:
+                raise httpx.HTTPStatusError(
+                    "message is too long",
+                    request=httpx.Request("POST", "http://x"),
+                    response=httpx.Response(400),
+                )
+            return {"ok": True}
+
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+
+        await mod.enviar_mensaje(1, texto_largo)
+
+        # 1) Markdown (400), 2) plano completo (400 por longitud), 3+) trozos.
+        assert len(intentos) >= 3, intentos
+        assert "parse_mode" in intentos[0]
+        assert len(intentos[1]["text"]) > mod.MAX_TG_LEN
+        trozos = [i for i in intentos[2:]]
+        assert all(len(i["text"]) <= mod.MAX_TG_LEN for i in trozos)
+        assert "".join(i["text"] for i in trozos) == texto_largo
+
+    @pytest.mark.asyncio
+    async def test_doble_400_corto_se_recorta_con_aviso(self, monkeypatch):
+        """BOT-022: segundo 400 que no es por longitud: llega recortado con aviso."""
+        import httpx
+        import climasafeai.bot.telegram_bot as mod
+
+        intentos: list[dict] = []
+
+        async def _fake_tg(method: str, **kwargs):
+            intentos.append(kwargs)
+            if "parse_mode" in kwargs:
+                raise httpx.HTTPStatusError(
+                    "bad entities",
+                    request=httpx.Request("POST", "http://x"),
+                    response=httpx.Response(400),
+                )
+            if mod.AVISO_TG_RECORTE not in kwargs.get("text", ""):
+                raise httpx.HTTPStatusError(
+                    "bad request",
+                    request=httpx.Request("POST", "http://x"),
+                    response=httpx.Response(400),
+                )
+            return {"ok": True}
+
+        monkeypatch.setattr(mod, "_tg", _fake_tg)
+
+        await mod.enviar_mensaje(1, "texto corto que Telegram insiste en rechazar")
+
+        assert len(intentos) == 3, intentos
+        assert mod.AVISO_TG_RECORTE in intentos[2]["text"]
+        assert "texto corto que Telegram insiste en rechazar" in intentos[2]["text"]
+
 
 # ── BOT-010: fecha de nacimiento en vez de edad ────────────────────────────
 

@@ -1750,11 +1750,12 @@
         "se pega una conversacion real con LLM que termina en respuesta entregada, y otra con doble 400 que ya no se pierde",
         "hay tests del doble 400 y del truncado, y make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-13",
       "owner": "opencode-bot",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-13"
     },
     {
       "id": "WEB-008",

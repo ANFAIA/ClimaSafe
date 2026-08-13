@@ -79,6 +79,10 @@ class TestLLMConfig:
         cfg = LLMConfig()
         assert cfg.model == "ollama/qwen2.5:1.5b"
 
+    def test_max_tokens_default_suficiente(self):
+        """BOT-022: 1024 tokens cortaban la respuesta a mitad; el default sube."""
+        assert LLMConfig().max_tokens >= 2048
+
     def test_custom_model(self):
         cfg = LLMConfig(model="ollama/qwen2.5:7b")
         assert cfg.model == "ollama/qwen2.5:7b"
@@ -94,6 +98,12 @@ class TestMejorDisponible:
     Si alguien revierte el orden a [FINE_TUNED, GPU, CPU], estos tests fallan.
     """
 
+    def test_fine_tuned_es_qwen3_climasafe(self):
+        """LLM-014: el fine-tuned por defecto es el qwen3 entrenado en LLM-013,
+        no el qwen2.5:climasafe del ciclo anterior."""
+        assert MODELO_FINE_TUNED == "ollama/qwen3:climasafe"
+        assert "qwen2.5:climasafe" not in MODELO_FINE_TUNED
+
     @patch("climasafeai.llm.rag_qwen._modelos_ollama")
     def test_solo_qwen3_disponible_lo_elige(self, mock_list):
         mock_list.return_value = ["qwen3:1.7b"]
@@ -103,8 +113,8 @@ class TestMejorDisponible:
     @patch("climasafeai.llm.rag_qwen._modelos_ollama")
     def test_fine_tuned_primero_si_existe(self, mock_list):
         # El orden [FINE_TUNED, GPU, QWEN3, CPU] pone el fine-tuned primero:
-        # aunque qwen3 también esté, gana el fine-tuned.
-        mock_list.return_value = ["qwen3:1.7b", "qwen2.5:climasafe"]
+        # aunque qwen3 base también esté, gana el fine-tuned.
+        mock_list.return_value = ["qwen3:1.7b", "qwen3:climasafe"]
         cfg = LLMConfig.mejor_disponible()
         assert cfg.model == MODELO_FINE_TUNED
 
@@ -131,6 +141,14 @@ class TestCheckOllama:
         mock_list.return_value = []
         res = check_ollama()
         assert res["available"] is False
+
+    @patch("climasafeai.llm.rag_qwen._modelos_ollama")
+    def test_best_model_prioriza_qwen3_climasafe(self, mock_list):
+        """LLM-014: con el fine-tuned qwen3:climasafe en Ollama, check_ollama
+        lo detecta y lo devuelve como mejor modelo."""
+        mock_list.return_value = ["qwen2.5:1.5b", "qwen3:climasafe", "qwen3:1.7b"]
+        res = check_ollama()
+        assert res["best_model"] == MODELO_FINE_TUNED
 
 
 # ── ask_raw ────────────────────────────────────────────────────────────
@@ -807,6 +825,99 @@ class TestParteLlano:
 
 
 # ── ARNES-003: modo debug del payload hacia el LLM ─────────────────────
+
+
+class TestTruncadoYThink:
+    """BOT-022: el corte por max_tokens se avisa y el <think> de qwen3 no llega.
+
+    Reproduce el fallo del 13-08: completion=1024 tokens exactos
+    (max_tokens) → respuesta truncada a mitad y larga, que además tumbaba el
+    envío a Telegram. El default de max_tokens sube y el corte que quede se
+    marca; el bloque de razonamiento de qwen3 no contamina la respuesta.
+    """
+
+    @staticmethod
+    def _mock_completion(
+        respuesta: str, finish: str = "stop", completion_tokens: int | None = None
+    ) -> MagicMock:
+        mock_resp = MagicMock()
+        mock_resp.choices = [MagicMock()]
+        mock_resp.choices[0].message.content = respuesta
+        mock_resp.choices[0].finish_reason = finish
+        if completion_tokens is None:
+            mock_resp.usage = None
+        else:
+            mock_resp.usage.completion_tokens = completion_tokens
+        return mock_resp
+
+    def test_respuesta_truncada_por_length_lleva_aviso(self):
+        from climasafeai.llm.rag_qwen import AVISO_TRUNCADO, ask_raw
+
+        with patch("litellm.completion") as mock_completion:
+            mock_completion.return_value = self._mock_completion(
+                "Bebe agua y evita el sol", finish="length"
+            )
+            res = ask_raw("pregunta", config=LLMConfig())
+        assert AVISO_TRUNCADO in res["answer"]
+
+    def test_respuesta_completa_sin_aviso(self):
+        from climasafeai.llm.rag_qwen import AVISO_TRUNCADO, ask_raw
+
+        with patch("litellm.completion") as mock_completion:
+            mock_completion.return_value = self._mock_completion("Bebe agua")
+            res = ask_raw("pregunta", config=LLMConfig())
+        assert AVISO_TRUNCADO not in res["answer"]
+
+    def test_ollama_finish_stop_con_tokens_agotados_lleva_aviso(self):
+        """BOT-022: Ollama corta por max_tokens pero reporta finish_reason='stop'
+        (verificado con qwen3:climasafe real); el aviso no puede depender solo
+        de finish_reason='length'."""
+        from climasafeai.llm.rag_qwen import AVISO_TRUNCADO, ask_raw
+
+        with patch("litellm.completion") as mock_completion:
+            mock_completion.return_value = self._mock_completion(
+                "Respuesta que se corta", finish="stop", completion_tokens=2048
+            )
+            res = ask_raw("pregunta", config=LLMConfig())
+        assert AVISO_TRUNCADO in res["answer"]
+
+    def test_limpiar_bloque_think_multilinea(self):
+        from climasafeai.llm.rag_qwen import _limpiar_bloque_think
+
+        limpio = _limpiar_bloque_think(
+            "<think>\nVoy a calcular el riesgo paso a paso...\n</think>\nBebe agua."
+        )
+        assert limpio == "Bebe agua."
+
+    def test_limpiar_think_cierre_suelto(self):
+        """BOT-022: qwen3:climasafe emitió solo el cierre </think> sin apertura
+        (conversación real del 13-08); no debe llegar al usuario."""
+        from climasafeai.llm.rag_qwen import _limpiar_bloque_think
+
+        limpio = _limpiar_bloque_think("</think>\n\nRIESGO: SEGURO\nÍndice personalizado: 0.84")
+        assert limpio.startswith("RIESGO: SEGURO")
+        assert "</think>" not in limpio
+
+    def test_qwen3_con_thinking_no_contamina_la_respuesta(self):
+        from climasafeai.llm.rag_qwen import ask_raw
+
+        with patch("litellm.completion") as mock_completion:
+            mock_completion.return_value = self._mock_completion(
+                "<think>razonamiento interno</think>Bebe agua y evita el sol."
+            )
+            res = ask_raw("pregunta", config=LLMConfig(model="ollama/qwen3:1.7b"))
+        assert "<think>" not in res["answer"]
+        assert "razonamiento interno" not in res["answer"]
+
+    def test_qwen25_sin_bloque_no_se_toca(self):
+        from climasafeai.llm.rag_qwen import ask_raw
+
+        with patch("litellm.completion") as mock_completion:
+            mock_completion.return_value = self._mock_completion(
+                "Texto con <think> mencionado pero sin bloque"
+            )
+            res = ask_raw("pregunta", config=LLMConfig(model="ollama/qwen2.5:1.5b"))
+        assert res["answer"] == "Texto con <think> mencionado pero sin bloque"
 
 
 class TestDebugLLM:

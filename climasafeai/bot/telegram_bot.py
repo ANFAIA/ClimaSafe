@@ -2370,6 +2370,38 @@ async def _finalizar_parte(chat_id: int) -> None:
     _conversaciones.pop(chat_id, None)
 
 
+# Telegram rechaza con 400 los mensajes de más de 4096 caracteres.
+MAX_TG_LEN = 4096
+
+# BOT-022: aviso que se añade cuando Telegram sigue rechazando el mensaje y
+# hay que recortarlo en vez de perder el update mudo.
+AVISO_TG_RECORTE = "\n\n[mensaje recortado: Telegram rechazó el envío completo]"
+
+
+def _partir_texto(texto: str, max_len: int = MAX_TG_LEN) -> list[str]:
+    """Parte un texto en trozos de ≤ max_len para Telegram.
+
+    Se corta por saltos de línea para no partir una frase por la mitad; una
+    línea que ella sola supere el límite se corta a la fuerza. Los saltos de
+    línea que separan trozos se conservan al final del trozo, así que el texto
+    unido de todos los trozos es idéntico al original.
+    """
+    trozos: list[str] = []
+    resto = texto
+    while len(resto) > max_len:
+        corte = resto.rfind("\n", 0, max_len)
+        if corte == -1:
+            # Línea única gigante: corte forzoso.
+            trozos.append(resto[:max_len])
+            resto = resto[max_len:]
+            continue
+        trozos.append(resto[: corte + 1])
+        resto = resto[corte + 1 :]
+    if resto:
+        trozos.append(resto)
+    return trozos
+
+
 async def enviar_mensaje(
     chat_id: int,
     texto: str,
@@ -2400,7 +2432,32 @@ async def enviar_mensaje(
         # nada. Se reenvía en plano — mejor sin negritas que sin mensaje.
         logger.warning("Telegram rechazó el formato del mensaje; se reenvía en texto plano")
         payload.pop("parse_mode", None)
-        await _tg("sendMessage", **payload)
+        # BOT-022: el reenvío en plano vive DENTRO del manejo de errores. Antes
+        # estaba fuera del try: si Telegram volvía a responder 400 —p.ej. el
+        # texto superaba los 4096 caracteres— la excepción subía por
+        # _finalizar_parte hasta el polling_loop y el parte del 13-08 murió
+        # así: el usuario no recibió nada. Ahora el segundo 400 se maneja: se
+        # parte el texto en mensajes múltiples (o se recorta con aviso), el
+        # update nunca se pierde mudo.
+        try:
+            await _tg("sendMessage", **payload)
+        except httpx.HTTPStatusError as exc2:
+            if exc2.response.status_code != 400:
+                raise
+            logger.warning(
+                "Doble 400 al enviar a %s (%d caracteres); se parte el mensaje",
+                chat_id,
+                len(texto),
+            )
+            trozos = _partir_texto(texto)
+            if len(trozos) == 1:
+                # No era la longitud: recortar no lo arregla, pero el usuario
+                # recibe el texto con un aviso en vez de un update muerto.
+                trozos = [
+                    f"{texto[: MAX_TG_LEN - len(AVISO_TG_RECORTE)]}{AVISO_TG_RECORTE}"
+                ]
+            for trozo in trozos:
+                await _tg("sendMessage", **{**payload, "text": trozo})
 
 
 _CAMPOS_PERFIL = {

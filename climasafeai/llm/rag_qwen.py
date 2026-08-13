@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -108,7 +109,9 @@ def _debug_payload(messages: list[dict[str, str]], config: LLMConfig) -> str:
 MODELO_LOCAL_CPU = "ollama/qwen2.5:1.5b"
 MODELO_LOCAL_QWEN3 = "ollama/qwen3:1.7b"
 MODELO_LOCAL_GPU = "ollama/qwen2.5:7b"
-MODELO_FINE_TUNED = "ollama/qwen2.5:climasafe"
+# LLM-014: el fine-tuned de LLM-013 se sirve sobre qwen3 (Modelfile-qwen3);
+# el 2.5:climasafe quedó obsoleto tras el reentrenamiento.
+MODELO_FINE_TUNED = "ollama/qwen3:climasafe"
 MODELO_API_DEFECTO = "groq/llama-3.3-70b-versatile"
 
 # RAG-003: distancia coseno máxima (sqlite-vec: 0 = idéntico, 2 = opuesto)
@@ -125,6 +128,33 @@ MODELO_API_DEFECTO = "groq/llama-3.3-70b-versatile"
 #     el ruido de frío en una pregunta de calor.
 UMBRAL_DISTANCIA = 0.50
 
+# BOT-022: cuando el modelo agota max_tokens (finish_reason="length"), la
+# respuesta llega cortada a mitad sin que nadie se entere. Se marca con un
+# aviso visible para que el usuario sepa que el texto está incompleto.
+AVISO_TRUNCADO = (
+    "\n\n[mensaje cortado por el límite de tokens del modelo; pregunta de nuevo para el resto]"
+)
+
+
+def _limpiar_bloque_think(texto: str) -> str:
+    """Quita el bloque <think>…</think> que qwen3 antepone con el thinking.
+
+    El Modelfile de qwen3 debe servirse con enable_thinking=false
+    (fine_tune.py), pero si se sirve con thinking activo el bloque de
+    razonamiento cae dentro del content y acabaría en el parte. Para los
+    modelos que no emiten el bloque (qwen2.5, Groq…) es un no-op.
+
+    También quita las etiquetas sueltas que deja el modelo: en una
+    conversación real (13-08) qwen3:climasafe emitió solo el cierre
+    (`</think>` al principio del content, sin apertura) y la respuesta
+    acabaría en el parte con el cierre pegado.
+    """
+    # Bloques completos <think>…</think>, con el salto de línea que dejan.
+    texto = re.sub(r"<think>.*?</think>\s*", "", texto, flags=re.DOTALL)
+    # Etiquetas de apertura o cierre sueltas que filtran sin pareja.
+    texto = re.sub(r"</?think>\s*", "", texto)
+    return texto
+
 
 @dataclass
 class LLMConfig:
@@ -139,7 +169,11 @@ class LLMConfig:
 
     model: str = MODELO_LOCAL_CPU
     temperature: float = 0.3
-    max_tokens: int = 1024
+    # BOT-022: 1024 tokens cortaban la respuesta a mitad (log del 13-08:
+    # completion=1024 exactos, respuesta larga y truncada). Se sube a 2048
+    # para los partes normales; el corte que quede ya no es silencioso:
+    # _chat_litellm lo detecta por finish_reason="length" y añade AVISO_TRUNCADO.
+    max_tokens: int = 2048
 
     @classmethod
     def desde_modelo(cls, model: str) -> "LLMConfig":
@@ -168,7 +202,7 @@ class LLMConfig:
             MODELO_LOCAL_QWEN3,
             MODELO_LOCAL_CPU,
         ]:
-            # fine-tuned: "ollama/qwen2.5:climasafe" → Ollama lo ve como "qwen2.5:climasafe"
+            # fine-tuned: "ollama/qwen3:climasafe" → Ollama lo ve como "qwen3:climasafe"
             nombre_corto = candidate.split("/", 1)[1] if "/" in candidate else candidate
             if nombre_corto in modelos:
                 return cls(model=candidate)
@@ -209,7 +243,29 @@ def _chat_litellm(
                 getattr(usage, "completion_tokens", "?"),
                 getattr(usage, "total_tokens", "?"),
             )
-        return resp.choices[0].message.content.strip()
+        # BOT-022: si qwen3 se sirve con thinking activo, el razonamiento
+        # llega en un bloque <think> que no es parte de la respuesta; se
+        # limpia antes de devolverla. Para qwen2.5 es un no-op.
+        content = resp.choices[0].message.content.strip()
+        if "qwen3" in config.model:
+            content = _limpiar_bloque_think(content)
+        # BOT-022: el modelo agotó max_tokens y la respuesta está cortada a
+        # mitad. Antes se callaba; ahora se avisa. No basta con depender de
+        # finish_reason="length": Ollama responde "stop" aunque corte por el
+        # límite (completion_tokens == max_tokens), así que se comprueba
+        # también ese caso.
+        finish = getattr(resp.choices[0], "finish_reason", None)
+        completion_tokens = getattr(usage, "completion_tokens", 0) if usage is not None else 0
+        if finish == "length" or (
+            isinstance(completion_tokens, int) and completion_tokens >= config.max_tokens
+        ):
+            logger.warning(
+                "Respuesta truncada por max_tokens=%s (%s); se añade aviso",
+                config.max_tokens,
+                config.model,
+            )
+            content += AVISO_TRUNCADO
+        return content
     except Exception as exc:
         logger.error("Error en LiteLLM (%s): %s", config.model, exc)
         return None
