@@ -1767,8 +1767,12 @@
         "al terminar el chat, el perfil se persiste en la BBDD como perfil web (web_<id>) igual que el formulario individual, de forma que la pagina individual lo precarga despues",
         "hay tests del cuestionario con los campos nuevos y de la persistencia, y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "owner": "opencode-web",
+      "review_rounds": 0,
+      "blocked_reason": "Pospuesta por el humano el 2026-08-13: no se implementa ahora, queda como pendiente junto a WEB-009 y FORECAST-004."
     },
     {
       "id": "WEB-009",
@@ -1809,11 +1813,12 @@
         "los enlaces internos del home sirven 200 servidos como estaticos",
         "el home y las paginas siguen el estilo visual del repo personal"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-13",
       "owner": "pages",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-13"
     },
     {
       "id": "WEB-011",
