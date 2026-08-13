@@ -6,7 +6,7 @@ Regresión BUG-004: transformers 5.5.0 lanza
 is not set` en apply_chat_template. La máquina local no tiene GPU ni unsloth,
 así que se mockea todo el entorno y se verifica que tras cada from_pretrained
 que alimenta apply_chat_template (entrenar y evaluar) se aplica
-get_chat_template(tokenizer, chat_template="qwen-2.5").
+get_chat_template(tokenizer, chat_template="qwen-3") (LLM-013: Qwen3).
 """
 
 import argparse
@@ -87,8 +87,42 @@ def test_cada_ruta_con_apply_chat_template_aplica_get_chat_template():
     apply_chat_template (entrenar y evaluar) aplican get_chat_template.
     exportar_gguf también hace from_pretrained pero no usa apply_chat_template."""
     src = Path(ft.__file__).read_text(encoding="utf-8")
-    assert src.count('get_chat_template(tokenizer, chat_template="qwen-2.5")') == 2
+    assert src.count('get_chat_template(tokenizer, chat_template="qwen-3")') == 2
     assert src.count("tokenizer.apply_chat_template") == 4
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM-013 criterio 1: --model qwen3-1.7b → unsloth/Qwen3-1.7B
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_qwen3_1_7b_mapea_a_unsloth_y_parse_args_lo_acepta():
+    """Criterio 1 (LLM-013): el alias qwen3-1.7b mapea a unsloth/Qwen3-1.7B
+    y parse_args lo acepta como opción."""
+    assert ft.MODEL_NAMES["qwen3-1.7b"] == "unsloth/Qwen3-1.7B"
+    args = ft.parse_args(["--model", "qwen3-1.7b"])
+    assert args.model == "qwen3-1.7b"
+
+
+def test_vram_check_distingue_1_7b_de_7b():
+    """qwen3-1.7b contiene "7b" como substring de "1.7b": el check de VRAM no
+    debe pedirle 8 GB como a los 7B reales (4.5 GB le bastan), mientras que
+    qwen2.5-7b sí sigue pidiendo 8 GB."""
+    torch_mock = MagicMock()
+    torch_mock.cuda.is_available.return_value = True
+    props = MagicMock()
+    props.total_memory = int(4.5 * 1024**3)
+    torch_mock.cuda.get_device_properties.return_value = props
+    torch_mock.cuda.get_device_name.return_value = "T4"
+
+    with (
+        patch("importlib.util.find_spec", return_value=MagicMock()),
+        patch.dict(sys.modules, {"torch": torch_mock}),
+    ):
+        assert not any("VRAM insuficiente" in p
+                       for p in ft.comprobar_entorno("qwen3-1.7b"))
+        assert any("VRAM insuficiente" in p
+                   for p in ft.comprobar_entorno("qwen2.5-7b"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -99,7 +133,7 @@ def test_cada_ruta_con_apply_chat_template_aplica_get_chat_template():
 class TestEntrenarChatTemplate:
     def _args(self, tmp_path, val_file=""):
         return argparse.Namespace(
-            model="qwen2.5-1.5b",
+            model="qwen3-1.7b",
             train_file=str(tmp_path / "train.jsonl"),
             val_file=val_file,
             output_dir=str(tmp_path / "out"),
@@ -128,7 +162,7 @@ class TestEntrenarChatTemplate:
 
         def _get_chat_template(tokenizer, **kwargs):
             orden.append("get_chat_template")
-            assert kwargs["chat_template"] == "qwen-2.5"
+            assert kwargs["chat_template"] == "qwen-3"
             return tok_con
 
         env_llm["unsloth"].FastLanguageModel.from_pretrained.side_effect = _from_pretrained
@@ -181,7 +215,7 @@ class TestEntrenarTrainingArguments:
         val_file = tmp_path / "val.jsonl"
         val_file.write_text('{"instruction": "i", "input": "", "output": "o"}\n')
         return argparse.Namespace(
-            model="qwen2.5-1.5b",
+            model="qwen3-1.7b",
             train_file=str(tmp_path / "train.jsonl"),
             val_file=str(val_file),
             output_dir=str(tmp_path / "out"),
@@ -247,7 +281,7 @@ class TestEvaluarChatTemplate:
 
         def _get_chat_template(tokenizer, **kwargs):
             orden.append("get_chat_template")
-            assert kwargs["chat_template"] == "qwen-2.5"
+            assert kwargs["chat_template"] == "qwen-3"
             return tok_con
 
         env_llm["unsloth"].FastLanguageModel.from_pretrained.side_effect = _from_pretrained
@@ -286,6 +320,32 @@ class TestEvaluarChatTemplate:
 
         tok_sin.apply_chat_template.assert_not_called()
         assert tok_con.apply_chat_template.call_count == 2
+
+    def test_generacion_desactiva_thinking(self, env_llm, tmp_path):
+        """Criterio 2 (LLM-013): la generación de ejemplo del eval construye el
+        prompt con enable_thinking=False — el mismo prefijo <think> vacío que
+        servirá Ollama con el thinking desactivado, para no romper el formato
+        EXACTO del benchmark (RIESGO: / Índice personalizado)."""
+        tok_sin = env_llm["tok_sin_template"]
+        tok_con = env_llm["tok_con_template"]
+        llamadas = []
+        tok_con.apply_chat_template.side_effect = lambda *a, **k: (
+            llamadas.append(k) or MagicMock()
+        )
+
+        with (
+            patch.dict(sys.modules, env_llm["mods"]),
+            patch.object(
+                ft,
+                "cargar_dataset",
+                return_value=[{"instruction": "i", "input": "", "output": "o"}],
+            ),
+        ):
+            ft.evaluar(self._args(tmp_path))
+
+        generacion = [k for k in llamadas if k.get("add_generation_prompt")]
+        assert len(generacion) == 1
+        assert generacion[0]["enable_thinking"] is False
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,11 +1,19 @@
 #! /usr/bin/env python
 """
-ClimaSafeAI — Fine‑tuning LoRA de Qwen 2.5 7B con Unsloth.
+ClimaSafeAI — Fine‑tuning LoRA de Qwen 3 1.7B (y Qwen 2.5) con Unsloth.
+
+Modo thinking (Qwen 3): el dataset enseña respuestas directas ("RIESGO: …" /
+"Índice personalizado: …") sin razonar. El template qwen-3 de Unsloth envuelve
+el target de entrenamiento en un <think> vacío y, al generar con
+enable_thinking=False, emite el mismo prefijo — el modelo nunca aprende a
+razonar de verdad. Al servirlo con Ollama, el Modelfile debe dejar el thinking
+desactivado (enable_thinking=false) para que el formato EXACTO del benchmark
+no se rompa.
 
 Uso:
     # Entrenar
     python climasafeai/llm/fine_tune.py \
-        --model qwen2.5-7b \
+        --model qwen3-1.7b \
         --train-file data/llm/train.jsonl \
         --val-file data/llm/val.jsonl \
         --output-dir models/llm/qwen-climasafe-lora
@@ -40,6 +48,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 MODEL_NAMES = {
+    "qwen3-1.7b": "unsloth/Qwen3-1.7B",
     "qwen2.5-7b": "unsloth/Qwen2.5-7B",
     "qwen2.5-1.5b": "unsloth/Qwen2.5-1.5B",
     "qwen2.5-7b-instruct": "unsloth/Qwen2.5-7B-Instruct",
@@ -71,9 +80,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     # Datos
     data = p.add_argument_group("Datos")
-    data.add_argument("--model", default="qwen2.5-7b",
+    data.add_argument("--model", default="qwen3-1.7b",
                       choices=list(MODEL_NAMES.keys()),
-                      help="Modelo base (default: qwen2.5-7b)")
+                      help="Modelo base (default: qwen3-1.7b)")
     data.add_argument("--train-file", default="data/llm/train.jsonl",
                       help="JSONL de entrenamiento (instruction/input/output)")
     data.add_argument("--val-file", default="data/llm/val.jsonl",
@@ -180,8 +189,12 @@ def entrenar(args: argparse.Namespace) -> None:
         device_map="auto",
     )
     # Unsloth no garantiza tokenizer.chat_template y transformers 5.5.0 lo
-    # exige para apply_chat_template: aplicamos el de Qwen 2.5.
-    tokenizer = get_chat_template(tokenizer, chat_template="qwen-2.5")
+    # exige para apply_chat_template: aplicamos el de Qwen 3.
+    # Thinking: el dataset enseña respuestas directas ("RIESGO: …"). El template
+    # qwen-3 de Unsloth envuelve el target assistant en un <think> vacío y, al
+    # servirlo, Ollama con thinking desactivado emite el mismo prefijo — el
+    # formato EXACTO del benchmark no se rompe (ver docstring del módulo).
+    tokenizer = get_chat_template(tokenizer, chat_template="qwen-3")
 
     # 2. Añadir LoRA
     print("[2/5] Añadiendo LoRA...")
@@ -410,7 +423,7 @@ def evaluar(args: argparse.Namespace) -> None:
     )
     # Mismo requisito que en entrenar: apply_chat_template necesita
     # chat_template configurado en el tokenizer (transformers 5.5.0).
-    tokenizer = get_chat_template(tokenizer, chat_template="qwen-2.5")
+    tokenizer = get_chat_template(tokenizer, chat_template="qwen-3")
     FastLanguageModel.for_inference(model)
 
     # Cargar dataset de validación
@@ -463,6 +476,7 @@ def evaluar(args: argparse.Namespace) -> None:
         messages = _formatear_chat(ex)
         inputs = tokenizer.apply_chat_template(
             messages[:-1], tokenize=True, add_generation_prompt=True,
+            enable_thinking=False,  # mismo prefijo <think> vacío que servirá Ollama (thinking off)
             return_tensors="pt"
         ).to(model.device)
 
@@ -487,7 +501,7 @@ def evaluar(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 
-def comprobar_entorno(model: str = "qwen2.5-7b") -> list[str]:
+def comprobar_entorno(model: str = "qwen3-1.7b") -> list[str]:
     """Devuelve la lista de problemas que impiden entrenar. Vacía = se puede.
 
     Existe porque el fallo por defecto era un `ModuleNotFoundError: unsloth` a los
@@ -524,12 +538,14 @@ def comprobar_entorno(model: str = "qwen2.5-7b") -> list[str]:
         return problemas
 
     # 3. VRAM suficiente para el modelo pedido
+    # qwen3-1.7b contiene "7b" como substring de "1.7b": solo los 7B reales
+    # (qwen2.5-7b…) piden 8 GB; el 1.7B pide lo mismo que el 1.5B.
     libre = torch.cuda.get_device_properties(0).total_memory / 1024**3
-    necesaria = 8.0 if "7b" in model else 4.0
+    necesaria = 8.0 if ("7b" in model and "1.7b" not in model) else 4.0
     if libre < necesaria:
         problemas.append(
             f"VRAM insuficiente: {libre:.1f} GB en {torch.cuda.get_device_name(0)}, "
-            f"y {model} en QLoRA pide ~{necesaria:.0f} GB. Prueba con --model qwen2.5-1.5b."
+            f"y {model} en QLoRA pide ~{necesaria:.0f} GB. Prueba con --model qwen3-1.7b."
         )
     return problemas
 

@@ -7,7 +7,7 @@
 #
 # Uso:
 #   ./climasafeai/llm/entrenar.sh --check              ¿se puede entrenar ya?
-#   ./climasafeai/llm/entrenar.sh                      entrena con qwen2.5-1.5b
+#   ./climasafeai/llm/entrenar.sh                      entrena con qwen3-1.7b
 #   ./climasafeai/llm/entrenar.sh --model qwen2.5-7b   ...o con el 7B, si hay VRAM
 #
 # Cualquier argumento se pasa tal cual a fine_tune.py.
@@ -40,9 +40,9 @@ if ! "$MICROMAMBA" env list | grep -qE "^\s*${ENTORNO}\s"; then
 fi
 
 cd "$ROOT"
-# Por defecto el 1.5B: es lo que cabe en 4 GB de VRAM. El 7B pide 8-10 GB.
+# Por defecto el 1.7B (Qwen3): cabe en 4 GB de VRAM igual que el 1.5B. El 7B pide 8-10 GB.
 if [[ ! " $* " =~ " --model " ]]; then
-  set -- --model qwen2.5-1.5b "$@"
+  set -- --model qwen3-1.7b "$@"
 fi
 
 echo "▶  Entrenando en el entorno '${ENTORNO}'  ·  $*"
