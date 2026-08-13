@@ -93,7 +93,7 @@ help:
 
 
 	@echo "  Documentación"
-	@echo "    make docs           sphinx-apidoc + html"
+	@echo "    make docs           mkdocs build → site/ (documentacion/)"
 	@echo ""
 	@echo "  Arnés (ver AGENTS.md)"
 	@echo "    make init           ./init.sh — la puerta: ¿se puede trabajar?"
@@ -390,11 +390,10 @@ mlflow:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Documentación
+#  Documentación (MkDocs Material sobre documentacion/ → site/)
 # ─────────────────────────────────────────────────────────────────────────────
 docs:
-	$(UVRUN) sphinx-apidoc -o docs/source/ $(MODULE)/
-	$(MAKE) html -C docs
+	$(UVRUN) mkdocs build
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Limpieza

@@ -134,6 +134,9 @@ secrets/
 # --- Sphinx ---
 docs/_build/
 
+# --- MkDocs (DOC-005) ---
+site/
+
 # --- Misc ---
 *.manifest
 *.spec

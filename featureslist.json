@@ -1865,8 +1865,12 @@
         "la nav incluye indice, guia de inicio rapido y los 4 componentes (web, MCP, bot, RAG)",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "owner": "docs",
+      "review_rounds": 1,
+      "closed": "2026-08-13"
     },
     {
       "id": "DEPLOY-002",
