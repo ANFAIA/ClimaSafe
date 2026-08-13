@@ -123,8 +123,10 @@
         "Tests de cada adaptador con mocked transport",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "review_rounds": 0
     },
     {
       "id": "MSG-002",
@@ -1716,10 +1718,11 @@
         "benchmark o conversacion real demuestra que el bot usa qwen3:climasafe (formato RIESGO:/Indice personalizado) y no el 2.5",
         "make test sigue en verde"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-13",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-13"
     },
     {
       "id": "WEB-007",
@@ -1813,12 +1816,11 @@
         "los enlaces internos del home sirven 200 servidos como estaticos",
         "el home y las paginas siguen el estilo visual del repo personal"
       ],
-      "status": "done",
+      "status": "in_progress",
       "depends_on": [],
       "started": "2026-08-13",
       "owner": "pages",
-      "review_rounds": 0,
-      "closed": "2026-08-13"
+      "review_rounds": 0
     },
     {
       "id": "WEB-011",
