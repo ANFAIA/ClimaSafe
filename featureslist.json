@@ -106,8 +106,11 @@
         "Documentar ventajas/desventajas de cada uno con benchmark sobre datos espanoles",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "review_rounds": 0,
+      "closed": "2026-08-13"
     },
     {
       "id": "MSG-001",
@@ -1685,6 +1688,247 @@
       "review_rounds": 0,
       "blocked_reason": "Parada por el humano en otra sesion (llevaba 4h). La implementacion (generar_dataset_frio.py + tests) quedo sin commitear en el arbol; se retoma cuando el usuario lo decida.",
       "closed": "2026-08-11"
+    },
+    {
+      "id": "LLM-013",
+      "title": "Adaptar el fine-tuning (notebook Colab + fine_tune.py) a Qwen3-1.7B",
+      "description": "Adaptar el fine-tuning (notebook Colab + fine_tune.py) a Qwen3-1.7B",
+      "acceptance_criteria": [
+        "fine_tune.py acepta --model qwen3-1.7b mapeando a unsloth/Qwen3-1.7B",
+        "El chat template aplicado en entrenar y evaluar es el de qwen3 (qwen-3) y el modo thinking queda manejado para que el formato EXACTO del benchmark no se rompa",
+        "El notebook notebooks/llm-fine-tuning-colab.ipynb entrena con --model qwen3-1.7b y actualiza titulo, descripciones y nombres de artefactos",
+        "Los tests de fine_tune se actualizan a qwen3 y make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-12",
+      "review_rounds": 0,
+      "closed": "2026-08-12"
+    },
+    {
+      "id": "LLM-014",
+      "title": "El bot usa qwen3:climasafe como modelo fine-tuneado (LLM-013 lo entrenó, falta apuntar el código)",
+      "description": "El bot usa qwen3:climasafe como modelo fine-tuneado (LLM-013 lo entrenó, falta apuntar el código)",
+      "acceptance_criteria": [
+        "rag_qwen.py define MODELO_FINE_TUNED como ollama/qwen3:climasafe",
+        "'ollama/qwen2.5:climasafe' deja de ser el fine-tuned por defecto",
+        "check_ollama() detecta qwen3:climasafe y lo prioriza como mejor modelo",
+        "benchmark o conversacion real demuestra que el bot usa qwen3:climasafe (formato RIESGO:/Indice personalizado) y no el 2.5",
+        "make test sigue en verde"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "review_rounds": 0
+    },
+    {
+      "id": "WEB-007",
+      "title": "El chat es una opcion de navegacion mas: pagina propia solo para el chat",
+      "description": "El chat es una opcion de navegacion mas: pagina propia solo para el chat",
+      "acceptance_criteria": [
+        "La web tiene una opcion de navegacion 'Chat' al mismo nivel que Individual y Grupo",
+        "al elegirla se va a una pagina/vista dedicada solo al chat, sin el mapa ni el formulario de prediccion delante",
+        "el chat mantiene toda su funcionalidad actual (preguntas conversacionales, prediccion real al final, ver detalle completo)",
+        "las otras vistas (individual, grupo, mapa, rutinas) no cambian y se sigue navegando entre ellas sin romper nada",
+        "hay tests del flujo de navegacion y make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "owner": "opencode-web",
+      "review_rounds": 0,
+      "closed": "2026-08-13"
+    },
+    {
+      "id": "BOT-022",
+      "title": "La respuesta del LLM del bot no llega: el reenvio en plano esta fuera del try y la respuesta se trunca",
+      "description": "La respuesta del LLM del bot no llega: el reenvio en plano esta fuera del try y la respuesta se trunca",
+      "acceptance_criteria": [
+        "Con el modelo LLM activo, la respuesta redactada llega SIEMPRE al usuario aunque Telegram rechace el Markdown y aunque supere 4096 caracteres: el reenvio en plano pasa a estar dentro del manejo de errores y si el texto es demasiado largo se parte en mensajes multiples o se recorta con aviso, nunca se pierde el update",
+        "si la respuesta del LLM sale truncada por max_tokens (1024), se sube el limite o se recorta con un aviso claro en vez de cortar a mitad",
+        "si el modelo es qwen3, se limpia el bloque <think> del texto antes de enviar",
+        "se pega una conversacion real con LLM que termina en respuesta entregada, y otra con doble 400 que ya no se pierde",
+        "hay tests del doble 400 y del truncado, y make test pasa"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "owner": "opencode-bot",
+      "review_rounds": 0
+    },
+    {
+      "id": "WEB-008",
+      "title": "El chat no pregunta campos importantes (trabajo, deporte, entrenado, estado previo) ni persiste el perfil",
+      "description": "El chat no pregunta campos importantes (trabajo, deporte, entrenado, estado previo) ni persiste el perfil",
+      "acceptance_criteria": [
+        "El cuestionario del chat pregunta al menos: ocupacion/tipo de trabajo (construccion, reparto, campo, oficina...), deporte y entrenado (si esta acostumbrado a ESA actividad), y falta_sueno/enfermedad_reciente/fiesta cuando aplique — mismo catalogo de campos que acepta /api/predict",
+        "los campos opcionales no rompen si el usuario no los da",
+        "al terminar el chat, el perfil se persiste en la BBDD como perfil web (web_<id>) igual que el formulario individual, de forma que la pagina individual lo precarga despues",
+        "hay tests del cuestionario con los campos nuevos y de la persistencia, y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-009",
+      "title": "La pagina individual no precarga los datos del perfil guardado de la BBDD",
+      "description": "La pagina individual no precarga los datos del perfil guardado de la BBDD",
+      "acceptance_criteria": [
+        "Se reproduce el caso: un perfil guardado y al volver a la pagina individual sus datos aparecen precargados en el formulario (edad, sexo, grasa, aclimatado, fototipo, comorbilidades, medicacion, situacion social, ubicacion)",
+        "si el fallo esta en como se identifica/carga el perfil (cargarPerfil / GET /api/perfil/{id} / _chat_id_de_perfil), se corrige y se pega la traza del GET real",
+        "un perfil inexistente sigue pidiendo datos sin reventar",
+        "hay tests del endpoint de carga de perfil con datos reales de la BD y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "FORECAST-004",
+      "title": "La tendencia conformal no se entiende: banda y horizonte explicados en pantalla",
+      "description": "La tendencia conformal no se entiende: banda y horizonte explicados en pantalla",
+      "acceptance_criteria": [
+        "La grafica semanal explica en pantalla que significa la banda de confianza (intervalo de la prediccion conformal, alpha=0.1) y muestra banda_origen cuando exista",
+        "cuando el forecast no cubre los 7 dias se indica explicitamente hasta donde llega y que el resto es estimacion o no se dibuja, sin extrapolar en silencio",
+        "la leyenda usa lenguaje llano ('franja donde puede caer el riesgo real'), no solo 'banda conformal'",
+        "se pega una captura o el DOM generado de la grafica semanal con la explicacion visible",
+        "hay tests del endpoint semanal y make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-010",
+      "title": "Home + endpoints anidados en el GitHub Pages personal (cacelass.github.io)",
+      "description": "Reunion con jefes 2026-08-13: la web por defecto hoy es la prediccion; hay que hacer un home con enlace al GitHub y botones Probar ya / Documentacion / MCP / Telegram. Vive en el pages personal del humano (~/Documentos/migithub/cacelass.github.io): se aprovecha su index.html y se anaden endpoints anidados bajo /climasafe/.",
+      "acceptance_criteria": [
+        "el index.html de cacelass.github.io tiene una seccion/card ClimaSafe con enlace a github.com/ANFAIA/ClimaSafe y los 4 botones (Probar ya, Documentacion, MCP, Telegram)",
+        "projects/climasafe.html se actualiza con los 4 botones + enlace GitHub",
+        "existe climasafe/mcp.html con instrucciones de conexion MCP (opencode.json/.mcp.json, tools, token de escritura)",
+        "existe climasafe/telegram.html con instrucciones @BotFather (crear bot, token, .env) y la nota de que el LLM es local",
+        "los enlaces internos del home sirven 200 servidos como estaticos",
+        "el home y las paginas siguen el estilo visual del repo personal"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-13",
+      "owner": "pages",
+      "review_rounds": 0
+    },
+    {
+      "id": "WEB-011",
+      "title": "Conversión ONNX de XGBoost/RF/LSTM + artefactos a JSON para el demo",
+      "description": "Parte 1 del 'Probar ya' ONNX/WASM: convertir los modelos que usa predict_ensemble (XGBoost_calor.joblib, RandomForest_frio.joblib, LSTM_province_hybrid.pt) a ONNX y exportar los artefactos (feature_names, scalers, encoders, umbrales_provincia, conformal, isotonic, provincia_mapping, INE, CLASS_THRESHOLDS, factores_riesgo.json) a JSON determinista para que el navegador los consuma.",
+      "acceptance_criteria": [
+        "existe un script reproducible (scripts/exportar_onnx.py) que convierte XGBoost_calor.joblib, RandomForest_frio.joblib y LSTM_province_hybrid.pt a .onnx",
+        "los artefactos se exportan a JSON (o formatos ligeros) sin datos inventados",
+        "cada .onnx carga e infiere en onnxruntime CPU sin error",
+        "paridad de probabilidades ONNX vs joblib/torch en 5 escenarios con diff < 1e-3",
+        "los artefactos de salida van a una carpeta versionada (ej. models/onnx/)",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-012",
+      "title": "Demo Probar ya: pipeline en el navegador con onnxruntime-web",
+      "description": "Parte 2 del 'Probar ya' ONNX/WASM: port a JS del pipeline de predict_ensemble (weather Open-Meteo, indices, features diarias, process_input, inferencia ONNX de los 3 modelos, Formula, ensemble conformal-weighted, personalizacion, overrides HI/WC/UV y recomendaciones) y pagina probar-ya/index.html en cacelass.github.io/climasafe/probar-ya/.",
+      "acceptance_criteria": [
+        "cacelass.github.io/climasafe/probar-ya/ sirve como estatico sin backend",
+        "fetch a Open-Meteo (CORS) con fallback a escenario precargado si falla",
+        "ejecuta los 3 modelos ONNX + Formula + ensemble + personalizacion y muestra clase final, % de riesgo, perfil horario y recomendaciones",
+        "paridad con predict_ensemble local en 5 escenarios (clase identica, % dentro de ±1 punto)",
+        "el README de la carpeta explica como regenerar los ONNX",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "WEB-011"
+      ]
+    },
+    {
+      "id": "DOC-005",
+      "title": "Sitio de documentacion con MkDocs Material sobre documentacion/",
+      "description": "Decidido en plan 2026-08-13: el boton Documentacion del home abre un sitio navegable. documentacion/ es Markdown en espanol, asi que MkDocs Material (no Sphinx) apuntando a documentacion/ + README. Se publica en cacelass.github.io/climasafe/documentacion/ (subpath).",
+      "acceptance_criteria": [
+        "mkdocs.yml en la raiz con theme material y nav sobre documentacion/ + README",
+        "make docs construye el sitio en site/ sin errores",
+        "la config usa base_url para servir bajo /climasafe/documentacion/ (rutas relativas correctas)",
+        "la nav incluye indice, guia de inicio rapido y los 4 componentes (web, MCP, bot, RAG)",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DEPLOY-002",
+      "title": "CI/CD: test+lint en CI, tag semantico y publicacion a GitHub Pages",
+      "description": "Decidido en plan 2026-08-13: CI + Pages, home y docs se publican solos. Workflows GitHub Actions en ANFAIA/ClimaSafe: calidad en CI, versionado/tag en main, y publicacion de docs + artefactos ONNX al pages personal del humano. Si no hay PAT entre repos, existe make pages-deploy local como alternativa documentada.",
+      "acceptance_criteria": [
+        ".github/workflows/ci.yml ejecuta make test + make lint en PR y push a main (y pasa)",
+        ".github/workflows/release.yml al llegar a main genera bump semantico v0.0.x + CHANGELOG + release notes + tag",
+        ".github/workflows/pages.yml construye docs (MkDocs) + ONNX y los publica en cacelass/cacelass.github.io (o make pages-deploy lo hace local y esta documentado si no hay token)",
+        "el workflow no commitea en el repo ANFAIA nada que no sea su release",
+        "make test + make lint pasan en local"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "PACK-001",
+      "title": "Empaquetado y presentacion: version unica, make build/release y README",
+      "description": "Mejorar presentacion y empacamiento (reunion 2026-08-13): hoy la version esta en pyproject.toml (0.0.55) y README, pero chat/app.py y chat/entrypoint.sh hardcodean 0.0.1. Fuente unica de version, build reproducible, release con el git_agent existente y README menos denso con seccion Probar online.",
+      "acceptance_criteria": [
+        "la version sale de una sola fuente (pyproject.toml) y chat/app.py + chat/entrypoint.sh la consumen sin hardcodear (o se documenta la divergencia y se alinea)",
+        "make build genera un wheel instalable (uv build) sin error",
+        "make release usa git_agent (changelog + tag + bump) sin commitear solo",
+        "el README queda con badges correctos, menos densidad y una seccion Probar online apuntando al home",
+        "make test + make lint pasan"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "LLM-015",
+      "title": "Guia de revision + script de control de calidad del dataset sintetico",
+      "description": "Reunion 2026-08-13: las alucinaciones del LLM fine-tuneado dependen de la baja calidad del zip de preguntas y respuestas (colab_dataset.zip). Se pide una guia de revision para el dataset sintetico y un script de control de calidad que detecte pares sospechosos, ademas de mejorar generar_dataset.py para no generarlos.",
+      "acceptance_criteria": [
+        "documentacion/llm/guia-revision-dataset.md con criterios por par: coherencia clase vs predict_ensemble, campos obligatorios, que cuenta como alucinacion",
+        "climasafeai/llm/revisar_dataset.py detecta: clase incoherente con el pipeline, inputs sin 'Tiempo en esa franja', perfiles imposibles, duplicados casi identicos y desequilibrio de clases",
+        "el script corre sobre data/llm/train.jsonl y val.jsonl y reporta hallazgos reales (JSON + resumen)",
+        "generar_dataset.py incorpora al menos 3 correcciones que el script detecta en el dataset actual",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "LLM-016",
+      "title": "Estudio: diferencias entre modelo base y modelo de instrucciones",
+      "description": "Reunion 2026-08-13: buscar la diferencia entre modelo base y modelo de instrucciones en el contexto del fine-tuning de Qwen3 de este proyecto (LLM-013/LLM-014). El objetivo es decidir sobre que variante conviene aplicar el proximo LoRA y entender el origen de las alucinaciones.",
+      "acceptance_criteria": [
+        "documentacion/llm/base-vs-instruct.md con las diferencias: chat template, thinking mode de Qwen3, LoRA sobre base vs instruct, cuando usar cada uno",
+        "comparacion real: misma conversacion con el modelo base, el instruct y qwen3:climasafe (o benchmark) con las salidas pegadas",
+        "conclusion practica para este proyecto (que base usar en el proximo fine-tuning y como mitiga las alucinaciones)",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "MCP-004",
+      "title": "Adaptar los servidores MCP a los nuevos estandares del protocolo",
+      "description": "Reunion 2026-08-13: el MCP se actualizo y tiene nuevos estandares. Revisar y adaptar prediction_mcp_tool.py y factors_mcp_tool.py al spec MCP vigente: tool annotations (title, readOnlyHint, destructiveHint), transporte streamable HTTP ademas de --stdio, y actualizar .mcp.json + documentacion. No toca MCP-002/MCP-003 (permisos), que son capas distintas.",
+      "acceptance_criteria": [
+        "auditoria escrita (en el detalle o en documentacion) de ambos servidores contra el spec MCP vigente",
+        "todas las tools de lectura llevan annotation readOnlyHint y title",
+        "las tools destructivas (borrar_rutina) llevan destructiveHint",
+        "el transporte streamable HTTP se verifica funcionando ademas de --stdio (test o comando de arranque)",
+        ".mcp.json y documentacion/componentes.md reflejan los cambios",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }

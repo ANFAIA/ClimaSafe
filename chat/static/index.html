@@ -324,22 +324,6 @@
         <button class="btn-mode" data-mode="chat" onclick="setModoPaso1('chat')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">💬 Chat</button>
       </div>
 
-      <div id="step1-chat" style="display:none">
-        <div class="card">
-          <div class="card-title">Agente conversacional</div>
-          <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
-            El asistente te hace las preguntas de una en una y construye tu perfil;
-            al terminar calcula tu riesgo con el mismo sistema de predicción del formulario.
-          </p>
-          <div id="chat-box" class="chat-box"></div>
-          <div id="chat-opciones" class="chat-opciones"></div>
-          <div class="chat-input-row">
-            <input type="text" id="chat-input" placeholder="Escribe tu respuesta..." autocomplete="off" onkeydown="if(event.key==='Enter')enviarChat()">
-            <button class="btn" onclick="enviarChat()" style="padding:8px 20px">Enviar</button>
-          </div>
-        </div>
-      </div>
-
       <div id="step1-individual-controls" class="form-row" style="gap:8px;margin-bottom:8px">
         <select id="perfil-select" style="flex:2;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
           <option value="">-- Cargar perfil --</option>
@@ -359,6 +343,25 @@
       <div class="btn-row">
         <button class="btn" onclick="irPaso2()">Siguiente</button>
       </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step" id="step-chat">
+    <div class="card">
+      <div class="card-title">Agente conversacional</div>
+      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
+        El asistente te hace las preguntas de una en una y construye tu perfil;
+        al terminar calcula tu riesgo con el mismo sistema de predicción del formulario.
+      </p>
+      <div id="chat-box" class="chat-box"></div>
+      <div id="chat-opciones" class="chat-opciones"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Escribe tu respuesta..." autocomplete="off" onkeydown="if(event.key==='Enter')enviarChat()">
+        <button class="btn" onclick="enviarChat()" style="padding:8px 20px">Enviar</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="volverDesdeChat()">Volver</button>
       </div>
     </div>
   </div>
@@ -877,6 +880,7 @@ function ponerMarcador(lat, lon, colorRiesgo) {
 
 function irPaso2() {
   document.getElementById('step1').classList.remove('visible');
+  document.getElementById('step-chat').classList.remove('visible');
   document.getElementById('step2').classList.add('visible');
   document.getElementById('dot1').classList.remove('active');
   document.getElementById('dot1').classList.add('done');
@@ -1209,6 +1213,13 @@ async function predecir() {
 }
 
 function setModoPaso1(modo) {
+  if (modo === 'chat') {
+    // WEB-007: el chat es una vista dedicada, sin mapa ni formulario delante.
+    document.getElementById('step1').classList.remove('visible');
+    document.getElementById('step-chat').classList.add('visible');
+    if (!chatAbierto) abrirChat();
+    return;
+  }
   currentMode = modo;
   document.querySelectorAll('#step1 .btn-mode[data-mode]').forEach(b => {
     b.classList.toggle('active', b.dataset.mode === modo);
@@ -1218,11 +1229,15 @@ function setModoPaso1(modo) {
   document.getElementById('step1-individual-controls').style.display = modo === 'individual' ? 'flex' : 'none';
   document.getElementById('step1-individual').style.display = modo === 'individual' ? 'block' : 'none';
   document.getElementById('step1-grupo').style.display = modo === 'grupo' ? 'block' : 'none';
-  document.getElementById('step1-chat').style.display = modo === 'chat' ? 'block' : 'none';
   const mapEl = document.getElementById('map');
   mapEl.classList.remove('mapa-mode');
   if (map) setTimeout(() => map.invalidateSize(), 100);
-  if (modo === 'chat' && !chatAbierto) abrirChat();
+}
+
+function volverDesdeChat() {
+  document.getElementById('step-chat').classList.remove('visible');
+  document.getElementById('step1').classList.add('visible');
+  setModoPaso1(currentMode || 'individual');
 }
 
 function setSubModoPaso2(modo) {
