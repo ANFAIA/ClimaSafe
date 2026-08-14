@@ -353,11 +353,12 @@ export async function predictEnsemble({ weather, provincia = "Madrid", perfil = 
 
   const estrato = edadAestrato(perfil.edad);
 
-  const [xgbResult, rfResult, lstmResult] = await Promise.all([
-    _predecirTabular(modelos.xgb, "calor", dfFeatures, provincia, estrato, artefactos),
-    _predecirTabular(modelos.rf, "frio", dfFeatures, provincia, estrato, artefactos),
-    _predecirLstm(modelos.lstm, dfHora, dfFeatures, provincia, estrato, artefactos),
-  ]);
+  // IMPORTANTE: las tres inferencias van SECUENCIALES, no en Promise.all.
+  // onnxruntime-web no soporta session.run() concurrente entre sesiones (comparten
+  // el runtime wasm) y lanza "Session already started". Bug 2026-08-14.
+  const xgbResult = await _predecirTabular(modelos.xgb, "calor", dfFeatures, provincia, estrato, artefactos);
+  const rfResult = await _predecirTabular(modelos.rf, "frio", dfFeatures, provincia, estrato, artefactos);
+  const lstmResult = await _predecirLstm(modelos.lstm, dfHora, dfFeatures, provincia, estrato, artefactos);
   const resultados = {
     XGBoost_calor: xgbResult,
     RandomForest_frio: rfResult,

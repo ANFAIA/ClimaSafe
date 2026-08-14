@@ -217,7 +217,7 @@
 
       <div class="card">
         <h3>Salida y ubicación</h3>
-        <div class="grid-3">
+        <div class="grid-2">
           <div class="field">
             <label for="provincia">Provincia</label>
             <select id="provincia"></select>
@@ -227,26 +227,6 @@
             <select id="fecha">
               <option value="hoy">Hoy</option>
               <option value="manana">Mañana</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="deporte">Deporte (opcional)</label>
-            <select id="deporte">
-              <option value="">— ninguno —</option>
-              <option value="pasear">Pasear</option>
-              <option value="caminar">Caminar</option>
-              <option value="senderismo">Senderismo</option>
-              <option value="ciclismo_suave">Ciclismo suave</option>
-              <option value="ciclismo">Ciclismo</option>
-              <option value="futbol">Fútbol</option>
-              <option value="trekking_mochila">Trekking con mochila</option>
-              <option value="correr_suave">Correr suave</option>
-              <option value="tenis_dobles">Tenis dobles</option>
-              <option value="tenis">Tenis</option>
-              <option value="btt">BTT</option>
-              <option value="futbol_competicion">Fútbol competición</option>
-              <option value="ciclismo_fuerte">Ciclismo fuerte</option>
-              <option value="correr">Correr</option>
             </select>
           </div>
         </div>
@@ -315,6 +295,53 @@
       </div>
 
       <div class="card">
+        <h3>¿Qué vas a hacer?</h3>
+        <div class="field">
+          <label for="tipo_actividad">Tipo de salida</label>
+          <select id="tipo_actividad">
+            <option value="reposo">Reposo / sin esfuerzo</option>
+            <option value="trabajo">Trabajo</option>
+            <option value="deporte" selected>Deporte / ejercicio</option>
+            <option value="competicion">Competición</option>
+          </select>
+        </div>
+        <div id="ocupacion-row" class="field oculto">
+          <label for="ocupacion">Ocupación en la salida</label>
+          <select id="ocupacion">
+            <option value="">— selecciona —</option>
+            <option value="oficina">Oficina / bajo techo</option>
+            <option value="reparto">Reparto / conducción</option>
+            <option value="mantenimiento">Mantenimiento exterior</option>
+            <option value="construccion">Construcción</option>
+            <option value="campo">Campo / agricultura</option>
+          </select>
+        </div>
+        <div id="deporte-row" class="field">
+          <label for="deporte">Deporte (fija la intensidad por su MET)</label>
+          <select id="deporte">
+            <option value="">— ninguno —</option>
+            <option value="pasear">Pasear (3,5 MET)</option>
+            <option value="caminar">Caminar (4 MET)</option>
+            <option value="senderismo">Senderismo (6 MET)</option>
+            <option value="tenis_dobles">Tenis dobles (6 MET)</option>
+            <option value="ciclismo_suave">Bici tranquila (6,8 MET)</option>
+            <option value="ciclismo">Bici (7 MET)</option>
+            <option value="futbol">Fútbol (7 MET)</option>
+            <option value="correr_suave">Trotar (7,5 MET)</option>
+            <option value="trekking_mochila">Trekking con mochila (7,8 MET)</option>
+            <option value="tenis">Tenis individual (8 MET)</option>
+            <option value="btt">BTT / montaña (8,5 MET)</option>
+            <option value="futbol_competicion">Fútbol competición (9 MET)</option>
+            <option value="ciclismo_fuerte">Bici fuerte (9 MET)</option>
+            <option value="correr">Correr (10,5 MET)</option>
+          </select>
+          <p class="meta" style="font-size:0.78rem;color:var(--muted);margin-top:4px">
+            Si eliges deporte, la intensidad se fija sola según su MET (puedes ajustarla en «Persona»).
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
         <h3>Salud y entorno</h3>
         <div class="field">
           <label>Comorbilidades</label>
@@ -341,39 +368,29 @@
             <label class="check"><input type="checkbox" value="vivienda_fria" class="social"> Vivienda fría</label>
           </div>
         </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="fototipo">Fototipo (Fitzpatrick)</label>
-            <select id="fototipo">
-              <option value="">— desconocido —</option>
-              <option value="1">I — siempre se quema</option>
-              <option value="2">II — se quema fácil</option>
-              <option value="3">III — se quema a veces</option>
-              <option value="4">IV — se quema poco</option>
-              <option value="5">V — rara vez se quema</option>
-              <option value="6">VI — nunca se quema</option>
-            </select>
-          </div>
-          <div class="field" style="display:flex;align-items:flex-end;">
-            <button id="predecir" class="hero-cta" disabled>Predecir riesgo →</button>
-          </div>
-        </div>
         <div class="field">
-          <label for="ocupacion">Ocupación en la salida (solo si vas a trabajar)</label>
-          <select id="ocupacion">
-            <option value="">— no es una salida laboral —</option>
-            <option value="oficina">Oficina / bajo techo</option>
-            <option value="reparto">Reparto / conducción</option>
-            <option value="mantenimiento">Mantenimiento exterior</option>
-            <option value="construccion">Construcción</option>
-            <option value="campo">Campo / agricultura</option>
+          <label for="fototipo">Fototipo (Fitzpatrick)</label>
+          <select id="fototipo">
+            <option value="">— desconocido —</option>
+            <option value="1">I — siempre se quema</option>
+            <option value="2">II — se quema fácil</option>
+            <option value="3">III — se quema a veces</option>
+            <option value="4">IV — se quema poco</option>
+            <option value="5">V — rara vez se quema</option>
+            <option value="6">VI — nunca se quema</option>
           </select>
         </div>
         <div class="checks" style="margin-top:4px;">
           <label class="check"><input type="checkbox" id="falta_sueno"> Dormí mal / menos de 6 h</label>
           <label class="check"><input type="checkbox" id="enfermedad_reciente"> Estoy resfriado / enfermo</label>
           <label class="check"><input type="checkbox" id="fiesta"> Fiesta / celebración (alcohol + baile)</label>
+          <label class="check"><input type="checkbox" id="alcohol_reciente"> Consumí alcohol recientemente</label>
         </div>
+      </div>
+
+      <div style="text-align:center;margin-top:8px;">
+        <button id="predecir" class="hero-cta" disabled>Predecir riesgo →</button>
+      </div>
       </div>
 
       <div id="estado" class="status oculto"></div>

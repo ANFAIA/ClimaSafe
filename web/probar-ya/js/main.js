@@ -10,6 +10,7 @@ import { getOrt } from "./ort-runtime.js";
 import { fetchWeatherData, provinciaMasCercana, getProvinceCoords } from "./weather.js";
 import { predictEnsemble } from "./modelos.js";
 import { generarRecomendaciones } from "./recomendaciones.js";
+import { nivelActividadDeDeporte } from "./personalizacion.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -28,6 +29,8 @@ async function init() {
   initMapa();
   rellenarProvincias();
   rellenarHoras();
+  $("tipo_actividad").addEventListener("change", onCambiarTipoActividad);
+  onCambiarTipoActividad();
   try {
     const ort = await getOrt();
     // Los .wasm/.mjs de onnxruntime-web viven en vendor/, junto a ort.min.js.
@@ -149,7 +152,9 @@ function perfilDesdeFormulario() {
   const checks = (cls) =>
     [...document.querySelectorAll(`.${cls}:checked`)].map((c) => c.value);
   const deporte = $("deporte").value || null;
-  const nivel = $("nivel_actividad").value;
+  // El MET del deporte fija la intensidad (igual que la web: _aplicar_deporte_a_nivel).
+  const nivel = deporte ? (nivelActividadDeDeporte(deporte) || $("nivel_actividad").value)
+                        : $("nivel_actividad").value;
   return {
     edad: Number($("edad").value) || 45,
     sexo: $("sexo").value,
@@ -166,9 +171,16 @@ function perfilDesdeFormulario() {
     fototipo: $("fototipo").value || null,
     falta_sueno: $("falta_sueno").checked,
     enfermedad_reciente: $("enfermedad_reciente").checked,
-    fiesta: $("fiesta").checked,
+    fiesta: $("fiesta").checked || $("alcohol_reciente").checked,
     ocupacion: $("ocupacion").value || null,
   };
+}
+
+// Tipo de salida → muestra deporte (deporte/competición) u ocupación (trabajo).
+function onCambiarTipoActividad() {
+  const tipo = $("tipo_actividad").value;
+  $("ocupacion-row").classList.toggle("oculto", tipo !== "trabajo");
+  $("deporte-row").classList.toggle("oculto", !(tipo === "deporte" || tipo === "competicion"));
 }
 
 function ubicacionDesdeFormulario() {
