@@ -1,0 +1,43 @@
+{
+  "daily_feature_cols": [
+    "t2m_c",
+    "rh",
+    "wind_speed_kmh",
+    "sp",
+    "heat_index_c",
+    "wbgt_c",
+    "wind_chill_c",
+    "heat_index_mean",
+    "heat_index_std",
+    "heat_index_min",
+    "horas_sobre_umbral",
+    "wind_chill_mean",
+    "wind_chill_std",
+    "wind_chill_max",
+    "horas_bajo_umbral",
+    "heat_index_c_lag1",
+    "heat_index_c_roll3",
+    "heat_index_c_roll7",
+    "dias_consec_sobre_umbral",
+    "grados_dia_calor_roll7",
+    "grados_dia_calor_roll14",
+    "wind_chill_mean_roll3",
+    "wind_chill_mean_roll7",
+    "wind_chill_mean_roll14",
+    "grados_dia_frio_roll7",
+    "grados_dia_frio_roll14",
+    "dias_consec_bajo_umbral",
+    "t2m_min_noche_lag1",
+    "t2m_min_noche_roll7",
+    "dias_consec_wc_severo",
+    "horas_wc_severo_sum14"
+  ],
+  "feature_cols_seq": [
+    "t2m_c",
+    "rh",
+    "wind_speed_kmh",
+    "heat_index_c",
+    "wind_chill_c"
+  ],
+  "seq_len": 24
+}

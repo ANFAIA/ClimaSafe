@@ -1,0 +1,282 @@
+{
+  "N_FEATURES_PROVINCIA": 4,
+  "demographic_features": [
+    "pct_mayores_65",
+    "pct_mayores_80",
+    "pct_mujeres",
+    "log_poblacion_total"
+  ],
+  "log_poblacion_aplicado_por_el_cliente": true,
+  "provincias": {
+    "Albacete": {
+      "pct_mayores_65": 21.8,
+      "pct_mayores_80": 6.2,
+      "pct_mujeres": 49.8,
+      "poblacion_total": 385000
+    },
+    "Almería": {
+      "pct_mayores_65": 16.5,
+      "pct_mayores_80": 4.3,
+      "pct_mujeres": 48.9,
+      "poblacion_total": 753000
+    },
+    "Araba/Álava": {
+      "pct_mayores_65": 20.5,
+      "pct_mayores_80": 6.0,
+      "pct_mujeres": 50.3,
+      "poblacion_total": 335000
+    },
+    "Asturias": {
+      "pct_mayores_65": 26.4,
+      "pct_mayores_80": 8.2,
+      "pct_mujeres": 52.3,
+      "poblacion_total": 1011000
+    },
+    "Badajoz": {
+      "pct_mayores_65": 19.6,
+      "pct_mayores_80": 5.5,
+      "pct_mujeres": 49.9,
+      "poblacion_total": 672000
+    },
+    "Barcelona": {
+      "pct_mayores_65": 18.9,
+      "pct_mayores_80": 5.7,
+      "pct_mujeres": 51.0,
+      "poblacion_total": 5727000
+    },
+    "Bizkaia": {
+      "pct_mayores_65": 22.4,
+      "pct_mayores_80": 6.8,
+      "pct_mujeres": 51.8,
+      "poblacion_total": 1148000
+    },
+    "Burgos": {
+      "pct_mayores_65": 23.0,
+      "pct_mayores_80": 6.8,
+      "pct_mujeres": 50.2,
+      "poblacion_total": 356000
+    },
+    "Cantabria": {
+      "pct_mayores_65": 22.2,
+      "pct_mayores_80": 6.6,
+      "pct_mujeres": 51.0,
+      "poblacion_total": 585000
+    },
+    "Ceuta": {
+      "pct_mayores_65": 15.0,
+      "pct_mayores_80": 3.5,
+      "pct_mujeres": 49.5,
+      "poblacion_total": 83000
+    },
+    "Ciudad Real": {
+      "pct_mayores_65": 20.5,
+      "pct_mayores_80": 5.8,
+      "pct_mujeres": 49.5,
+      "poblacion_total": 492000
+    },
+    "Cuenca": {
+      "pct_mayores_65": 24.5,
+      "pct_mayores_80": 7.2,
+      "pct_mujeres": 49.0,
+      "poblacion_total": 195000
+    },
+    "Cáceres": {
+      "pct_mayores_65": 23.0,
+      "pct_mayores_80": 6.5,
+      "pct_mujeres": 49.5,
+      "poblacion_total": 389000
+    },
+    "Cádiz": {
+      "pct_mayores_65": 17.8,
+      "pct_mayores_80": 4.8,
+      "pct_mujeres": 50.1,
+      "poblacion_total": 1245000
+    },
+    "Córdoba": {
+      "pct_mayores_65": 19.8,
+      "pct_mayores_80": 5.6,
+      "pct_mujeres": 50.2,
+      "poblacion_total": 776000
+    },
+    "Gipuzkoa": {
+      "pct_mayores_65": 22.0,
+      "pct_mayores_80": 6.5,
+      "pct_mujeres": 51.0,
+      "poblacion_total": 726000
+    },
+    "Girona": {
+      "pct_mayores_65": 18.5,
+      "pct_mayores_80": 5.3,
+      "pct_mujeres": 49.9,
+      "poblacion_total": 797000
+    },
+    "Granada": {
+      "pct_mayores_65": 18.8,
+      "pct_mayores_80": 5.3,
+      "pct_mujeres": 50.5,
+      "poblacion_total": 922000
+    },
+    "Guadalajara": {
+      "pct_mayores_65": 16.2,
+      "pct_mayores_80": 4.3,
+      "pct_mujeres": 48.9,
+      "poblacion_total": 268000
+    },
+    "Huelva": {
+      "pct_mayores_65": 17.5,
+      "pct_mayores_80": 4.6,
+      "pct_mujeres": 49.6,
+      "poblacion_total": 526000
+    },
+    "Huesca": {
+      "pct_mayores_65": 21.8,
+      "pct_mayores_80": 6.4,
+      "pct_mujeres": 49.0,
+      "poblacion_total": 225000
+    },
+    "Jaén": {
+      "pct_mayores_65": 20.0,
+      "pct_mayores_80": 5.6,
+      "pct_mujeres": 49.6,
+      "poblacion_total": 627000
+    },
+    "León": {
+      "pct_mayores_65": 26.0,
+      "pct_mayores_80": 8.0,
+      "pct_mujeres": 51.5,
+      "poblacion_total": 452000
+    },
+    "Lleida": {
+      "pct_mayores_65": 19.5,
+      "pct_mayores_80": 5.6,
+      "pct_mujeres": 49.0,
+      "poblacion_total": 442000
+    },
+    "Lugo": {
+      "pct_mayores_65": 28.0,
+      "pct_mayores_80": 8.8,
+      "pct_mujeres": 52.0,
+      "poblacion_total": 325000
+    },
+    "Madrid": {
+      "pct_mayores_65": 17.6,
+      "pct_mayores_80": 5.5,
+      "pct_mujeres": 51.7,
+      "poblacion_total": 6751000
+    },
+    "Melilla": {
+      "pct_mayores_65": 12.5,
+      "pct_mayores_80": 2.8,
+      "pct_mujeres": 49.0,
+      "poblacion_total": 86000
+    },
+    "Murcia": {
+      "pct_mayores_65": 17.5,
+      "pct_mayores_80": 4.8,
+      "pct_mujeres": 49.7,
+      "poblacion_total": 1531000
+    },
+    "Málaga": {
+      "pct_mayores_65": 18.8,
+      "pct_mayores_80": 5.4,
+      "pct_mujeres": 50.5,
+      "poblacion_total": 1695000
+    },
+    "Navarra": {
+      "pct_mayores_65": 20.5,
+      "pct_mayores_80": 6.2,
+      "pct_mujeres": 50.2,
+      "poblacion_total": 671000
+    },
+    "Ourense": {
+      "pct_mayores_65": 29.0,
+      "pct_mayores_80": 9.5,
+      "pct_mujeres": 52.5,
+      "poblacion_total": 306000
+    },
+    "Palencia": {
+      "pct_mayores_65": 25.0,
+      "pct_mayores_80": 7.5,
+      "pct_mujeres": 50.5,
+      "poblacion_total": 159000
+    },
+    "Pontevedra": {
+      "pct_mayores_65": 23.5,
+      "pct_mayores_80": 7.2,
+      "pct_mujeres": 51.6,
+      "poblacion_total": 949000
+    },
+    "Salamanca": {
+      "pct_mayores_65": 24.5,
+      "pct_mayores_80": 7.5,
+      "pct_mujeres": 51.0,
+      "poblacion_total": 329000
+    },
+    "Santa Cruz de Tenerife": {
+      "pct_mayores_65": 16.8,
+      "pct_mayores_80": 4.5,
+      "pct_mujeres": 49.8,
+      "poblacion_total": 1044000
+    },
+    "Segovia": {
+      "pct_mayores_65": 22.5,
+      "pct_mayores_80": 6.6,
+      "pct_mujeres": 49.8,
+      "poblacion_total": 156000
+    },
+    "Sevilla": {
+      "pct_mayores_65": 17.5,
+      "pct_mayores_80": 4.9,
+      "pct_mujeres": 50.6,
+      "poblacion_total": 1948000
+    },
+    "Soria": {
+      "pct_mayores_65": 26.5,
+      "pct_mayores_80": 8.2,
+      "pct_mujeres": 49.5,
+      "poblacion_total": 89000
+    },
+    "Tarragona": {
+      "pct_mayores_65": 19.0,
+      "pct_mayores_80": 5.5,
+      "pct_mujeres": 49.4,
+      "poblacion_total": 839000
+    },
+    "Teruel": {
+      "pct_mayores_65": 25.0,
+      "pct_mayores_80": 7.5,
+      "pct_mujeres": 48.5,
+      "poblacion_total": 135000
+    },
+    "Toledo": {
+      "pct_mayores_65": 18.5,
+      "pct_mayores_80": 5.1,
+      "pct_mujeres": 49.3,
+      "poblacion_total": 706000
+    },
+    "Valladolid": {
+      "pct_mayores_65": 22.5,
+      "pct_mayores_80": 6.8,
+      "pct_mujeres": 51.0,
+      "poblacion_total": 520000
+    },
+    "Zamora": {
+      "pct_mayores_65": 28.5,
+      "pct_mayores_80": 9.0,
+      "pct_mujeres": 51.5,
+      "poblacion_total": 168000
+    },
+    "Zaragoza": {
+      "pct_mayores_65": 21.0,
+      "pct_mayores_80": 6.3,
+      "pct_mujeres": 50.5,
+      "poblacion_total": 964000
+    },
+    "Ávila": {
+      "pct_mayores_65": 25.0,
+      "pct_mayores_80": 7.5,
+      "pct_mujeres": 49.8,
+      "poblacion_total": 158000
+    }
+  }
+}

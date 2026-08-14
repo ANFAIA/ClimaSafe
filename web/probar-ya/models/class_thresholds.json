@@ -1,0 +1,23 @@
+{
+  "CLASS_THRESHOLDS_LSTM": {
+    "calor": {
+      "t1": 0.5,
+      "t2": 0.1
+    },
+    "frio": {
+      "t1": 0.4,
+      "t2": 0.35
+    }
+  },
+  "CLASS_THRESHOLDS_RECOMENDADOS": {
+    "calor": {
+      "t1": 0.25,
+      "t2": 0.1
+    },
+    "frio": {
+      "t1": 0.21,
+      "t2": 0.2
+    }
+  },
+  "PERS_THRESHOLD_PELIGRO": 0.55
+}

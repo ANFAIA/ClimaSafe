@@ -1,0 +1,9 @@
+{
+  "name": "climasafe-probar-ya-paridad",
+  "private": true,
+  "type": "module",
+  "description": "Test de paridad node: pipeline JS de web/probar-ya vs predict_ensemble Python",
+  "dependencies": {
+    "onnxruntime-web": "1.27.0"
+  }
+}

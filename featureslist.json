@@ -154,10 +154,11 @@
         "Misma interfaz MessageAdapter que MSG-001",
         "Tests de concurrencia y make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-13",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-14"
     },
     {
       "id": "AGENT-001",
@@ -169,8 +170,10 @@
         "README del skill documenta uso basico y requisitos",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-14",
+      "review_rounds": 0
     },
     {
       "id": "RAG-001",
@@ -1857,10 +1860,14 @@
         "el README de la carpeta explica como regenerar los ONNX",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "WEB-011"
-      ]
+      ],
+      "started": "2026-08-14",
+      "owner": "demo",
+      "review_rounds": 0,
+      "closed": "2026-08-14"
     },
     {
       "id": "DOC-005",

@@ -1,0 +1,220 @@
+{
+  "calor": {
+    "comorbilidades": {
+      "cardiovascular": {
+        "calidad": "alta",
+        "coef": 1.4,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "cardiopatía/HTA"
+      },
+      "diabetes": {
+        "calidad": "media",
+        "coef": 1.2,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "diabetes"
+      },
+      "mental": {
+        "calidad": "alta",
+        "coef": 1.8,
+        "doi": "10.1038/s41598-025-...",
+        "implementado": true,
+        "nombre": "salud mental"
+      },
+      "respiratoria": {
+        "calidad": "alta",
+        "coef": 1.3,
+        "doi": "10.1016/j.ebiom.2016.02.034",
+        "implementado": true,
+        "nombre": "enfermedad respiratoria"
+      }
+    },
+    "farmacos": {
+      "antipsicoticos": {
+        "calidad": "alta",
+        "coef": 1.8,
+        "doi": "10.1038/s41598-025-...",
+        "implementado": true,
+        "nombre": "antipsicóticos"
+      },
+      "diureticos_asa": {
+        "calidad": "media",
+        "coef": 1.3,
+        "doi": "10.1371/journal.pone.0233617",
+        "implementado": true,
+        "nombre": "diuréticos de asa"
+      }
+    },
+    "fisiologico": {
+      "enfermedad_reciente": {
+        "calidad": "alta",
+        "coef": 1.3,
+        "doi": "10.1113/ep088458",
+        "implementado": true,
+        "nombre": "enfermedad reciente / convalecencia"
+      },
+      "falta_sueno": {
+        "calidad": "alta",
+        "coef": 1.2,
+        "doi": "10.1113/ep088458",
+        "implementado": true,
+        "nombre": "falta de sueño / mala noche"
+      },
+      "grasa_alta_esfuerzo": {
+        "calidad": "alta",
+        "coef": 1.2,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "obesidad / grasa alta (en esfuerzo)"
+      },
+      "grasa_baja_protector": {
+        "calidad": "alta",
+        "coef": 0.9,
+        "doi": null,
+        "implementado": true,
+        "nombre": "grasa corporal baja (protector en calor)"
+      },
+      "no_aclimatado": {
+        "calidad": "alta",
+        "coef": 1.6,
+        "doi": null,
+        "implementado": true,
+        "nombre": "no aclimatado"
+      },
+      "sexo_mujer": {
+        "calidad": "alta",
+        "coef": 1.1,
+        "doi": null,
+        "implementado": true,
+        "nombre": "sexo mujer"
+      }
+    },
+    "ocupacional": {
+      "esfuerzo_termico_laboral": {
+        "calidad": "alta",
+        "coef": 2.5,
+        "doi": "10.1016/s2542-5196(18)30237-7",
+        "implementado": true,
+        "nombre": "esfuerzo térmico laboral (golpe de calor)"
+      },
+      "estres_termico_laboral": {
+        "calidad": "media",
+        "coef": 2.0,
+        "doi": "10.2486/indhealth.2012-0138",
+        "implementado": true,
+        "nombre": "estrés térmico laboral"
+      }
+    },
+    "situacional": {
+      "alcohol": {
+        "calidad": "alta",
+        "coef": 1.8,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "consumo de alcohol (reciente)"
+      },
+      "encamado": {
+        "calidad": "alta",
+        "coef": 2.0,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "encamado"
+      },
+      "no_sale": {
+        "calidad": "alta",
+        "coef": 2.0,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "no sale de casa"
+      },
+      "sin_aire_acondicionado": {
+        "calidad": "alta",
+        "coef": 2.5,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "sin aire acondicionado en casa"
+      },
+      "vive_solo": {
+        "calidad": "alta",
+        "coef": 1.5,
+        "doi": "10.1056/NEJM199607113350203",
+        "implementado": true,
+        "nombre": "vive solo"
+      }
+    }
+  },
+  "cap_factores": 3.0,
+  "frio": {
+    "comorbilidades": {
+      "cardiovascular": {
+        "calidad": "alta",
+        "coef": 1.5,
+        "doi": "10.3389/fcvm.2023.1084611",
+        "implementado": true,
+        "nombre": "cardiopatía/HTA"
+      },
+      "respiratoria": {
+        "calidad": "alta",
+        "coef": 1.4,
+        "doi": null,
+        "implementado": true,
+        "nombre": "enf. respiratoria"
+      }
+    },
+    "fisiologico": {
+      "grasa_alta_protector": {
+        "calidad": "alta",
+        "coef": 0.9,
+        "doi": null,
+        "implementado": true,
+        "nombre": "grasa corporal alta (protector en frío)"
+      },
+      "grasa_baja": {
+        "calidad": "alta",
+        "coef": 1.3,
+        "doi": null,
+        "implementado": true,
+        "nombre": "grasa corporal baja / fragilidad"
+      },
+      "sexo_mujer": {
+        "calidad": "alta",
+        "coef": 1.05,
+        "doi": null,
+        "implementado": true,
+        "nombre": "sexo mujer"
+      }
+    },
+    "situacional": {
+      "encamado": {
+        "calidad": "alta",
+        "coef": 1.5,
+        "doi": null,
+        "implementado": true,
+        "nombre": "encamado"
+      },
+      "no_sale": {
+        "calidad": "alta",
+        "coef": 1.3,
+        "doi": null,
+        "implementado": true,
+        "nombre": "no sale de casa"
+      },
+      "vive_solo": {
+        "calidad": "alta",
+        "coef": 1.3,
+        "doi": null,
+        "implementado": true,
+        "nombre": "vive solo"
+      },
+      "vivienda_fria": {
+        "calidad": "alta",
+        "coef": 1.5,
+        "doi": "10.1136/jech.57.10.784",
+        "implementado": true,
+        "nombre": "vivienda fría"
+      }
+    }
+  },
+  "version": 2
+}

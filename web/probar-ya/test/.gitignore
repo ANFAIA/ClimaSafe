@@ -1,0 +1,3 @@
+# onnxruntime-web se instala con `npm install` desde package.json/lock.
+# No se versiona (141 MB): el test lo instala si falta.
+node_modules/
