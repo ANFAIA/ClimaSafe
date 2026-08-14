@@ -2,28 +2,16 @@
 # Construye:  make docs   →  site/
 # Se publica en GitHub Pages bajo subpath: https://cacelass.github.io/climasafe/documentacion/
 #
+# El contenido curado vive en docs_site/ (solo las 6 páginas del sitio); el
+# resto de documentacion/ (notas internas, decisiones, actas) NO se publica.
 # Estética: la MISMA que el resto de cacelass.github.io (fondo oscuro, fuentes
 # Sora + JetBrains Mono, acento azul). El footer "Made with Material for MkDocs"
 # se elimina en overrides/main.html y se sustituye por el footer del sitio.
-# El contenido es MÍNIMO a propósito: solo las secciones curadas.
 
 site_name: ClimaSafe
 site_url: https://cacelass.github.io/climasafe/documentacion/
-docs_dir: documentacion
+docs_dir: docs_site
 use_directory_urls: true
-
-# Solo se construyen las páginas curadas; el resto de documentacion/ (notas
-# internas, decisiones, actas, papers sueltos) queda excluido del sitio.
-exclude_docs: |
-  *
-  **/*
-  !index.md
-  !modelos-pesos.md
-  !riesgo-personalizacion.md
-  !arquitectura.md
-  !papers.md
-  !llm.md
-  !assets/extra.css
 
 theme:
   name: material

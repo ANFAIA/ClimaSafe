@@ -50,13 +50,13 @@ rm -rf "$DOC_DEST"
 mkdir -p "$(dirname "$DOC_DEST")"
 cp -R "$ROOT/site" "$DOC_DEST"
 
-echo "▶ Copiando fuente de docs (mkdocs.yml + documentacion/ + overrides/) → climasafe/documentacion-src/"
+echo "▶ Copiando fuente de docs (mkdocs.yml + docs_site/ + overrides/) → climasafe/documentacion-src/"
 # La fuente vive también en el pages personal: si el repo ANFAIA desaparece, la
 # documentación se puede regenerar desde aquí (ver climasafe/documentacion-src/build.sh).
 rm -rf "$DOC_SRC_DEST"
 mkdir -p "$DOC_SRC_DEST"
 cp "$ROOT/mkdocs.yml" "$DOC_SRC_DEST/"
-cp -R "$ROOT/documentacion" "$DOC_SRC_DEST/documentacion"
+cp -R "$ROOT/docs_site" "$DOC_SRC_DEST/docs_site"
 cp -R "$ROOT/overrides" "$DOC_SRC_DEST/overrides"
 cat > "$DOC_SRC_DEST/build.sh" <<'EOF'
 #!/usr/bin/env bash

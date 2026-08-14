@@ -47,11 +47,6 @@ make format       # ruff format
 
 # MLflow
 make mlflow       # UI en http://localhost:5000
-
-# Docker
-make docker-run     # construir imagen + arrancar contenedor
-make docker-update  # reconstruir con los últimos cambios
-make docker-down    # parar y eliminar contenedores
 ```
 
 ## Comandos del chat web
