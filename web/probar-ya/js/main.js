@@ -14,6 +14,26 @@ import { nivelActividadDeDeporte } from "./personalizacion.js";
 
 const $ = (id) => document.getElementById(id);
 
+// Aviso médico-legal: ventana emergente al cargar. Se recuerda la aceptación
+// en localStorage (mismo navegador), pero el disclaimer queda visible de forma
+// permanente en los resultados.
+const AVISO_KEY = "climasafe-aviso-medico-aceptado";
+function initAvisoMedico() {
+  const overlay = $("aviso-medico");
+  const aceptar = $("aviso-aceptar");
+  if (!overlay || !aceptar) return;
+  const mostrar = () => overlay.classList.add("abierto");
+  aceptar.addEventListener("click", () => {
+    try { localStorage.setItem(AVISO_KEY, "1"); } catch { /* sin almacenamiento */ }
+    overlay.classList.remove("abierto");
+  });
+  try {
+    if (!localStorage.getItem(AVISO_KEY)) mostrar();
+  } catch {
+    mostrar(); // sin acceso a localStorage → mostrar siempre
+  }
+}
+
 const CLASE_LABEL = { 0: "SEGURO", 1: "PRECAUCIÓN", 2: "PELIGRO" };
 const CLASE_COLOR = { 0: "clase-0", 1: "clase-1", 2: "clase-2" };
 
@@ -26,6 +46,7 @@ let escenarios = null;
 // Carga inicial
 // ─────────────────────────────────────────────────────────────────────────────
 async function init() {
+  initAvisoMedico();
   initMapa();
   rellenarProvincias();
   rellenarHoras();

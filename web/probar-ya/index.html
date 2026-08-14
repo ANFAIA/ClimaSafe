@@ -175,6 +175,26 @@
     .footer-id strong { color: var(--text); font-weight: 500; }
     .footer-id span { color: var(--muted); }
     .oculto { display: none; }
+    /* Aviso médico-legal */
+    .aviso-overlay {
+      display: none; position: fixed; inset: 0; z-index: 2000;
+      background: rgba(6, 9, 16, 0.78); backdrop-filter: blur(4px);
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .aviso-overlay.abierto { display: flex; }
+    .aviso-modal {
+      background: var(--surface); border: 1px solid var(--border-hi);
+      border-radius: var(--r2); max-width: 560px; width: 100%;
+      padding: 26px; box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+    }
+    .aviso-modal h3 { font-family: var(--sans); font-weight: 600; margin-bottom: 12px; color: var(--amber); }
+    .aviso-modal p, .aviso-modal li { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
+    .aviso-modal ul { margin: 10px 0 16px 18px; }
+    .aviso-acciones { text-align: right; }
+    .aviso-disclaimer {
+      font-size: 0.72rem; color: var(--dim); line-height: 1.5;
+      border-top: 1px solid var(--border); margin-top: 18px; padding-top: 10px;
+    }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -463,6 +483,11 @@
         <div style="text-align:center;margin-top:8px;">
           <a class="hero-cta" href="../documentacion/riesgo-personalizacion/" target="_blank" rel="noopener">Entender mejor el resultado →</a>
         </div>
+
+        <p class="aviso-disclaimer">
+          ClimaSafe no es un dispositivo médico y no sustituye el criterio clínico. Si presentas síntomas,
+          contacta con emergencias (112) o con tu médico.
+        </p>
       </div>
     </div>
   </section>
@@ -476,6 +501,23 @@
       </div>
     </div>
   </footer>
+
+  <!-- Aviso médico-legal: ventana emergente al cargar (persistencia opcional
+       en localStorage; el disclaimer también queda visible en resultados). -->
+  <div id="aviso-medico" class="aviso-overlay" role="dialog" aria-modal="true" aria-label="Aviso médico-legal">
+    <div class="aviso-modal">
+      <h3>Aviso médico-legal</h3>
+      <p><strong>ClimaSafe no es un dispositivo médico</strong> ni sustituye el criterio clínico de un profesional sanitario.</p>
+      <ul>
+        <li>La estimación de riesgo se basa en modelos estadísticos e índices de la literatura epidemiológica; puede contener errores y no debe usarse para diagnosticar, decidir tratamientos ni planificar actividades de riesgo.</li>
+        <li>Es una <strong>demo educativa y de investigación</strong>: en la UE, los sistemas de salud pueden clasificarse como de alto riesgo según el Reglamento de Inteligencia Artificial.</li>
+        <li>Si presentas síntomas (mareo, confusión, dificultad para respirar, dolor en el pecho…), <strong>contacta con emergencias (112) o con tu médico</strong>.</li>
+      </ul>
+      <div class="aviso-acciones">
+        <button id="aviso-aceptar" class="hero-cta">Entendido</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Cache-busting: GitHub Pages cachea max-age=600; el ?v= obliga a cargar
        los módulos nuevos tras cada cambio (sube el número al tocar js/). -->

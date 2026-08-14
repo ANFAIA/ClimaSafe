@@ -271,10 +271,47 @@
     .final-result .class { font-size: 1.6rem; }
     #map { height: 180px; }
   }
+
+  /* Aviso médico-legal */
+  .aviso-overlay {
+    display: none; position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.55); align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .aviso-overlay.open { display: flex; }
+  .aviso-modal {
+    background: var(--card); border-radius: var(--radius); max-width: 560px; width: 100%;
+    padding: 26px; box-shadow: 0 12px 48px rgba(0,0,0,0.3); color: var(--text);
+  }
+  .aviso-modal h2 { margin-bottom: 12px; font-size: 1.25rem; color: var(--precaucion); }
+  .aviso-modal p, .aviso-modal li { font-size: 0.9rem; color: var(--text-light); line-height: 1.6; }
+  .aviso-modal ul { margin: 10px 0 16px 18px; }
+  .aviso-disclaimer {
+    font-size: 0.75rem; color: var(--text-light); line-height: 1.5;
+    border-top: 1px solid var(--border); margin-top: 18px; padding-top: 10px;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
 <div class="container">
+
+  <!-- Aviso médico-legal: ventana emergente al cargar (aceptación recordada en
+       localStorage; el disclaimer también queda visible en los resultados). -->
+  <div id="aviso-medico" class="aviso-overlay" role="dialog" aria-modal="true" aria-label="Aviso médico-legal">
+    <div class="aviso-modal">
+      <h2>Aviso médico-legal</h2>
+      <p><strong>ClimaSafe no es un dispositivo médico</strong> ni sustituye el criterio clínico de un profesional sanitario.</p>
+      <ul>
+        <li>La estimación de riesgo se basa en modelos estadísticos e índices de la literatura epidemiológica; puede contener errores y no debe usarse para diagnosticar, decidir tratamientos ni planificar actividades de riesgo.</li>
+        <li>Es una <strong>demo educativa y de investigación</strong>: en la UE, los sistemas de salud pueden clasificarse como de alto riesgo según el Reglamento de Inteligencia Artificial.</li>
+        <li>Si presentas síntomas (mareo, confusión, dificultad para respirar, dolor en el pecho…), <strong>contacta con emergencias (112) o con tu médico</strong>.</li>
+      </ul>
+      <div style="text-align:right">
+        <button class="btn" onclick="aceptarAvisoMedico()">Entendido</button>
+      </div>
+    </div>
+  </div>
 
   <header>
     <h1>ClimaSafeAI</h1>
@@ -804,6 +841,11 @@
       <a class="btn btn-outline" href="https://cacelass.github.io/climasafe/documentacion/riesgo-personalizacion/" target="_blank" rel="noopener"
          style="text-decoration:none;display:inline-flex;align-items:center">Entender mejor el resultado →</a>
     </div>
+
+    <p class="aviso-disclaimer">
+      ClimaSafe no es un dispositivo médico y no sustituye el criterio clínico. Si presentas síntomas,
+      contacta con emergencias (112) o con tu médico.
+    </p>
 
   </div>
 </div>
@@ -3592,6 +3634,22 @@ document.addEventListener('DOMContentLoaded', function() {
     refrescarListaPerfiles();
   });
 });
+
+// ── Aviso médico-legal ──────────────────────────────────────────────
+(function initAvisoMedico() {
+  const overlay = document.getElementById('aviso-medico');
+  if (!overlay) return;
+  try {
+    if (!localStorage.getItem('climasafe-aviso-medico-aceptado')) {
+      overlay.classList.add('open');
+    }
+  } catch { overlay.classList.add('open'); }
+})();
+function aceptarAvisoMedico() {
+  const overlay = document.getElementById('aviso-medico');
+  if (overlay) overlay.classList.remove('open');
+  try { localStorage.setItem('climasafe-aviso-medico-aceptado', '1'); } catch { /* sin almacenamiento */ }
+}
 </script>
 </body>
 </html>

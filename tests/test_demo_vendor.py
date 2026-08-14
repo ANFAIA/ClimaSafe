@@ -52,3 +52,13 @@ def test_demo_nav_y_volver_apuntan_fuera_de_probar_ya():
     assert 'href="../../projects/climasafe.html"' in html, "falta el botón Volver al proyecto"
     assert 'href="../../index.html"' in html, "el '← index' no apunta al home real"
     assert "cómo regenerar / desplegar" not in html, "el botón sin sentido sigue en el hero"
+
+
+def test_demo_tiene_aviso_medico_legal():
+    """La demo muestra un aviso médico-legal emergente y un disclaimer permanente."""
+    html = (_ROOT / "web" / "probar-ya" / "index.html").read_text(encoding="utf-8")
+    assert 'id="aviso-medico"' in html, "falta la ventana de aviso médico-legal"
+    assert "no es un dispositivo médico" in html, "falta el texto del aviso"
+    assert "contacta con emergencias" in html, "falta la referencia a emergencias"
+    js = (_ROOT / "web" / "probar-ya" / "js" / "main.js").read_text(encoding="utf-8")
+    assert "initAvisoMedico" in js, "falta la lógica del aviso en main.js"
