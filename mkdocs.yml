@@ -17,7 +17,7 @@ use_directory_urls: true
 exclude_docs: |
   *
   **/*
-  !inicio.md
+  !index.md
   !modelos-pesos.md
   !arquitectura.md
   !papers.md
@@ -48,7 +48,7 @@ theme:
         name: Cambiar a modo claro
 
 nav:
-  - Inicio: inicio.md
+  - Inicio: index.md
   - Modelos y pesos: modelos-pesos.md
   - Arquitectura: arquitectura.md
   - Papers: papers.md

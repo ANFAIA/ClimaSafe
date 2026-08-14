@@ -39,6 +39,14 @@ ONNX_DIR = _REAL_MODELS_DIR / "onnx"
 
 TOL = 1e-3
 
+# En CI no existen los modelos entrenados (models/*.joblib está gitignored):
+# la paridad ONNX vs joblib solo se puede verificar donde hay modelos reales
+# (local). En CI estos tests se saltan; el resto de la suite sigue validando.
+pytestmark = pytest.mark.skipif(
+    not (_REAL_MODELS_DIR / "XGBoost_calor.joblib").exists(),
+    reason="modelos entrenados no presentes (CI sin models/*.joblib): la paridad ONNX se verifica en local",
+)
+
 _ONNX_ESPERADOS = [
     "XGBoost_calor.onnx",
     "RandomForest_frio.onnx",

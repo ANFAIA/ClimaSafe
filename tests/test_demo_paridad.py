@@ -29,8 +29,8 @@ TEST_DIR = WEB / "test"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
-    NODE is None,
-    reason="node no está en PATH: el test de paridad JS necesita node >= 18",
+    NODE is None or not (ROOT / "models" / "XGBoost_calor.joblib").exists(),
+    reason="node o modelos entrenados no presentes (CI sin models/*.joblib): la paridad JS se verifica en local",
 )
 
 TOLERANCIA_PUNTOS = 0.01  # ±1 punto

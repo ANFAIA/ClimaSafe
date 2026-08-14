@@ -27,6 +27,18 @@ jobs:
       - name: Sync dependencies (all extras + dev group)
         run: uv sync --all-extras
 
+      - name: Seed DB (factores desde JSON a SQLite)
+        # En CI no existe data/climasafe.db (gitignored): los tests de
+        # personalización/MCP leen los factores desde la BD. Se crea la BD y
+        # se siembran los factores desde data/factores_riesgo.json.
+        run: |
+          uv run --no-sync python -c "
+          from climasafeai.db.manager import DBManager
+          db = DBManager()
+          db.initialize()
+          print(db.migrar_desde_json())
+          "
+
       - name: Test
         run: make test
 
