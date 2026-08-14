@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClimaSafe · Probar ya — riesgo térmico en el navegador</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* Tokens del sistema de diseño de cacelass.github.io (style.css) — la demo
+       es autocontenida: no enlaza ../style.css para poder servirse sola. */
+    :root {
+      --bg: #080b12; --bg2: #0c1018; --surface: #0f1420; --surface2: #131926;
+      --border: #1c2333; --border-hi: #26304a;
+      --text: #e2e8f4; --muted: #7a8eaa; --dim: #5a6a86;
+      --accent: #4f8ef7; --accent2: #6ba3ff; --accent-lo: rgba(79,142,247,0.08);
+      --green: #3ecf8e; --green-lo: rgba(62,207,142,0.08);
+      --purple: #a78bfa; --purple-lo: rgba(167,139,250,0.08);
+      --amber: #f6a623; --amber-lo: rgba(246,166,35,0.08);
+      --red: #e74c3c; --red-lo: rgba(231,76,60,0.10);
+      --mono: 'JetBrains Mono', monospace; --sans: 'Sora', sans-serif;
+      --r: 8px; --r2: 12px; --max: 940px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      overflow-x: clip; color: var(--text); font-family: var(--sans);
+      font-weight: 400; line-height: 1.65; -webkit-font-smoothing: antialiased;
+      background-color: #080b12;
+      background:
+        radial-gradient(ellipse 80% 60% at 70% -10%, rgba(79,142,247,0.09) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at -10% 80%, rgba(167,139,250,0.07) 0%, transparent 55%),
+        linear-gradient(160deg, #080c14 0%, #060910 40%, #08060f 70%, #060b12 100%);
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image: radial-gradient(circle, rgba(79,142,247,0.18) 1px, transparent 1px);
+      background-size: 36px 36px; opacity: 0.22; pointer-events: none; z-index: 0;
+    }
+    body > * { position: relative; z-index: 1; }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { color: #fff; }
+    code { font-family: var(--mono); font-size: 0.82em; color: var(--accent2); background: var(--accent-lo); padding: 1px 5px; border-radius: 3px; }
+    .container { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+
+    nav {
+      border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+      background: rgba(8,11,18,0.96); backdrop-filter: blur(20px);
+    }
+    .nav-inner {
+      max-width: var(--max); margin: 0 auto; padding: 0 28px;
+      height: 54px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand { display: flex; align-items: center; gap: 10px; }
+    .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+    .nav-id { font-family: var(--mono); font-size: 0.76rem; display: flex; align-items: center; gap: 10px; }
+    .nav-id a { color: var(--muted); }
+    .nav-id a:hover { color: var(--accent2); }
+    .nav-id strong { color: var(--text); font-weight: 500; }
+    .nav-id span { color: var(--muted); }
+
+    .proj-hero { padding: 64px 0 40px; }
+    .hero-eyebrow {
+      font-family: var(--mono); font-size: 0.76rem; color: var(--accent2);
+      letter-spacing: 2px; text-transform: uppercase; margin-bottom: 18px;
+    }
+    .proj-hero h1 { font-size: 2.2rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
+    .hl { background: linear-gradient(90deg, var(--accent2), var(--purple)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero-sub { color: var(--muted); margin: 18px 0 28px; max-width: 640px; font-size: 0.95rem; }
+    .proj-links { display: flex; flex-wrap: wrap; gap: 10px; }
+    .hero-cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: var(--mono); font-size: 0.76rem; cursor: pointer;
+      color: var(--text); background: var(--surface2);
+      border: 1px solid var(--border-hi); border-radius: var(--r);
+      padding: 9px 16px; transition: border-color 0.2s, background 0.2s;
+    }
+    .hero-cta:hover { border-color: var(--accent); background: var(--accent-lo); color: #fff; }
+    .hero-cta:disabled { opacity: 0.5; cursor: wait; }
+
+    .section { padding: 20px 0 56px; }
+    .sec-head { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+    .sec-num { font-family: var(--mono); color: var(--accent); font-size: 0.8rem; }
+    .sec-divider { flex: 1; height: 1px; background: var(--border); }
+    .sec-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; }
+    .sec-title { font-size: 1.05rem; font-weight: 600; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    @media (max-width: 760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r2); padding: 20px; margin-bottom: 18px;
+    }
+    .card h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 5px; }
+    .field select, .field input[type="number"], .field input[type="text"] {
+      width: 100%; background: var(--bg2); color: var(--text);
+      border: 1px solid var(--border-hi); border-radius: var(--r);
+      padding: 8px 10px; font-family: var(--sans); font-size: 0.88rem;
+    }
+    .field select:focus, .field input:focus { outline: none; border-color: var(--accent); }
+    .checks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+    .check { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text); cursor: pointer; }
+    .check input { accent-color: var(--accent); }
+
+    .status { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); margin: 14px 0; }
+    .status.err { color: var(--red); }
+    .status .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--border-hi); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: -1px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .clase-badge {
+      display: inline-block; font-family: var(--mono); font-size: 1.15rem; font-weight: 500;
+      padding: 10px 22px; border-radius: var(--r); letter-spacing: 1px;
+    }
+    .clase-0 { background: var(--green-lo); color: var(--green); border: 1px solid var(--green); }
+    .clase-1 { background: var(--amber-lo); color: var(--amber); border: 1px solid var(--amber); }
+    .clase-2 { background: var(--red-lo); color: var(--red); border: 1px solid var(--red); }
+
+    .riesgo-big { font-size: 2.4rem; font-weight: 600; font-family: var(--mono); color: var(--text); }
+    .meta { font-size: 0.8rem; color: var(--muted); }
+    .override { font-family: var(--mono); font-size: 0.74rem; color: var(--amber); background: var(--amber-lo); border: 1px solid var(--amber); border-radius: var(--r); padding: 8px 12px; margin-top: 12px; display: inline-block; }
+
+    .perfil-barras { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 12px; }
+    .barra {
+      flex: 1; min-width: 4px; border-radius: 2px 2px 0 0; position: relative;
+      background: linear-gradient(180deg, var(--accent2), var(--accent));
+      opacity: 0.75; transition: opacity 0.2s;
+    }
+    .barra.ventana { outline: 1px solid var(--amber); opacity: 1; }
+    .barra:hover { opacity: 1; }
+    .eje-x { display: flex; gap: 3px; margin-top: 4px; }
+    .eje-x span { flex: 1; font-family: var(--mono); font-size: 0.6rem; color: var(--dim); text-align: center; }
+
+    .reco { list-style: none; }
+    .reco li {
+      padding: 9px 12px; border-left: 2px solid var(--accent);
+      background: var(--bg2); border-radius: 0 var(--r) var(--r) 0;
+      margin-bottom: 8px; font-size: 0.85rem; color: var(--text);
+    }
+
+    details { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+    summary { cursor: pointer; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+    summary:hover { color: var(--accent2); }
+    .tabla-modelos { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.82rem; }
+    .tabla-modelos th, .tabla-modelos td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    .tabla-modelos th { color: var(--muted); font-weight: 500; font-family: var(--mono); font-size: 0.72rem; }
+    .tabla-modelos td { font-family: var(--mono); }
+    .factor-item { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 0.82rem; }
+    .factor-item .f-nombre { color: var(--muted); }
+    .factor-item .f-valor { font-family: var(--mono); color: var(--accent2); }
+
+    footer { border-top: 1px solid var(--border); padding: 28px 0 40px; }
+    .footer-inner { max-width: var(--max); margin: 0 auto; padding: 0 28px; display: flex; justify-content: space-between; align-items: center; }
+    .footer-id { font-family: var(--mono); font-size: 0.76rem; display: flex; align-items: center; gap: 10px; }
+    .footer-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .footer-id strong { color: var(--text); font-weight: 500; }
+    .footer-id span { color: var(--muted); }
+    .oculto { display: none; }
+  </style>
+  <!-- onnxruntime-web: vendor local (la demo funciona sin red salvo el fetch
+       meteorológico); el CDN es solo respaldo si el vendor falta. -->
+  <script src="vendor/ort.min.js"></script>
+  <script>
+    if (typeof ort === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.min.js"><\/script>');
+    }
+  </script>
+</head>
+<body class="proj-page">
+
+  <nav>
+    <div class="nav-inner">
+      <div class="nav-brand">
+        <div class="nav-dot"></div>
+        <div class="nav-id"><a href="../../index.html" class="nav-back">← index</a> <strong>ClimaSafe</strong> <span>/ probar-ya</span></div>
+      </div>
+      <ul class="nav-links" style="display:flex;gap:18px;list-style:none;">
+        <li><a href="#formulario">formulario</a></li>
+        <li><a href="#resultado">resultado</a></li>
+        <li><a href="../../projects/climasafe.html">volver</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <section class="proj-hero">
+    <div class="container">
+      <div class="hero-eyebrow">ClimaSafe · ONNX / WASM</div>
+      <h1>Prueba el modelo de riesgo<br /><span class="hl">sin servidor, en tu navegador.</span></h1>
+      <p class="hero-sub">
+        El pipeline completo de <code>predict_ensemble</code> (3 modelos ONNX + fórmula +
+        ensemble conformal + personalización) portado a JavaScript. Los datos vienen de
+        Open-Meteo; si no hay red, se usa un escenario precargado.
+      </p>
+      <div class="proj-links">
+        <a class="hero-cta" href="../../projects/climasafe.html">← Volver</a>
+        <a class="hero-cta" href="https://github.com/ANFAIA/ClimaSafe" target="_blank">github.com/ANFAIA/ClimaSafe</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="formulario">
+    <div class="container">
+      <div class="sec-head">
+        <span class="sec-num">01</span>
+        <div class="sec-divider"></div>
+        <span class="sec-tag">perfil y salida</span>
+        <span class="sec-title">¿Dónde, cuándo y quién?</span>
+      </div>
+
+      <div id="carga-modelos" class="status"><span class="spinner"></span>Cargando modelos ONNX (~26 MB)…</div>
+
+      <div class="card">
+        <h3>Salida y ubicación</h3>
+        <div class="grid-3">
+          <div class="field">
+            <label for="provincia">Provincia</label>
+            <select id="provincia"></select>
+          </div>
+          <div class="field">
+            <label for="fecha">Fecha</label>
+            <select id="fecha">
+              <option value="hoy">Hoy</option>
+              <option value="manana">Mañana</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="deporte">Deporte (opcional)</label>
+            <select id="deporte">
+              <option value="">— ninguno —</option>
+              <option value="pasear">Pasear</option>
+              <option value="caminar">Caminar</option>
+              <option value="senderismo">Senderismo</option>
+              <option value="ciclismo_suave">Ciclismo suave</option>
+              <option value="ciclismo">Ciclismo</option>
+              <option value="futbol">Fútbol</option>
+              <option value="trekking_mochila">Trekking con mochila</option>
+              <option value="correr_suave">Correr suave</option>
+              <option value="tenis_dobles">Tenis dobles</option>
+              <option value="tenis">Tenis</option>
+              <option value="btt">BTT</option>
+              <option value="futbol_competicion">Fútbol competición</option>
+              <option value="ciclismo_fuerte">Ciclismo fuerte</option>
+              <option value="correr">Correr</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="lat">Latitud (opcional; por defecto la de la provincia)</label>
+            <input type="number" id="lat" step="0.0001" placeholder="p. ej. 40.4168">
+          </div>
+          <div class="field">
+            <label for="lon">Longitud (opcional)</label>
+            <input type="number" id="lon" step="0.0001" placeholder="p. ej. -3.7038">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Persona</h3>
+        <div class="grid-3">
+          <div class="field">
+            <label for="edad">Edad</label>
+            <input type="number" id="edad" min="1" max="110" value="45">
+          </div>
+          <div class="field">
+            <label for="sexo">Sexo</label>
+            <select id="sexo">
+              <option value="hombre">Hombre</option>
+              <option value="mujer">Mujer</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="grasa">% grasa corporal (opcional)</label>
+            <input type="number" id="grasa" min="3" max="60" step="0.1" placeholder="p. ej. 22">
+          </div>
+        </div>
+        <div class="grid-3">
+          <div class="field">
+            <label for="nivel_actividad">Nivel de actividad</label>
+            <select id="nivel_actividad">
+              <option value="reposo">Reposo</option>
+              <option value="ligera">Ligera</option>
+              <option value="moderada" selected>Moderada</option>
+              <option value="intensa">Intensa</option>
+              <option value="muy_intensa">Muy intensa</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="hora_inicio">Hora de inicio</label>
+            <select id="hora_inicio"></select>
+          </div>
+          <div class="field">
+            <label for="duracion">Duración (horas)</label>
+            <input type="number" id="duracion" min="0.5" max="12" step="0.5" value="2">
+          </div>
+        </div>
+        <div class="checks" style="margin-top:4px;">
+          <label class="check"><input type="checkbox" id="aclimatado"> Aclimatado al calor</label>
+          <label class="check"><input type="checkbox" id="entrenado"> Entrenado para la actividad</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Salud y entorno</h3>
+        <div class="field">
+          <label>Comorbilidades</label>
+          <div class="checks">
+            <label class="check"><input type="checkbox" value="cardiovascular" class="comorb"> Cardiovascular / HTA</label>
+            <label class="check"><input type="checkbox" value="diabetes" class="comorb"> Diabetes</label>
+            <label class="check"><input type="checkbox" value="respiratoria" class="comorb"> Respiratoria</label>
+            <label class="check"><input type="checkbox" value="mental" class="comorb"> Salud mental</label>
+          </div>
+        </div>
+        <div class="field">
+          <label>Medicación</label>
+          <div class="checks">
+            <label class="check"><input type="checkbox" value="diureticos_asa" class="farmaco"> Diuréticos de asa</label>
+            <label class="check"><input type="checkbox" value="antipsicoticos" class="farmaco"> Antipsicóticos</label>
+          </div>
+        </div>
+        <div class="field">
+          <label>Situación social</label>
+          <div class="checks">
+            <label class="check"><input type="checkbox" value="vive_solo" class="social"> Vive solo</label>
+            <label class="check"><input type="checkbox" value="no_sale" class="social"> No sale de casa</label>
+            <label class="check"><input type="checkbox" value="sin_aire_acondicionado" class="social"> Sin aire acondicionado</label>
+            <label class="check"><input type="checkbox" value="vivienda_fria" class="social"> Vivienda fría</label>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="fototipo">Fototipo (Fitzpatrick)</label>
+            <select id="fototipo">
+              <option value="">— desconocido —</option>
+              <option value="1">I — siempre se quema</option>
+              <option value="2">II — se quema fácil</option>
+              <option value="3">III — se quema a veces</option>
+              <option value="4">IV — se quema poco</option>
+              <option value="5">V — rara vez se quema</option>
+              <option value="6">VI — nunca se quema</option>
+            </select>
+          </div>
+          <div class="field" style="display:flex;align-items:flex-end;">
+            <button id="predecir" class="hero-cta" disabled>Predecir riesgo →</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ocupacion">Ocupación en la salida (solo si vas a trabajar)</label>
+          <select id="ocupacion">
+            <option value="">— no es una salida laboral —</option>
+            <option value="oficina">Oficina / bajo techo</option>
+            <option value="reparto">Reparto / conducción</option>
+            <option value="mantenimiento">Mantenimiento exterior</option>
+            <option value="construccion">Construcción</option>
+            <option value="campo">Campo / agricultura</option>
+          </select>
+        </div>
+        <div class="checks" style="margin-top:4px;">
+          <label class="check"><input type="checkbox" id="falta_sueno"> Dormí mal / menos de 6 h</label>
+          <label class="check"><input type="checkbox" id="enfermedad_reciente"> Estoy resfriado / enfermo</label>
+          <label class="check"><input type="checkbox" id="fiesta"> Fiesta / celebración (alcohol + baile)</label>
+        </div>
+      </div>
+
+      <div id="estado" class="status oculto"></div>
+    </div>
+  </section>
+
+  <section class="section" id="resultado">
+    <div class="container">
+      <div class="sec-head">
+        <span class="sec-num">02</span>
+        <div class="sec-divider"></div>
+        <span class="sec-tag">resultado</span>
+        <span class="sec-title">Riesgo para la salida elegida</span>
+      </div>
+      <div id="resultado-vacio" class="card">
+        <p class="meta">Completa el formulario y pulsa «Predecir riesgo». El resultado (clase, % de
+        riesgo, perfil horario y recomendaciones) aparecerá aquí.</p>
+      </div>
+      <div id="resultado-contenido" class="oculto">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+            <div>
+              <div class="meta" style="margin-bottom:6px;">Clase final</div>
+              <span id="clase-badge" class="clase-badge"></span>
+            </div>
+            <div>
+              <div class="meta" style="margin-bottom:6px;">Riesgo personalizado</div>
+              <div><span id="riesgo-big" class="riesgo-big"></span><span class="meta"> %</span></div>
+            </div>
+            <div id="info-salida" class="meta" style="flex:1;min-width:200px;"></div>
+          </div>
+          <div id="override-box" class="oculto"></div>
+          <div id="modo-datos" class="meta" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="card">
+          <h3>Perfil horario — Heat Index del día</h3>
+          <div id="perfil-barras" class="perfil-barras"></div>
+          <div id="perfil-eje" class="eje-x"></div>
+          <p class="meta" style="margin-top:10px;" id="perfil-leyenda"></p>
+        </div>
+
+        <div class="card">
+          <h3>Recomendaciones</h3>
+          <ul id="recomendaciones" class="reco"></ul>
+        </div>
+
+        <div class="card">
+          <details>
+            <summary>Detalle del ensemble (probabilidades poblacionales, factores, override)</summary>
+            <div id="detalle"></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-id"><span class="footer-dot"></span><strong>ClimaSafe</strong><span>· probar-ya · ONNX en el navegador</span></div>
+      <div class="footer-links" style="display:flex;gap:16px;list-style:none;">
+        <a href="../index.html">← index</a>
+        <a href="https://github.com/ANFAIA/ClimaSafe" target="_blank">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

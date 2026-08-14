@@ -29,10 +29,10 @@ async function init() {
   rellenarHoras();
   try {
     const ort = await getOrt();
-    if (ort.env && ort.env.wasm && ort.env.wasm.wasmPaths === undefined) {
-      // Los .wasm viven en vendor/ junto a la demo.
-      try { ort.env.wasm.wasmPaths = "./vendor/"; } catch { /* versión sin wasmPaths */ }
-    }
+    // Los .wasm/.mjs de onnxruntime-web viven en vendor/, junto a ort.min.js.
+    // Sin wasmPaths, onnxruntime resuelve los ficheros relativos al directorio
+    // del propio script (vendor/) — que es donde están. Poner "./vendor/" aquí
+    // duplicaba el prefijo (vendor/vendor/...) y rompía la carga (bug 2026-08-14).
     artefactos = await cargarArtefactos("./models");
     modelos = await cargarModelosOrt("./models", ort);
     catalogoRec = await leerJson("./models/recomendaciones.json");
@@ -103,10 +103,10 @@ function perfilDesdeFormulario() {
     farmacos: checks("farmaco"),
     situacion_social: checks("social"),
     fototipo: $("fototipo").value || null,
-    falta_sueno: false,
-    enfermedad_reciente: false,
-    fiesta: false,
-    ocupacion: null,
+    falta_sueno: $("falta_sueno").checked,
+    enfermedad_reciente: $("enfermedad_reciente").checked,
+    fiesta: $("fiesta").checked,
+    ocupacion: $("ocupacion").value || null,
   };
 }
 

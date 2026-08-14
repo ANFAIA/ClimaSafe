@@ -73,6 +73,7 @@ reports/**/*.csv
 reports/**/*.npz
 *.html
 !docs/**/*.html
+!web/probar-ya/index.html
 
 # --- Modelos entrenados ---
 models/**/*.joblib
