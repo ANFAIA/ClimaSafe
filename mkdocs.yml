@@ -1,11 +1,26 @@
 # Configuración del sitio de documentación (MkDocs Material)
 # Construye:  make docs   →  site/
 # Se publica en GitHub Pages bajo subpath: https://cacelass.github.io/climasafe/documentacion/
+#
+# El sitio es MÍNIMO a propósito (2026-08-14): solo 4 páginas — Inicio,
+# Modelos y pesos, Arquitectura y Papers —, escritas para quien visita la web.
+# El resto de documentacion/ (notas internas, decisiones, actas) NO se publica:
+# se excluye con exclude_docs y solo vive como fuente en el repo.
 
 site_name: ClimaSafe
 site_url: https://cacelass.github.io/climasafe/documentacion/
 docs_dir: documentacion
 use_directory_urls: true
+
+# Solo se construyen las 4 páginas curadas; todo lo demás de documentacion/
+# queda excluido del sitio (aunque siga en el repo como fuente).
+exclude_docs: |
+  *
+  **/*
+  !inicio.md
+  !modelos-pesos.md
+  !arquitectura.md
+  !papers.md
 
 theme:
   name: material
@@ -34,65 +49,6 @@ theme:
 
 nav:
   - Inicio: inicio.md
-  - Inicio rápido: inicio_rapido.md
-  - Componentes (web · MCP · bot · RAG): componentes.md
-  - Modelos y pesos:
-      - ml/conclusiones_modelos.md
-      - ml/calibracion_umbrales.md
-      - ml/lstm_hibrida.md
-      - ml/formulas_vs_secuencias.md
-      - ml/ablacion_features_27v19.md
-      - ml/features_frio_retardo.md
-      - ml/label_sin_fuga.md
-      - ml/active_learner.md
-      - ml/contrafactuales.md
-      - ml/alternativas_descartadas.md
-      - ml/problemas_conocidos.md
-      - ml/README.md
-      - conformal_prediction.md
-      - resolucion_prediccion.md
-  - Riesgo y personalización:
-      - riesgo/formulas_deterministas.md
-      - riesgo/personalizacion_individual.md
-      - riesgo/coeficientes_literatura.md
-      - riesgo/README.md
-  - Arquitectura:
-      - arquitectura/README.md
-      - arquitectura/pipeline_prediccion.md
-      - arquitectura/diseño_modelo.md
-      - arquitectura/base_datos.md
-      - arquitectura/control_acceso_mcp.md
-      - arquitectura/decisiones_estratificacion_demografica.md
-      - arquitectura/evaluacion_fuentes_externas.md
-      - arquitectura/agentes_ia.md
-  - Modelos explorados:
-      - modelos/README.md
-      - modelos/actuales/README.md
-      - modelos/actuales/xgboost.md
-      - modelos/actuales/randomforest.md
-      - modelos/actuales/lstm.md
-      - modelos/diffusion/README.md
-      - modelos/gnn/README.md
-      - modelos/nbeats/README.md
-      - modelos/transformers/README.md
-  - Papers y fuentes:
-      - papers/README.md
-      - papers/aclimatacion/README.md
-      - papers/factores-riesgo/README.md
-      - papers/indices-biometeorologicos/README.md
-      - papers/ocupacional/README.md
-      - papers/planes-accion/README.md
-  - LLM:
-      - llm/guia-fine-tuning-qwen.md
-      - llm/colab-fine-tuning.md
-      - llm/estado-fine-tuning.md
-      - llm/decisiones-paso0.md
-      - llm/paso1-rag-indexacion-documentos.md
-      - llm/recursos-externos.md
-  - Plan y contexto:
-      - prd.md
-      - proximos_pasos.md
-      - conclusion-base-conocimiento.md
-      - mcp_apps_estudio.md
-      - arnes_comparativa.md
-  - Índice de carpetas: README.md
+  - Modelos y pesos: modelos-pesos.md
+  - Arquitectura: arquitectura.md
+  - Papers: papers.md
