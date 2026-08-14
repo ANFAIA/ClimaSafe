@@ -1,6 +1,6 @@
 [project]
 name = "climasafeai"
-version = "0.0.62"
+version = "0.0.65"
 description = "Prediccion de riesgo climatico personalizado (calor/frio/uv) con ML"
 authors = [
   { name = "Alejandro Cancelas Chapela" }
@@ -116,6 +116,16 @@ hibrido = [
 optuna = [
     "optuna",
     "optuna-dashboard",  # UI web para explorar estudios (opcional)
+]
+
+# ONNX: exportación de modelos para el demo navegador (WEB-011)
+# onnxmltools: skl2onnx 1.20 ya no incluye el conversor de XGBoost.
+# onnxscript: requerido por torch.onnx.export en torch>=2.6.
+onnx = [
+    "skl2onnx",
+    "onnxmltools",
+    "onnxruntime",
+    "onnxscript",
 ]
 
 
