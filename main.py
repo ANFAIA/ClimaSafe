@@ -316,7 +316,8 @@ def run_full_pipeline() -> None:
             print(f"    {clase}: guardado → {label}.joblib  |  CPDs: {bd.cpd_info}")
     except Exception as e:
         print(f"    No se pudo entrenar red bayesiana: {e}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
 
     # ------------------------------------------------------------------
     # 6.6. Entrenar conformal prediction (split conformal)
@@ -506,7 +507,7 @@ def run_full_pipeline() -> None:
     # 10. Tabla comparativa final (Rec_riesgo como métrica principal)
     # ------------------------------------------------------------------
     print("\n10. Tabla comparativa final (Rec_riesgo)...")
-    
+
     dfs = []
     if not res_cal.empty:
         _c = res_cal.copy()

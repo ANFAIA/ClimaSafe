@@ -680,7 +680,7 @@ def _update_indices(all_papers: list[ScoutPaper]) -> list[Path]:
 
 # ── Factores de riesgo (SQLite) ───────────────────────────────────────────────
 
-from climasafeai.db.manager import DBManager
+from climasafeai.db.manager import DBManager  # noqa: E402
 
 _SCOUT_DB = DBManager()
 

@@ -280,7 +280,7 @@ def _predecir_formulas(current: dict) -> dict:
     }
 
 
-from datetime import date as date_type
+from datetime import date as date_type  # noqa: E402
 
 
 # Umbral de PELIGRO sobre la probabilidad personalizada. Más exigente que el t2

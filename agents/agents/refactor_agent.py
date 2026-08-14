@@ -67,7 +67,7 @@ class RefactorAgent(BaseAgent):
             except (SyntaxError, UnicodeDecodeError):
                 continue
 
-            new_source = source
+            new_source = source  # noqa: F841 — se mantiene por claridad; los fixes se aplican por AST
             for node in ast.walk(tree):
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
@@ -78,12 +78,6 @@ class RefactorAgent(BaseAgent):
                     if i < len(node.args.defaults):
                         default = node.args.defaults[i]
                         if isinstance(default, (ast.List, ast.Dict, ast.Set)):
-                            lineno = default.lineno
-                            col = default.col_offset
-                            end_lineno = default.end_lineno or lineno
-                            end_col = default.end_col_offset or (col + 1)
-
-                            lines = new_source.splitlines(keepends=True)
                             # Marcar para reemplazo
                             changes.append(self._apply_and_commit(
                                 path, "", "", "mutable_default"

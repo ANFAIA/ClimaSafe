@@ -32,14 +32,18 @@ from pgmpy.inference import VariableElimination
 # ---------------------------------------------------------------------------
 
 def discretizar_temp_calor(t: float) -> int:
-    if t < 20: return 0
-    if t < 30: return 1
+    if t < 20:
+        return 0
+    if t < 30:
+        return 1
     return 2
 
 
 def discretizar_temp_frio(t: float) -> int:
-    if t > 10: return 0
-    if t > 0: return 1
+    if t > 10:
+        return 0
+    if t > 0:
+        return 1
     return 2
 
 
@@ -48,8 +52,10 @@ def discretizar_grasa(g: float) -> int:
 
 
 def discretizar_edad(e: float) -> int:
-    if e < 35: return 0
-    if e < 60: return 1
+    if e < 35:
+        return 0
+    if e < 60:
+        return 1
     return 2
 
 
@@ -58,8 +64,10 @@ def discretizar_vulnerabilidad(e_disc: int, g_disc: int) -> int:
 
 
 def discretizar_riesgo(r: float) -> int:
-    if r < 0.3: return 0
-    if r < 0.6: return 1
+    if r < 0.3:
+        return 0
+    if r < 0.6:
+        return 1
     return 2
 
 

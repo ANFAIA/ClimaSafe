@@ -88,7 +88,22 @@
 
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
-    @media (max-width: 760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .nav-inner { flex-wrap: wrap; height: auto; padding: 10px 20px; row-gap: 6px; }
+      .nav-links { flex-wrap: wrap; width: 100%; }
+      .nav-links a { padding: 4px 9px; font-size: 0.75rem; }
+      .proj-hero { padding: 44px 0 32px; }
+      .proj-hero h1 { font-size: 1.6rem; }
+      .hero-sub { font-size: 0.92rem; line-height: 1.6; }
+      .hero-cta { width: 100%; justify-content: center; }
+      .hero-cta + .hero-cta { margin-left: 0; }
+      .proj-links { flex-direction: column; align-items: stretch; }
+      .card { padding: 16px; }
+      #mapa { height: 200px; }
+      .clase-badge { font-size: 1.4rem; }
+      .riesgo-big { font-size: 2rem; }
+    }
 
     .card {
       background: var(--surface); border: 1px solid var(--border);
@@ -446,7 +461,7 @@
         </div>
 
         <div style="text-align:center;margin-top:8px;">
-          <a class="hero-cta" href="../documentacion/" target="_blank" rel="noopener">Entender mejor el resultado →</a>
+          <a class="hero-cta" href="../documentacion/riesgo-personalizacion/" target="_blank" rel="noopener">Entender mejor el resultado →</a>
         </div>
       </div>
     </div>

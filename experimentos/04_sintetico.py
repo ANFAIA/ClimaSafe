@@ -8,7 +8,8 @@ de los días de riesgo reales.
 Para LSTM: warping temporal + ruido en las secuencias 24h de los días
 de riesgo reales.
 """
-import sys; sys.path.insert(0, ".")
+import sys
+sys.path.insert(0, ".")
 import numpy as np
 import pandas as pd
 import joblib

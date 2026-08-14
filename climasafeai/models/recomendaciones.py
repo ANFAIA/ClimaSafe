@@ -14,7 +14,6 @@ def _cargar_catalogo() -> dict:
 
 def _riesgo_dominante(resultado: dict) -> str:
     modelos = resultado.get("modelos", {})
-    clase_final = resultado.get("clase_final", 0)
     heat_clases = []
     cold_clases = []
     for nombre, res in modelos.items():
@@ -55,7 +54,6 @@ def _clasificar_clima(current: dict, resultado: dict, riesgo_dominante: str = "a
     etiquetas = []
     t = current.get("t2m_c")
     wc = resultado.get("modelos", {}).get("Formula", {}).get("frio", {}).get("wind_chill_c")
-    hi = resultado.get("modelos", {}).get("Formula", {}).get("calor", {}).get("heat_index_c")
     uv = current.get("uv_index")
 
     if riesgo_dominante != "frio":
@@ -121,8 +119,8 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
         return []
 
     current = resultado.get("weather", {}).get("current", {})
-    clase_final = resultado.get("clase_final", 0)
     riesgo_dom = _riesgo_dominante(resultado)
+    clase_final = resultado.get("clase_final", 0)
     recomendaciones = []
 
     ventana = _ventana_actividad(perfil)
@@ -149,7 +147,6 @@ def generar_recomendaciones(perfil: dict, resultado: dict) -> list[str]:
         if seccion and "texto" in seccion:
             recomendaciones.append(seccion["texto"])
 
-    label_act = _actividad_label(perfil)
     actividad = perfil.get("nivel_actividad", "").lower()
     nivel_seguro = _nivel_actividad_segura(clase_final)
     if nivel_seguro == "reposo":

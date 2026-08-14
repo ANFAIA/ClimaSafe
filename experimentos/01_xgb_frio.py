@@ -2,7 +2,8 @@
 Experimento 1: XGBoost para frío (reemplazar RF).
 Grid search ligero de hyperparams + calibración de umbrales.
 """
-import sys; sys.path.insert(0, ".")
+import sys
+sys.path.insert(0, ".")
 import itertools
 import joblib
 import numpy as np

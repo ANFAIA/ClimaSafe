@@ -1,9 +1,10 @@
 """
-Experimento 2: 
+Experimento 2:
   a) Calibrar umbrales de decisión de la LSTM híbrida
   b) Ensemble ponderado XGBoost/RF + LSTM híbrida
 """
-import sys; sys.path.insert(0, ".")
+import sys
+sys.path.insert(0, ".")
 import joblib
 import numpy as np
 import pandas as pd
@@ -34,7 +35,7 @@ for clase in ("calor", "frio"):
 # --- 2. Cargar LSTM híbrida ---
 print("\n=== Cargando LSTM híbrida ===")
 data_seq = cargar_dataset_secuencias()
-from climasafeai.data.sequences import split_secuencias_por_fecha
+from climasafeai.data.sequences import split_secuencias_por_fecha  # noqa: E402
 split = split_secuencias_por_fecha(data_seq)
 _, X_train_s, X_val_s, X_test_s = escalar_secuencias(
     split["X_train"], split["X_val"], split["X_test"], guardar=False

@@ -108,34 +108,34 @@ def fetch_historical_hourly(lat: float, lon: float, days: int = 14) -> pd.DataFr
         "sp": hourly.get("surface_pressure", [np.nan] * len(hourly["time"])),
     })
     return df
-from climasafeai.data.make_dataset import (
+from climasafeai.data.make_dataset import (  # noqa: E402
     download_openuv,
     _agregar_estadisticas_diarias,
     _agregar_rezagos_temporales,
     HEAT_INDEX_UMBRAL_C,
     WIND_CHILL_UMBRAL_C,
 )
-from climasafeai.features.weather_indices import (
+from climasafeai.features.weather_indices import (  # noqa: E402
     add_weather_index_columns,
     heat_index,
     wind_chill,
     wbgt_from_heat_index,
     categorize_heat_index,
 )
-from climasafeai.features.external_features import (
+from climasafeai.features.external_features import (  # noqa: E402
     crear_mapping_provincias,
     alinear_features_provincia,
     escalar_features_provincia,
     DEMOGRAPHIC_FEATURES,
     _EMBEDDED_DEMOGRAPHICS,
 )
-from climasafeai.models.lstm_province_hybrid import (
+from climasafeai.models.lstm_province_hybrid import (  # noqa: E402
     DAILY_FEATURE_COLS,
     escalar_diarias,
     LSTM_HYBRID_SCALER_DIARIAS_PATH,
 )
-from climasafeai.utils.paths import ARTIFACTS_DIR
-from climasafeai.data.sequences import FEATURE_COLS_SEQ
+from climasafeai.utils.paths import ARTIFACTS_DIR  # noqa: E402
+from climasafeai.data.sequences import FEATURE_COLS_SEQ  # noqa: E402
 
 
 def _procesar_horario_con_indices(df_hora: pd.DataFrame) -> pd.DataFrame:
@@ -374,7 +374,6 @@ def build_daily_feature_vector(df_features: pd.DataFrame) -> np.ndarray | None:
     if df_features is None or df_features.empty:
         return None
     latest = df_features.sort_values("fecha").iloc[-1:]
-    available = [c for c in DAILY_FEATURE_COLS if c in latest.columns]
     missing = [c for c in DAILY_FEATURE_COLS if c not in latest.columns]
     for col in missing:
         latest[col] = 0.0

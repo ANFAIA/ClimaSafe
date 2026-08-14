@@ -542,7 +542,6 @@ def try_model() -> None:
         print(f"\n{'-'*60}")
         print("  Perfil de riesgo horario (HI por hora):")
         print(f"{'-'*60}")
-        horas_lista = [e["hora"] for e in perfil_horario]
         max_hi = max(h["HI"] for h in perfil_horario) if perfil_horario else 40
         for entry in perfil_horario:
             hora = entry["hora"]
@@ -639,7 +638,6 @@ def try_model() -> None:
                         for ft in tops:
                             print(f"    {ft['feature']}  ({ft['importancia']})")
             elif mod == "LSTM":
-                metodo = det.get("metodo", "")
                 hora = det.get("hora_mas_influyente")
                 if hora is not None:
                     print(f"\n  LSTM: hora mas influyente = {hora}:00")

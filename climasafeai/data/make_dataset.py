@@ -319,7 +319,6 @@ def filtrar_era5_por_puntos(ds: xr.Dataset, puntos_por_provincia: dict) -> xr.Da
             lats.append(lat)
             lons.append(lon)
 
-    idx = xr.DataArray(range(len(provincias)), dims="punto")
     ds_filtrado = ds.sel(
         latitude=xr.DataArray(lats, dims="punto"),
         longitude=xr.DataArray(lons, dims="punto"),

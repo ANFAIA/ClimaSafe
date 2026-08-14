@@ -125,7 +125,7 @@ class DoctorAgent(BaseAgent):
         if not result.ok:
             return {"ok": False, "message": "no es un repositorio git"}
         changes = result.stdout.strip()
-        n_changes = len([l for l in changes.split("\n") if l.strip()]) if changes else 0
+        n_changes = len([line for line in changes.split("\n") if line.strip()]) if changes else 0
         branch_result = run_command(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.ctx.root
         )

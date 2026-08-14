@@ -3,7 +3,8 @@ Experimento 3: LSTM híbrida con peso_riesgo_extra para
 empujar recall de clases de riesgo.
 Prueba 2.0 y 3.0, recalibra thresholds.
 """
-import sys; sys.path.insert(0, ".")
+import sys
+sys.path.insert(0, ".")
 import joblib
 import numpy as np
 import torch

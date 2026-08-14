@@ -171,17 +171,6 @@ def riesgo_zona_grid(
         h_inicio_p = int(perfil.get("hora_inicio", 0))
         h_duracion_p = float(perfil.get("duracion_actividad_h", 2))
         h_fin = min(23, h_inicio_p + max(1, int(h_duracion_p)))
-    if perfil and hi_peak is not None:
-        from climasafeai.features.personalizacion import personalizar_riesgo
-        prob_base = _hi_a_probabilidad(hi_peak)
-        resultado_pers = personalizar_riesgo(prob_base, perfil, tipo="calor")
-        prob_pers = resultado_pers["indice_personalizado"]
-        clase_general = _prob_a_clase(prob_pers)
-    elif hi_peak is not None:
-        clase_general = _clase_desde_hi(hi_peak, perfil_cfg)
-    else:
-        clase_general = 0
-
     celdas = _generar_celdas(lat, lon, radio_km)
 
     celdas_resultado = []
