@@ -7,7 +7,7 @@
 //      recomendaciones y detalle.
 import { cargarArtefactos, cargarModelosOrt, leerJson } from "./artefactos.js";
 import { getOrt } from "./ort-runtime.js";
-import { fetchWeatherData } from "./weather.js";
+import { fetchWeatherData, provinciaMasCercana, getProvinceCoords } from "./weather.js";
 import { predictEnsemble } from "./modelos.js";
 import { generarRecomendaciones } from "./recomendaciones.js";
 
@@ -25,6 +25,7 @@ let escenarios = null;
 // Carga inicial
 // ─────────────────────────────────────────────────────────────────────────────
 async function init() {
+  initMapa();
   rellenarProvincias();
   rellenarHoras();
   try {
@@ -79,6 +80,66 @@ function rellenarHoras() {
     sel.appendChild(opt);
   }
   sel.value = "10";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mapa interactivo (Leaflet + tiles oscuros): clic → lat/lon + provincia
+// ─────────────────────────────────────────────────────────────────────────────
+let mapa = null;
+let marcador = null;
+
+function _normOpcion(s) {
+  return String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[/\s]+/g, "").trim();
+}
+
+function _opcionProvinciaMasCercana(clave) {
+  const sel = $("provincia");
+  for (const opt of sel.options) {
+    if (_normOpcion(opt.value) === _normOpcion(clave) ||
+        _normOpcion(opt.textContent) === _normOpcion(clave)) {
+      return opt.value;
+    }
+  }
+  return null;
+}
+
+function ponerMarcador(lat, lon) {
+  if (!mapa) return;
+  if (marcador) marcador.setLatLng([lat, lon]);
+  else {
+    marcador = L.circleMarker([lat, lon], {
+      radius: 8, fillColor: "#4f8ef7", color: "#6ba3ff", weight: 2, fillOpacity: 0.85,
+    }).addTo(mapa);
+  }
+  mapa.setView([lat, lon], Math.max(mapa.getZoom(), 6));
+}
+
+function initMapa() {
+  const el = $("mapa");
+  if (!el || typeof L === "undefined") return;
+  mapa = L.map(el, { zoomControl: true, scrollWheelZoom: false }).setView([40.4168, -3.7038], 6);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CARTO',
+    maxZoom: 18,
+  }).addTo(mapa);
+  mapa.on("click", (e) => {
+    const lat = +e.latlng.lat.toFixed(4);
+    const lon = +e.latlng.lng.toFixed(4);
+    $("lat").value = lat;
+    $("lon").value = lon;
+    const clave = provinciaMasCercana(lat, lon);
+    if (clave) {
+      const val = _opcionProvinciaMasCercana(clave);
+      if (val) $("provincia").value = val;
+    }
+    ponerMarcador(lat, lon);
+  });
+  $("provincia").addEventListener("change", () => {
+    const [plat, plon] = getProvinceCoords($("provincia").value);
+    ponerMarcador(plat, plon);
+  });
+  ponerMarcador(40.4168, -3.7038);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

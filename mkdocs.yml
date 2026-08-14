@@ -1,54 +1,62 @@
-# Configuración del sitio de documentación (MkDocs Material)
+# Configuración del sitio de documentación (MkDocs)
 # Construye:  make docs   →  site/
 # Se publica en GitHub Pages bajo subpath: https://cacelass.github.io/climasafe/documentacion/
 #
-# El sitio es MÍNIMO a propósito (2026-08-14): solo 4 páginas — Inicio,
-# Modelos y pesos, Arquitectura y Papers —, escritas para quien visita la web.
-# El resto de documentacion/ (notas internas, decisiones, actas) NO se publica:
-# se excluye con exclude_docs y solo vive como fuente en el repo.
+# Estética: la MISMA que el resto de cacelass.github.io (fondo oscuro, fuentes
+# Sora + JetBrains Mono, acento azul). El footer "Made with Material for MkDocs"
+# se elimina en overrides/main.html y se sustituye por el footer del sitio.
+# El contenido es MÍNIMO a propósito: solo las secciones curadas.
 
 site_name: ClimaSafe
 site_url: https://cacelass.github.io/climasafe/documentacion/
 docs_dir: documentacion
 use_directory_urls: true
 
-# Solo se construyen las 4 páginas curadas; todo lo demás de documentacion/
-# queda excluido del sitio (aunque siga en el repo como fuente).
+# Solo se construyen las páginas curadas; el resto de documentacion/ (notas
+# internas, decisiones, actas, papers sueltos) queda excluido del sitio.
 exclude_docs: |
   *
   **/*
   !index.md
   !modelos-pesos.md
+  !riesgo-personalizacion.md
   !arquitectura.md
   !papers.md
+  !llm.md
+  !assets/extra.css
 
 theme:
   name: material
   language: es
+  custom_dir: overrides
   features:
-    - navigation.tabs
+    - navigation.sections
     - navigation.top
     - search.suggest
     - search.highlight
     - content.code.copy
   palette:
     - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: teal
-      accent: amber
-      toggle:
-        icon: material/brightness-7
-        name: Cambiar a modo oscuro
-    - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: amber
-      toggle:
-        icon: material/brightness-4
-        name: Cambiar a modo claro
+      primary: custom
+      accent: custom
+  font:
+    text: Sora
+    code: JetBrains Mono
+  icon:
+    logo: material/thermometer
+    repo: fontawesome/brands/github
+
+repo_url: https://github.com/ANFAIA/ClimaSafe
+repo_name: ClimaSafe
+
+extra_css:
+  - assets/extra.css
 
 nav:
   - Inicio: index.md
   - Modelos y pesos: modelos-pesos.md
+  - Riesgo y personalización: riesgo-personalizacion.md
   - Arquitectura: arquitectura.md
-  - Papers: papers.md
+  - Papers y fuentes: papers.md
+  - LLM: llm.md

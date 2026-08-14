@@ -13,4 +13,5 @@ Experimentos, conclusiones y problemas conocidos de los modelos.
 | `lstm_hibrida.md` | Diseño y resultados de la LSTM híbrida |
 | `problemas_conocidos.md` | Problemas conocidos y limitaciones |
 | `contrafactuales.md` | Explicaciones contrafactuales (cómo reducir el riesgo) |
+| `retos_tecnicos_viabilidad.md` | Estudio de viabilidad: HMM, Bayesianas, GP, GNN, TFT/N-BEATS, RL |
 | `active_learner.md` | Aprendizaje activo para filtrar papers |

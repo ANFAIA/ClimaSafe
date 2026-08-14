@@ -161,6 +161,8 @@
     .footer-id span { color: var(--muted); }
     .oculto { display: none; }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- onnxruntime-web: vendor local (la demo funciona sin red salvo el fetch
        meteorológico); el CDN es solo respaldo si el vendor falta. -->
   <script src="vendor/ort.min.js"></script>
@@ -257,6 +259,13 @@
             <label for="lon">Longitud (opcional)</label>
             <input type="number" id="lon" step="0.0001" placeholder="p. ej. -3.7038">
           </div>
+        </div>
+        <div class="field">
+          <label>Mapa — haz clic para fijar la ubicación</label>
+          <div id="mapa" style="height:240px;border-radius:8px;border:1px solid var(--border);margin-top:4px;background:var(--surface2)"></div>
+          <p class="meta" style="font-size:0.78rem;color:var(--muted);margin-top:4px">
+            Al hacer clic se rellenan latitud/longitud y se elige la provincia más cercana.
+          </p>
         </div>
       </div>
 

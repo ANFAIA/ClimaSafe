@@ -117,10 +117,38 @@ const PROVINCIA_COORDS = {
   zaragoza: [41.6488, -0.8891], avila: [40.6564, -4.6993],
 };
 
-export function getProvinceCoords(provincia) {
-  const key = String(provincia).trim().toLowerCase();
-  return PROVINCIA_COORDS[key] || [40.4168, -3.7038];
+// Normaliza un nombre de provincia para buscar en PROVINCIA_COORDS: minúsculas,
+// sin acentos y sin barras (p. ej. "Ávila" → "avila", "Araba/Álava" → "alava").
+const _normKey = (s) =>
+  String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[/\s]+/g, "").trim();
+
+const PROVINCIA_COORDS_NORM = {};
+for (const [k, v] of Object.entries(PROVINCIA_COORDS)) {
+  PROVINCIA_COORDS_NORM[_normKey(k)] = v;
 }
+
+export function getProvinceCoords(provincia) {
+  const key = _normKey(provincia);
+  return PROVINCIA_COORDS_NORM[key] || [40.4168, -3.7038];
+}
+
+// Provincia (clave canónica de PROVINCIA_COORDS) más cercana a un punto.
+// Lo usa el mapa de la demo para rellenar el selector al hacer clic.
+export function provinciaMasCercana(lat, lon) {
+  let mejor = null;
+  let mejorD = Infinity;
+  for (const [k, [plat, plon]] of Object.entries(PROVINCIA_COORDS)) {
+    const d = (plat - lat) ** 2 + (plon - lon) ** 2;
+    if (d < mejorD) {
+      mejorD = d;
+      mejor = k;
+    }
+  }
+  return mejor;
+}
+
+export { PROVINCIA_COORDS, PROVINCIA_COORDS_NORM, _normKey };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // fetch_weather_data (weather_fetcher.py:230)

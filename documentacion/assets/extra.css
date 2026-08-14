@@ -1,0 +1,166 @@
+/* extra.css — Estética de la documentación = la del resto de cacelass.github.io.
+   Fondo oscuro, fuentes Sora + JetBrains Mono, acento azul, bordes #1c2333.
+   Sustituye los tokens de color de Material por los del sitio. */
+
+:root {
+  --md-default-bg-color: #080b12;
+  --md-default-fg-color: #e2e8f4;
+  --md-default-fg-color--light: #7a8eaa;
+  --md-default-fg-color--lighter: #5a6a86;
+  --md-primary-fg-color: #0f1420;
+  --md-primary-fg-color--light: #131926;
+  --md-primary-fg-color--dark: #060910;
+  --md-accent-fg-color: #4f8ef7;
+  --md-typeset-a-color: #6ba3ff;
+  --md-code-bg-color: #0c1018;
+  --md-code-fg-color: #e2e8f4;
+  --md-typeset-table-color: #1c2333;
+  --md-footer-bg-color: #060910;
+  --md-footer-fg-color: #7a8eaa;
+}
+
+body {
+  background: #080b12;
+  background:
+    radial-gradient(ellipse 80% 60% at 70% -10%, rgba(79, 142, 247, 0.09) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at -10% 80%, rgba(167, 139, 250, 0.07) 0%, transparent 55%),
+    linear-gradient(160deg, #080c14 0%, #060910 40%, #08060f 70%, #060b12 100%);
+  font-family: "Sora", sans-serif;
+}
+
+/* Header pegajoso con el look del sitio */
+.md-header {
+  background: rgba(8, 11, 18, 0.96);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid #1c2333;
+  color: #e2e8f4;
+}
+.md-header__button.md-logo {
+  color: #4f8ef7;
+}
+.md-header__title {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+}
+
+/* Tipografía */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  font-family: "Sora", sans-serif;
+  font-weight: 600;
+  color: #e2e8f4;
+}
+.md-typeset h1 {
+  color: #e2e8f4;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.md-typeset {
+  color: #e2e8f4;
+  font-size: 0.9rem;
+}
+.md-typeset code {
+  font-family: "JetBrains Mono", monospace;
+  background: rgba(79, 142, 247, 0.08);
+  color: #6ba3ff;
+}
+.md-typeset pre > code {
+  background: #0c1018;
+  color: #e2e8f4;
+  border: 1px solid #1c2333;
+}
+
+/* Navegación */
+.md-nav__link {
+  color: #7a8eaa;
+}
+.md-nav__link:hover,
+.md-nav__link--active {
+  color: #6ba3ff;
+}
+.md-nav__title {
+  color: #e2e8f4;
+}
+
+/* Búsqueda */
+.md-search__input {
+  background: #0f1420;
+  color: #e2e8f4;
+}
+.md-search__input::placeholder {
+  color: #5a6a86;
+}
+
+/* Tablas */
+.md-typeset table:not([class]) {
+  background: #0f1420;
+  border: 1px solid #1c2333;
+  font-size: 0.82rem;
+}
+.md-typeset table:not([class]) th {
+  background: #131926;
+  color: #e2e8f4;
+}
+.md-typeset table:not([class]) td {
+  border-top: 1px solid #1c2333;
+}
+
+/* Bloques */
+.md-typeset blockquote,
+.md-typeset .admonition,
+.md-typeset details {
+  background: #0f1420;
+  border-color: #1c2333;
+}
+
+/* Enlaces */
+.md-content a {
+  color: #6ba3ff;
+  text-decoration: none;
+}
+.md-content a:hover {
+  color: #fff;
+}
+
+/* Footer del sitio (sustituye "Made with Material for MkDocs") */
+.cs-footer {
+  border-top: 1px solid #1c2333;
+  background: #060910;
+  color: #7a8a9a;
+}
+.cs-footer-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.76rem;
+  flex-wrap: wrap;
+}
+.cs-footer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4f8ef7;
+  box-shadow: 0 0 12px #4f8ef7;
+}
+.cs-footer-inner strong {
+  color: #e2e8f4;
+  font-weight: 500;
+}
+.cs-footer-sep {
+  color: #5a6a86;
+}
+.cs-footer-inner a {
+  color: #7a8eaa;
+  text-decoration: none;
+}
+.cs-footer-inner a:hover {
+  color: #6ba3ff;
+}
+.md-footer-meta {
+  display: none;
+}

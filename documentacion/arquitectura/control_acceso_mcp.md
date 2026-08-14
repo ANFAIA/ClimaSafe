@@ -5,7 +5,7 @@
 `tests/test_mcp_control_acceso.py`.
 **Fecha:** 2026-08-07.
 **Alcance:** `agents/tools/prediction_mcp_tool.py`, `climasafeai/db/manager.py`,
-`data/schema.sql`, tests del MCP y `climasafeai/skill/SKILL.md`.
+`data/schema.sql`, tests del MCP y `skills/climasafeai/SKILL.md`.
 
 Este documento fija las decisiones de diseño **antes** de escribir código, porque
 tres de ellas cambian el esquema de la base de datos y romper una migración a
@@ -287,7 +287,7 @@ MCP-003 **no obliga a tocar** `climasafeai/models/ensemble.py`,
 
 ## 7. Riesgos abiertos
 
-1. **`climasafeai/skill/SKILL.md:101-106`** documenta las tools de perfil,
+1. **`skills/climasafeai/SKILL.md:101-106`** documenta las tools de perfil,
    incluida «`listar_usuarios_mcp` | Lista todos los perfiles». Si no se
    actualiza, el SKILL miente sobre el comportamiento.
 2. **El único usuario real pierde acceso hasta que se le emita un token.** Es el
