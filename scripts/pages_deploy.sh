@@ -42,6 +42,7 @@ if [[ ! -d "$PAGES_DIR/.git" ]]; then
 fi
 
 DOC_DEST="$PAGES_DIR/climasafe/documentacion"
+DOC_SRC_DEST="$PAGES_DIR/climasafe/documentacion-src"
 DEMO_DEST="$PAGES_DIR/climasafe/probar-ya"
 
 echo "▶ Copiando site/ → climasafe/documentacion/ ($(du -sh "$ROOT/site" | cut -f1))"
@@ -49,13 +50,37 @@ rm -rf "$DOC_DEST"
 mkdir -p "$(dirname "$DOC_DEST")"
 cp -R "$ROOT/site" "$DOC_DEST"
 
+echo "▶ Copiando fuente de docs (mkdocs.yml + documentacion/) → climasafe/documentacion-src/"
+# La fuente vive también en el pages personal: si el repo ANFAIA desaparece, la
+# documentación se puede regenerar desde aquí (ver climasafe/documentacion-src/build.sh).
+rm -rf "$DOC_SRC_DEST"
+mkdir -p "$DOC_SRC_DEST"
+cp "$ROOT/mkdocs.yml" "$DOC_SRC_DEST/"
+cp -R "$ROOT/documentacion" "$DOC_SRC_DEST/documentacion"
+cat > "$DOC_SRC_DEST/build.sh" <<'EOF'
+#!/usr/bin/env bash
+# Regenera climasafe/documentacion/ desde esta fuente, sin depender del repo ANFAIA.
+# Requiere mkdocs y el theme material (pip install mkdocs mkdocs-material).
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+if ! command -v mkdocs >/dev/null 2>&1; then
+    echo "mkdocs no instalado. Prueba: pip install mkdocs mkdocs-material" >&2
+    exit 1
+fi
+mkdocs build -f mkdocs.yml -d /tmp/climasafe-docs-build
+rm -rf ../documentacion
+cp -R /tmp/climasafe-docs-build ../documentacion
+echo "✓ Documentación regenerada en climasafe/documentacion/"
+EOF
+chmod +x "$DOC_SRC_DEST/build.sh"
+
 echo "▶ Copiando web/probar-ya/ → climasafe/probar-ya/ ($(du -sh "$ROOT/web/probar-ya" | cut -f1))"
 rm -rf "$DEMO_DEST"
 mkdir -p "$(dirname "$DEMO_DEST")"
 cp -R "$ROOT/web/probar-ya" "$DEMO_DEST"
 
 cd "$PAGES_DIR"
-git add climasafe/documentacion climasafe/probar-ya
+git add climasafe/documentacion climasafe/documentacion-src climasafe/probar-ya
 
 if git diff --cached --quiet; then
     echo "Sin cambios en climasafe/ — nada que publicar."
