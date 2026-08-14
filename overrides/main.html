@@ -1,0 +1,19 @@
+{#-
+  overrides/main.html — ClimaSafe docs.
+
+  Sustituye el footer de Material ("Made with Material for MkDocs") por el
+  footer del sitio personal, con la misma estética que el resto de la web.
+-#}
+{% extends "base.html" %}
+
+{% block footer %}
+<footer class="cs-footer">
+  <div class="cs-footer-inner">
+    <span class="cs-footer-dot"></span>
+    <strong>ClimaSafe</strong>
+    <span class="cs-footer-sep">—</span>
+    <a href="https://cacelass.github.io/" target="_blank" rel="noopener">cacelass.github.io</a>
+    <a href="https://github.com/ANFAIA/ClimaSafe" target="_blank" rel="noopener">github.com/ANFAIA/ClimaSafe</a>
+  </div>
+</footer>
+{% endblock %}

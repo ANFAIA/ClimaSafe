@@ -74,6 +74,7 @@ reports/**/*.npz
 *.html
 !docs/**/*.html
 !web/probar-ya/index.html
+!overrides/main.html
 
 # --- Modelos entrenados ---
 models/**/*.joblib
