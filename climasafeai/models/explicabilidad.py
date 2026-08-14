@@ -216,7 +216,7 @@ def explicar_lstm(
                 "horas_top": contribuciones[:_TOP_N],
                 "variables_top": feature_contrib[:_TOP_N],
             }
-        except Exception as e:
+        except Exception:
             pass
 
     return {"metodo": "proxy no disponible", "error": "No fue posible explicar LSTM directamente"}

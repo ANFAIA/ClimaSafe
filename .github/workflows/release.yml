@@ -1,0 +1,29 @@
+name: Release
+
+# Al llegar a main: tag semántico v0.0.x + CHANGELOG + release notes.
+# El bump de versión en pyproject.toml lo hace `harness finish` en local antes
+# del push; este workflow solo publica la versión que ya está en el repo.
+# Idempotente: si el tag v<version> ya existe, no hace nada.
+# CI solo toca CHANGELOG.md + tag + GitHub Release — nunca código de producto.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Create release (tag + CHANGELOG + release notes)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/release_ci.sh

@@ -1821,7 +1821,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         try:
             datos_perfil = _data_a_perfil(data, alias, str(chat_id))
             _db.crear_perfil(datos_perfil)
-        except Exception as exc:
+        except Exception:
             logger.exception("Error al guardar perfil")
         conv["estado"] = _siguiente(estado, data)  # → DONE
         return None

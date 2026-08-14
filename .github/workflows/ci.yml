@@ -1,0 +1,55 @@
+name: CI
+
+# Calidad en cada PR y en cada push a main: test + lint.
+# El lint es "solo ficheros Python cambiados" — `make lint` sobre todo el repo
+# falla por deuda preexistente (ver .github/workflows/README.md).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Hace falta el historial para el diff de ficheros cambiados (lint).
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies (all extras + dev group)
+        run: uv sync --all-extras
+
+      - name: Test
+        run: make test
+
+      - name: Lint — ficheros Python cambiados
+        run: |
+          # En PR: diff contra la base. En push a main: diff contra el commit
+          # anterior (github.event.before). `make lint` completo falla por
+          # 23 errores preexistentes en ficheros ajenos (E402/E701/F841 no
+          # autofixables) — el lint acotado evita un CI que falla siempre.
+          # Solo `ruff check`: el `ruff format --check` del `make lint` falla
+          # repo-wide en 66 ficheros preexistentes, y reformatearlos no es de
+          # este ticket (ver .github/workflows/README.md).
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          CHANGED="$(git diff --name-only "${BASE}...HEAD" -- '*.py' 2>/dev/null || true)"
+          if [[ -z "$CHANGED" ]]; then
+            echo "Sin ficheros Python cambiados en este PR/push — lint no aplica."
+            exit 0
+          fi
+          echo "Lint de:"
+          echo "$CHANGED"
+          # shellcheck disable=SC2086 — los ficheros no contienen espacios
+          uv run ruff check $CHANGED

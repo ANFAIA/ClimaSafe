@@ -3,6 +3,7 @@
         test smoke lint format typecheck lock \
         lab notebook tb \
         docs \
+        pages-deploy pages-deploy-dry \
         profile \
         mlflow \
         monitor tune serve query \
@@ -394,6 +395,20 @@ mlflow:
 # ─────────────────────────────────────────────────────────────────────────────
 docs:
 	$(UVRUN) mkdocs build
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Publicación a GitHub Pages personal (cacelass/cacelass.github.io)
+#  Cross-repo: usa el checkout local del repo destino (o PAGES_REMOTE_URL).
+#  Comparte scripts/pages_deploy.sh con .github/workflows/pages.yml.
+#  - pages-deploy      copia site/ y web/probar-ya/ + commit + push
+#  - pages-deploy-dry  igual pero sin push (PUSH=no), deja el commit local
+#  Variables: PAGES_DIR, PAGES_REMOTE, PAGES_REMOTE_URL (ver .github/workflows/README.md)
+# ─────────────────────────────────────────────────────────────────────────────
+pages-deploy:
+	bash scripts/pages_deploy.sh
+
+pages-deploy-dry:
+	PUSH=no bash scripts/pages_deploy.sh
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Limpieza

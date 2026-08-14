@@ -1,0 +1,46 @@
+name: Pages
+
+# Publica docs (MkDocs → site/) y la demo del navegador (web/probar-ya/) en el
+# GitHub Pages personal del humano: cacelass/cacelass.github.io, bajo
+# climasafe/documentacion/ y climasafe/probar-ya/.
+#
+# Es CROSS-REPO: necesita el secreto PAGES_DEPLOY_TOKEN (PAT con scope `repo`
+# sobre cacelass/cacelass.github.io). Si no está definido, el job se salta con
+# un aviso — no falla el workflow. Alternativa local: make pages-deploy
+# (ver .github/workflows/README.md y README.md).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pages:
+    runs-on: ubuntu-latest
+    env:
+      PAGES_DEPLOY_TOKEN: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies (mkdocs)
+        run: uv sync
+
+      - name: Deploy docs + demo al pages personal
+        if: env.PAGES_DEPLOY_TOKEN != ''
+        env:
+          PAGES_DIR: ${{ runner.temp }}/cacelass.github.io
+          PAGES_REMOTE_URL: https://x-access-token:${{ secrets.PAGES_DEPLOY_TOKEN }}@github.com/cacelass/cacelass.github.io.git
+        run: bash scripts/pages_deploy.sh
+
+      - name: Skip publicación (falta PAGES_DEPLOY_TOKEN)
+        if: env.PAGES_DEPLOY_TOKEN == ''
+        run: |
+          echo "::warning::PAGES_DEPLOY_TOKEN no definido: publicación a cacelass.github.io saltada (el workflow no falla). Crea un PAT con scope 'repo' sobre cacelass/cacelass.github.io y añádelo en Settings → Secrets and variables → Actions. Alternativa local: make pages-deploy"

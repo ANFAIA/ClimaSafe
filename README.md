@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%2F%20RandomForest-orange)
 ![Tracking](https://img.shields.io/badge/Experiment%20Tracking-MLflow-blue?logo=mlflow)
-![Version](https://img.shields.io/badge/Version-0.0.67-green)
+![Version](https://img.shields.io/badge/Version-0.0.70-green)
 ![Author](https://img.shields.io/badge/Author-Alejandro%20Cancelas%20Chapela-blueviolet)
 ![Template](https://img.shields.io/badge/Generado%20con-dskit-58a6ff?logo=github)
 
@@ -11,7 +11,7 @@
 
 **Tipo de ML:** `supervisado`  
 **Autor:** Alejandro Cancelas Chapela  
-**Versión:** 0.0.67 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
+**Versión:** 0.0.70 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
 
 
 ClimaSafe estima, para cada **provincia y día**, el nivel de riesgo por temperatura
@@ -202,6 +202,50 @@ Requiere `TELEGRAM_BOT_TOKEN` en `.env` (te lo da @BotFather).
 > **MCP tools** (`agents.tools.prediction_mcp_tool`, 12 tools: predicción,
 > perfiles, rutinas, avisos) y el LLM local opcional (Qwen 2.5 + RAG). El skill
 > con el setup completo está en `skills/climasafeai/SKILL.md`.
+
+---
+
+## CI/CD y publicación
+
+Tres workflows de GitHub Actions en `.github/workflows/`:
+
+| Workflow | Trigger | Qué hace |
+|----------|---------|----------|
+| `ci.yml` | PR + push a main | `make test` + lint de los ficheros Python cambiados |
+| `release.yml` | push a main | Tag `v0.0.x` + CHANGELOG + GitHub Release (idempotente) |
+| `pages.yml` | push a main | Publica docs y demo en `cacelass.github.io` |
+
+- **`ci.yml`**: test con `uv sync --all-extras`. El lint es *solo de los `.py`
+  cambiados*: `make lint` completo arrastra deuda preexistente (23 errores en
+  ficheros ajenos). Detalle de la decisión en `.github/workflows/README.md`.
+- **`release.yml`**: el bump de versión lo hace `harness finish` en local antes
+  del push; el workflow publica la versión que ya está en `pyproject.toml`
+  (tag + CHANGELOG + release notes). No commitea código de producto.
+- **`pages.yml`**: publica `site/` (MkDocs) y `web/probar-ya/` en
+  `cacelass/cacelass.github.io` bajo `climasafe/documentacion/` y
+  `climasafe/probar-ya/`.
+
+### Publicar a GitHub Pages (docs + demo)
+
+La publicación es **cross-repo** y necesita un PAT sobre `cacelass/cacelass.github.io`:
+
+1. Crea un PAT (classic o fine-grained) con scope **`repo`** solo para
+   `cacelass/cacelass.github.io`.
+2. Añádelo como secreto **`PAGES_DEPLOY_TOKEN`** en
+   *Settings → Secrets and variables → Actions* del repo ANFAIA/ClimaSafe.
+3. El workflow `pages.yml` lo usa solo. Si el secreto no existe, el job se
+   salta con un aviso (no falla).
+
+Sin token (o para probar), el mismo deploy en local:
+
+```bash
+make pages-deploy        # copia site/ y web/probar-ya/ + commit + push al repo local
+make pages-deploy-dry    # igual pero sin push (PUSH=no) — deja el commit hecho y avisa
+```
+
+Variables: `PAGES_DIR` (default `~/Documentos/migithub/cacelass.github.io`),
+`PAGES_REMOTE` (default `origin`), `PAGES_REMOTE_URL` (clona el destino si el
+checkout no existe).
 
 ---
 

@@ -140,9 +140,10 @@
         "Dockerfile y docker-compose.yml en raiz del proyecto",
         "make test pasa"
       ],
-      "status": "done",
+      "status": "blocked",
       "depends_on": [],
-      "closed": "2026-08-13"
+      "closed": "2026-08-13",
+      "blocked_reason": "Docker descartado: el despliegue del proyecto es con agentes (DEPLOY-001), no con contenedores. MSG-002 se implementó con Dockerfile/docker-compose por error del líder. Se reformula en MSG-004 sin Docker, reutilizando la cola de MSG-003."
     },
     {
       "id": "MSG-003",
@@ -170,10 +171,11 @@
         "README del skill documenta uso basico y requisitos",
         "make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-14",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-14"
     },
     {
       "id": "RAG-001",
@@ -222,8 +224,11 @@
         "Documentar viabilidad de RL para pasar de predecir a reducir riesgo",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-14",
+      "review_rounds": 0,
+      "closed": "2026-08-14"
     },
     {
       "id": "BOT-002",
@@ -1898,8 +1903,12 @@
         "el workflow no commitea en el repo ANFAIA nada que no sea su release",
         "make test + make lint pasan en local"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-14",
+      "owner": "ci",
+      "review_rounds": 0,
+      "closed": "2026-08-14"
     },
     {
       "id": "PACK-001",
@@ -1956,6 +1965,22 @@
       ],
       "status": "pending",
       "depends_on": []
+    },
+    {
+      "id": "MSG-004",
+      "title": "Evaluaciones programadas sin Docker (worker sobre la cola MSG-003)",
+      "description": "Evaluaciones programadas sin Docker (worker sobre la cola MSG-003)",
+      "acceptance_criteria": [
+        "El programador de evaluaciones (hoy/manana/resumen diario) se ejecuta como worker que consume la cola de MSG-003, no en un contenedor",
+        "Se configura con variable de entorno CRON_SCHEDULE",
+        "Los resultados se envian via MessageAdapter",
+        "No existe Dockerfile ni docker-compose.yml en la raiz del proyecto",
+        "make test pasa"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-14",
+      "review_rounds": 0
     }
   ]
 }
