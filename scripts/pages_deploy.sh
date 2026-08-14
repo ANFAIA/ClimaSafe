@@ -87,7 +87,15 @@ if git diff --cached --quiet; then
     exit 0
 fi
 
-git commit -m "deploy(climasafe): actualiza documentacion y demo probar-ya"
+# El commit en el pages personal lo firma SIEMPRE un humano, nunca un bot:
+# - En CI (GitHub Actions), el actor que disparó el push (GITHUB_ACTOR).
+# - En local, la identidad git por defecto del usuario.
+if [[ -n "${GITHUB_ACTOR:-}" ]]; then
+    GIT_ID=( -c "user.name=$GITHUB_ACTOR" -c "user.email=${GITHUB_ACTOR_ID:-0}+${GITHUB_ACTOR}@users.noreply.github.com" )
+else
+    GIT_ID=()
+fi
+git "${GIT_ID[@]}" commit -m "deploy(climasafe): actualiza documentacion y demo probar-ya"
 
 if [[ "$PUSH" == "yes" ]]; then
     echo "▶ Push a $PAGES_REMOTE"

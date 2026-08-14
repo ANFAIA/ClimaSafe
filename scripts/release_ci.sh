@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 #
-# release_ci.sh — release semántico en CI: tag v0.0.x + CHANGELOG + release
-# notes. Lo usa .github/workflows/release.yml al llegar a main.
+# release_ci.sh — release semántico en CI: tag v0.0.x + GitHub Release con
+# release notes. Lo usa .github/workflows/release.yml al llegar a main.
 #
-# El bump de versión en pyproject.toml ya lo hace `harness finish` en local
-# (DocumentationAgent/GIT-001) antes del push: este script lee la versión,
+# El bump de versión en pyproject.toml lo hace `harness finish` en local
+# (DocumentationAgent/GIT-001) antes del push; este script lee la versión,
 # y si no existe el tag v<version> la publica. Idempotente: si el tag ya
 # existe, no hace nada.
 #
-# CI solo toca CHANGELOG.md + tag + release: NO commitea código de producto.
+# REGLA DE ORO: CI NO commitea NADA en el repo (ni CHANGELOG.md ni código).
+# Los commits los hace el humano/local con su identidad. El tag es LIGERO
+# (apunta al commit, sin objeto de tag ni autor), de modo que
+# github-actions[bot] jamás aparece como autor ni contribuyente. El changelog
+# de la versión se publica como cuerpo de la GitHub Release.
+#
+# Actualización OPCIONAL de CHANGELOG.md en LOCAL (solo modifica el fichero;
+# el commit lo hace el humano):
+#   UPDATE_CHANGELOG=yes bash scripts/release_ci.sh 0.0.71
 #
 # Uso:
 #   bash scripts/release_ci.sh                 # versión de pyproject.toml
@@ -26,13 +34,9 @@ if [[ -z "$VERSION" ]]; then
 fi
 TAG="v$VERSION"
 PUSH="${PUSH:-yes}"
-BRANCH="${BRANCH:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}}"
+UPDATE_CHANGELOG="${UPDATE_CHANGELOG:-no}"
 
-# Identidad de git: en CI usa el bot de GitHub; en local, la del usuario.
-GIT_NAME="${GIT_NAME:-github-actions[bot]}"
-GIT_EMAIL="${GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
-
-echo "▶ Release: versión $VERSION → tag $TAG (rama $BRANCH)"
+echo "▶ Release: versión $VERSION → tag $TAG"
 
 # Idempotencia: si el tag ya existe para esta versión, no hay nada que publicar.
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
@@ -50,32 +54,30 @@ else
     echo "▶ Primer release — rango: inicio del repo"
 fi
 
-CHANGELOG_SECTION="$(python3 scripts/release_notes.py "$RANGE" "$VERSION")"
 RELEASE_NOTES="$(python3 scripts/release_notes.py "$RANGE" "$VERSION" --release-notes)"
+CHANGELOG_SECTION="$(python3 scripts/release_notes.py "$RANGE" "$VERSION")"
 
-# Actualiza CHANGELOG.md — el único fichero del repo ANFAIA que toca CI.
-TMP="$(mktemp)"
-if [[ -f CHANGELOG.md ]]; then
-    { printf '# Changelog\n\n%s' "$CHANGELOG_SECTION"; tail -n +2 CHANGELOG.md; } > "$TMP"
-else
-    { printf '# Changelog\n\n%s' "$CHANGELOG_SECTION"; } > "$TMP"
+# CHANGELOG.md SOLO en local y SOLO modifica el fichero (sin commit): el
+# commit del CHANGELOG lo hace el humano con su identidad, nunca el bot.
+if [[ "$UPDATE_CHANGELOG" == "yes" ]]; then
+    TMP="$(mktemp)"
+    if [[ -f CHANGELOG.md ]]; then
+        { printf '# Changelog\n\n%s' "$CHANGELOG_SECTION"; tail -n +2 CHANGELOG.md; } > "$TMP"
+    else
+        { printf '# Changelog\n\n%s' "$CHANGELOG_SECTION"; } > "$TMP"
+    fi
+    mv "$TMP" CHANGELOG.md
+    echo "▶ CHANGELOG.md actualizado con la sección $TAG (sin commit — hazlo tú con tu identidad)."
 fi
-mv "$TMP" CHANGELOG.md
-echo "▶ CHANGELOG.md actualizado con la sección $TAG"
 
-git add CHANGELOG.md
-git -c "user.name=$GIT_NAME" -c "user.email=$GIT_EMAIL" \
-    commit -m "docs(release): CHANGELOG para $TAG"
-
-git -c "user.name=$GIT_NAME" -c "user.email=$GIT_EMAIL" \
-    tag -a "$TAG" -m "Release $TAG"
+# Tag LIGERO (sin objeto de tag ni autor): github-actions[bot] nunca firma.
+git tag "$TAG"
 
 if [[ "$PUSH" == "yes" ]]; then
-    echo "▶ Push del commit y del tag $TAG a $BRANCH"
-    git push origin "HEAD:$BRANCH"
+    echo "▶ Push del tag $TAG"
     git push origin "$TAG"
 else
-    echo "PUSH=no — commit y tag creados en local (sin push)."
+    echo "PUSH=no — tag creado en local (sin push)."
 fi
 
 # GitHub Release con las release notes agrupadas por tipo.
