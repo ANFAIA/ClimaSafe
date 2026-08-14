@@ -54,11 +54,12 @@ export async function cargarArtefactos(dir) {
 
 // Carga las sesiones ONNX (XGBoost_calor, RandomForest_frio, LSTM con su
 // external data). Devuelve {xgb, rf, lstm}.
+// IMPORTANTE: creación SECUENCIAL. El runtime wasm de onnxruntime-web no
+// soporta crear sesiones en paralelo (puede lanzar "Session already started"
+// en el arranque). Bug 2026-08-14.
 export async function cargarModelosOrt(dir, ort) {
-  const [xgb, rf] = await Promise.all([
-    ort.InferenceSession.create(`${dir}/XGBoost_calor.onnx`),
-    ort.InferenceSession.create(`${dir}/RandomForest_frio.onnx`),
-  ]);
+  const xgb = await ort.InferenceSession.create(`${dir}/XGBoost_calor.onnx`);
+  const rf = await ort.InferenceSession.create(`${dir}/RandomForest_frio.onnx`);
   // El LSTM se exportó con external data (LSTM_province_hybrid.onnx.data);
   // onnxruntime-web no la resuelve sola: hay que pasarla explícitamente.
   const modelBuf = await leerBytes(`${dir}/LSTM_province_hybrid.onnx`);

@@ -7,8 +7,8 @@
 //      recomendaciones y detalle.
 import { cargarArtefactos, cargarModelosOrt, leerJson } from "./artefactos.js";
 import { getOrt } from "./ort-runtime.js";
-import { fetchWeatherData, provinciaMasCercana, getProvinceCoords } from "./weather.js";
-import { predictEnsemble } from "./modelos.js";
+import { fetchWeatherData, provinciaMasCercana, getProvinceCoords } from "./weather.js?v=20260814";
+import { predictEnsemble } from "./modelos.js?v=20260814";
 import { generarRecomendaciones } from "./recomendaciones.js";
 import { nivelActividadDeDeporte } from "./personalizacion.js";
 
