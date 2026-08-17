@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,10 @@ from dotenv import load_dotenv
 
 EDADES = [25, 45, 65, 75, 85]
 SEXOS = ["hombre", "mujer"]
-GRASA = [None, 15, 25, 35]
+# QC LLM-015: más valores intermedios que la primera versión ([None, 15, 25, 35]).
+# Con solo cuatro valores de grasa, el mismo perfil base se repetía con el mismo
+# parte y el QC marcaba 184 pares casi idénticos (Jaccard > 0.9) en train.jsonl.
+GRASA = [None, 12, 15, 20, 25, 30, 35, 40]
 ACLIMATADO = [True, False]
 FOTOTIPO = ["II", "III", "IV"]
 SITUACION_SOCIAL = [
@@ -64,8 +68,11 @@ MEDICACION = [
     "antipsicoticos,diureticos_asa",
 ]
 ACTIVIDADES = ["reposo", "ligera", "moderada", "intensa"]
-DURACIONES = [0.5, 1.0, 2.0, 4.0, 6.0]
-HORAS = [8, 10, 12, 14, 16, 18]
+# QC LLM-015: la primera versión ([0.5, 1.0, 2.0, 4.0, 6.0] y horas 8-18) con
+# pocos valores repetía la misma ventana horaria para el mismo perfil, y el QC
+# los marcaba casi idénticos. Valores intermedios + horas más variadas.
+DURACIONES = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0]
+HORAS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 # Escenarios climáticos
 # Los siete escenarios originales eran de calor peninsular en julio, y de ahí salía
@@ -543,6 +550,17 @@ def formatear_input(perfil: dict, clima: dict | None = None) -> str:
 INSTRUCCION = "Predice el riesgo térmico para este perfil y da recomendaciones."
 
 
+def _input_normalizado(texto: str) -> str:
+    """Clave de deduplicación de inputs (misma normalización que el QC).
+
+    Minúsculas, espacios colapsados y números anonimizados: dos inputs con el
+    mismo perfil pero el parte a 41.5 °C vs 42.1 °C son el mismo ejemplo para
+    el aprendizaje, y sin anonimizar '41.5' y '42.1' contarían como distintos.
+    """
+    t = re.sub(r"\s+", " ", (texto or "").lower())
+    return re.sub(r"\d+(?:\.\d+)?", "#", t).strip()
+
+
 def generar_dataset(num_ejemplos: int, equilibrar: bool = True) -> list[dict]:
     """Genera dataset completo en formato Alpaca.
 
@@ -550,6 +568,13 @@ def generar_dataset(num_ejemplos: int, equilibrar: bool = True) -> list[dict]:
     tiene su cupo, hasta repartir `num_ejemplos` entre las clases que aparezcan.
     Sin esto el reparto lo decide el clima: la primera versión salió con 85 PELIGRO
     y 15 SEGURO, y un modelo entrenado ahí aprende a decir PELIGRO por defecto.
+
+    Correcciones QC LLM-015 (hallazgos reales sobre el dataset 2026-08):
+      - el input se descarta si el TEXTO formateado no lleva máx y UV (el val
+        actual tiene 97/100 pares con el parte incompleto a pesar del filtro
+        sobre el dict: el filtro comprobaba el dict, no lo que el modelo ve)
+      - los inputs ya emitidos no se repiten (dedupe con la misma normalización
+        que el QC: el train actual tiene 184 pares casi idénticos)
     """
     cupo = num_ejemplos  # sin equilibrar, el cupo por clase es el total
     if equilibrar:
@@ -561,7 +586,9 @@ def generar_dataset(num_ejemplos: int, equilibrar: bool = True) -> list[dict]:
     por_clase: dict[str, int] = {}
     descartados = 0
     incompletos = 0
+    duplicados = 0
     fallidos: list[str] = []
+    vistos: set[str] = set()
 
     # Se piden más perfiles de los necesarios: al descartar por cupo se gastan.
     for perfil in generar_perfiles(num_ejemplos * 4 if equilibrar else num_ejemplos):
@@ -583,6 +610,21 @@ def generar_dataset(num_ejemplos: int, equilibrar: bool = True) -> list[dict]:
         if not all(clima.get(c) is not None for c in campos_parte):
             incompletos += 1
             continue
+        texto = formatear_input(perfil, clima)
+        # Invariant sobre el TEXTO, no solo sobre el dict: el modelo aprende lo
+        # que ve escrito. Si el formateo no emite la máxima o el UV (p. ej. por
+        # un cambio futuro en formatear_input), el par no entra. QC LLM-015: el
+        # val de agosto tiene 97/100 inputs sin máx o sin UV.
+        if not all(marca in texto for marca in ("Tiempo en esa franja", "máx", "UV")):
+            incompletos += 1
+            continue
+        # Dedupe de inputs casi idénticos (QC LLM-015): repetir el mismo perfil
+        # con el mismo parte no añade información y enseña al modelo a repetirse.
+        clave = _input_normalizado(texto)
+        if clave in vistos:
+            duplicados += 1
+            continue
+        vistos.add(clave)
         clase = riesgo.get("clase", "DESCONOCIDO")
         if equilibrar and por_clase.get(clase, 0) >= cupo:
             descartados += 1
@@ -590,7 +632,7 @@ def generar_dataset(num_ejemplos: int, equilibrar: bool = True) -> list[dict]:
         por_clase[clase] = por_clase.get(clase, 0) + 1
         dataset.append({
             "instruction": INSTRUCCION,
-            "input": formatear_input(perfil, riesgo.get("clima")),
+            "input": texto,
             "output": formatear_respuesta(perfil, riesgo),
         })
 
@@ -598,7 +640,9 @@ def generar_dataset(num_ejemplos: int, equilibrar: bool = True) -> list[dict]:
         reparto = " · ".join(f"{k} {v}" for k, v in sorted(por_clase.items()))
         print(f"  Reparto por clase: {reparto}  ({descartados} descartados por cupo)")
     if incompletos:
-        print(f"  {incompletos} perfiles saltados por parte incompleto (sin media/máx/humedad/viento/UV)")
+        print(f"  {incompletos} perfiles saltados por parte incompleto (sin media/máx/humedad/viento/UV en el texto)")
+    if duplicados:
+        print(f"  {duplicados} inputs duplicados (mismo perfil y parte) saltados por dedupe")
     if fallidos:
         print(f"  {len(fallidos)} perfiles saltados por error de predicción:")
         for linea in fallidos[:5]:

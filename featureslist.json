@@ -1939,8 +1939,12 @@
         "generar_dataset.py incorpora al menos 3 correcciones que el script detecta en el dataset actual",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-17",
+      "owner": "llmqc",
+      "review_rounds": 0,
+      "closed": "2026-08-17"
     },
     {
       "id": "LLM-016",

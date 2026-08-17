@@ -189,6 +189,31 @@ class TestGenerarDataset:
         dataset = gd.generar_dataset(num_ejemplos=5, equilibrar=False)
         assert dataset == []
 
+    # ── Correcciones QC LLM-015 ──────────────────────────────────────────────
+
+    def test_descarta_input_cuyo_texto_no_lleva_max_o_uv(self, monkeypatch):
+        # Invariant sobre el TEXTO, no solo sobre el dict: si formatear_input no
+        # emite la máxima o el UV (hallazgo real: 97/100 pares del val de agosto),
+        # el par no entra aunque el dict diga que está completo.
+        clima = {"t_media": 20.0, "t_max": 21.0, "rh": 60, "viento_kmh": 5.0, "uv": 4.0}
+        monkeypatch.setattr(gd, "predecir", lambda perfil: _riesgo_fake(clima))
+        monkeypatch.setattr(gd, "formatear_input",
+                            lambda perfil, clima: "Edad: 45. Sin parte completo.")
+        dataset = gd.generar_dataset(num_ejemplos=5, equilibrar=False)
+        assert dataset == []
+
+    def test_dedupe_descarta_inputs_ya_emitidos(self, monkeypatch, capsys):
+        # Hallazgo real del QC: 184 pares casi idénticos en train.jsonl. Si el
+        # mismo perfil con el mismo parte se repite, solo entra el primero.
+        clima = {"t_media": 20.0, "t_max": 21.0, "rh": 60, "viento_kmh": 5.0, "uv": 4.0}
+        monkeypatch.setattr(gd, "predecir", lambda perfil: _riesgo_fake(clima))
+        # 10 perfiles idénticos + el mismo clima → 9 inputs duplicados.
+        perfiles = [_perfil() for _ in range(10)]
+        monkeypatch.setattr(gd, "generar_perfiles", lambda n: perfiles)
+        dataset = gd.generar_dataset(num_ejemplos=10, equilibrar=False)
+        assert len(dataset) == 1
+        assert "9 inputs duplicados" in capsys.readouterr().out
+
 
 # ── predict_ensemble con weather precargado ─────────────────────────────────
 
