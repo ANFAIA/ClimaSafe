@@ -1956,8 +1956,12 @@
         "conclusion practica para este proyecto (que base usar en el proximo fine-tuning y como mitiga las alucinaciones)",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-17",
+      "owner": "llmstudy",
+      "review_rounds": 0,
+      "closed": "2026-08-17"
     },
     {
       "id": "MCP-004",

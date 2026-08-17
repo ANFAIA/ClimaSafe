@@ -48,6 +48,9 @@ defecto**: si está instalado, `mejor_disponible()` lo prioriza.
 
 ## Modelo base vs modelo de instrucciones — conclusiones
 
+> Estudio completo: [`documentacion/llm/base-vs-instruct.md`](../documentacion/llm/base-vs-instruct.md)
+> — incluye la comparación real de salidas y la decisión para el próximo LoRA.
+
 Hay dos variantes del mismo modelo:
 
 - **Modelo base (Qwen3 base):** entrenado con billones de textos para predecir
