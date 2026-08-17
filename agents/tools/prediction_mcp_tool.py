@@ -1404,6 +1404,7 @@ def _html_vista_predict_risk(result: dict) -> str:
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.tools.base import ToolAnnotations
     from mcp.types import ImageContent
 
     _mcp = FastMCP("ClimaSafeAI Predicción de Riesgo")
@@ -1418,7 +1419,12 @@ try:
             return html_vista_sin_resultado()
         return _html_vista_predict_risk(ultimo)
 
-    @_mcp.tool(meta={"ui": {"resourceUri": _UI_RESOURCE_URI}})
+    @_mcp.tool(
+        meta={"ui": {"resourceUri": _UI_RESOURCE_URI}},
+        annotations=ToolAnnotations(
+            title="Predecir riesgo cardiovascular", readOnlyHint=True
+        ),
+    )
     @_acceso_publico
     def predict_risk_mcp(
         lat: float,
@@ -1493,7 +1499,9 @@ try:
         _UI_ESTADO["ultimo"] = result
         return json.dumps(result, indent=2, default=str, ensure_ascii=False)
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(title="Listar usuarios", readOnlyHint=True)
+    )
     @_requiere_identidad("admin")
     def listar_usuarios_mcp() -> str:
         """Lista los perfiles guardados: uid, alias, edad, sexo. SOLO ADMINISTRACIÓN.
@@ -1519,7 +1527,9 @@ try:
             )
         return json.dumps(datos, indent=2, ensure_ascii=False, default=str)
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(title="Cargar perfil", readOnlyHint=True)
+    )
     @_requiere_identidad("perfil_propio")
     def cargar_perfil_mcp(uid: Optional[str] = None) -> str:
         """Carga TU perfil. Sin `uid` carga el del token con el que llamas.
@@ -1540,7 +1550,11 @@ try:
             return json.dumps({"error": ERROR_AJENO}, ensure_ascii=False)
         return json.dumps(_perfil_publico(perfil), indent=2, ensure_ascii=False, default=str)
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(
+            title="Cargar perfil por chat de Telegram", readOnlyHint=True
+        )
+    )
     @_requiere_identidad("perfil_propio")
     def cargar_perfil_por_chat_id_mcp(chat_id: str) -> str:
         """Carga TU perfil a partir de tu chat_id de Telegram.
@@ -1568,7 +1582,9 @@ try:
         datos["encontrado"] = True
         return json.dumps(datos, indent=2, ensure_ascii=False, default=str)
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(title="Vincular chat de Telegram")
+    )
     @_requiere_identidad("perfil_propio", sujeto=("uid",))
     @_requiere_token_escritura
     def vincular_chat_id_mcp(chat_id: str, uid: Optional[str] = None) -> str:
@@ -1605,7 +1621,7 @@ try:
             ensure_ascii=False,
         )
 
-    @_mcp.tool()
+    @_mcp.tool(annotations=ToolAnnotations(title="Crear perfil"))
     @_requiere_identidad("identidad")
     @_requiere_token_escritura
     def crear_perfil_mcp(
@@ -1677,7 +1693,9 @@ try:
             ensure_ascii=False,
         )
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(title="Listar rutinas", readOnlyHint=True)
+    )
     @_requiere_identidad("perfil_propio")
     def listar_rutinas_mcp(
         alias: Optional[str] = None,
@@ -1703,7 +1721,7 @@ try:
             )
         return json.dumps(rutinas, indent=2, ensure_ascii=False, default=str)
 
-    @_mcp.tool()
+    @_mcp.tool(annotations=ToolAnnotations(title="Crear rutina"))
     @_requiere_identidad("perfil_propio")
     @_requiere_token_escritura
     def crear_rutina_mcp(
@@ -1771,7 +1789,9 @@ try:
             ensure_ascii=False,
         )
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(title="Borrar rutina", destructiveHint=True)
+    )
     @_requiere_identidad("perfil_propio")
     @_requiere_token_escritura
     def borrar_rutina_mcp(
@@ -1804,7 +1824,9 @@ try:
             {"success": True, "id": rid, "mensaje": "Rutina eliminada"}, ensure_ascii=False
         )
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(title="Configurar hora de aviso")
+    )
     @_requiere_identidad("perfil_propio")
     @_requiere_token_escritura
     def configurar_hora_aviso_mcp(
@@ -1870,7 +1892,9 @@ try:
             ensure_ascii=False,
         )
 
-    @_mcp.tool()
+    @_mcp.tool(
+        annotations=ToolAnnotations(title="Riesgo de rutinas del día", readOnlyHint=True)
+    )
     @_requiere_identidad("perfil_propio")
     def riesgo_rutinas_dia_mcp(
         alias: Optional[str] = None,
@@ -1978,7 +2002,12 @@ try:
             default=str,
         )
 
-    @_mcp.tool(structured_output=False)
+    @_mcp.tool(
+        structured_output=False,
+        annotations=ToolAnnotations(
+            title="Gráfica de riesgo horario", readOnlyHint=True
+        ),
+    )
     @_acceso_publico
     def grafica_riesgo_horario_mcp(
         lat: float,

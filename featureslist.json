@@ -1975,8 +1975,12 @@
         ".mcp.json y documentacion/componentes.md reflejan los cambios",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-17",
+      "owner": "mcp",
+      "review_rounds": 0,
+      "closed": "2026-08-17"
     },
     {
       "id": "MSG-004",

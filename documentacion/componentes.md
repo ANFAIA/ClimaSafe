@@ -28,6 +28,17 @@ uno de predicción (predecir riesgo, crear, cargar y vincular perfiles) y otro
 de factores (consultar la base de factores de riesgo, buscarlos, aprobarlos
 y hacer búsqueda semántica sobre la base de conocimiento).
 
+Adaptados al spec MCP **2025-06-18+** (SDK `mcp>=1.28.1`):
+
+- **Tool annotations**: todas las tools llevan `title`; las de lectura llevan
+  `readOnlyHint` y las destructivas (`borrar_rutina_mcp`, `reject_factor_mcp`)
+  llevan `destructiveHint`. Auditoría completa en
+  `documentacion/arquitectura/auditoria-mcp-espec.md`.
+- **Transporte**: ambos soportan `--stdio` (cliente `.mcp.json`) y **streamable
+  HTTP** además de él. `make mcp-http` sirve la predicción en
+  `http://localhost:8101/mcp` y `make mcp-factors` los factores en
+  `http://localhost:8100/mcp`.
+
 ## RAG vectorial
 
 Los factores de riesgo y su documentación se indexan con sqlite-vec
