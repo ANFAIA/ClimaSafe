@@ -227,7 +227,7 @@ mcp:
 	$(UVRUN) python -m agents.tools.prediction_mcp_tool
 
 mcp-http:
-	@echo "▶  MCP Server — HTTP plano en http://localhost:8101/mcp"
+	@echo "▶  MCP Server — HTTP plano en http://localhost:8101/mcp (Streamable HTTP)"
 	$(UVRUN) python -m agents.tools.prediction_mcp_tool --insecure
 
 mcp-token:
@@ -249,7 +249,7 @@ mcp-web: mcp-http
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 mcp-factors:
-	@echo "▶  MCP Server — Factores en http://localhost:8100/sse"
+	@echo "▶  MCP Server — Factores en http://localhost:8100/mcp (Streamable HTTP)"
 	$(UVRUN) python -m agents.tools.factors_mcp_tool
 
 USER_BIN := $(shell echo $${HOME:-~})/.local/bin
@@ -297,11 +297,12 @@ profile:
 #  Calidad de código
 # ─────────────────────────────────────────────────────────────────────────────
 test:
-	$(UVRUN) pytest tests/ -v
+	@mkdir -p .pytest_tmp
+	TMPDIR="$(CURDIR)/.pytest_tmp" $(UVRUN) pytest tests/ -v
 
 smoke:
 	@echo "▶  Test de humo — pipeline con datos sintéticos"
-	$(UVRUN) pytest tests/ -v -m smoke --tb=short
+	TMPDIR="$(CURDIR)/.pytest_tmp" $(UVRUN) pytest tests/ -v -m smoke --tb=short
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Arnés — la puerta y el backlog (ver AGENTS.md)

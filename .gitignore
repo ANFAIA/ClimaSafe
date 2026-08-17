@@ -139,6 +139,8 @@ docs/_build/
 
 # --- MkDocs (DOC-005) ---
 site/
+# pytest basetemp (fuera de /tmp para no llenarlo)
+.pytest_tmp/
 
 # --- Misc ---
 *.manifest

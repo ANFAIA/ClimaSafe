@@ -298,7 +298,7 @@ else
   # en los agentes para trabajar, así que si `agents/tests/` está roja la puerta
   # también lo está — si no, el arnés se autoverifica con las herramientas rotas.
   TEST_LOG="$(mktemp)"
-  if $RUNNER pytest tests/ agents/tests/ -q --no-header >"$TEST_LOG" 2>&1; then
+  if TMPDIR="$ROOT/.pytest_tmp" $RUNNER pytest tests/ agents/tests/ -q --no-header >"$TEST_LOG" 2>&1; then
     SUMMARY="$(grep -Eo '[0-9]+ passed[^=]*' "$TEST_LOG" | tail -1 | sed 's/[[:space:]]*$//')"
     ok "pytest" "${SUMMARY:-suite en verde}"
   else
