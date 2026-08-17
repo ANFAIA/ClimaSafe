@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%2F%20RandomForest-orange)
 ![Tracking](https://img.shields.io/badge/Experiment%20Tracking-MLflow-blue?logo=mlflow)
-![Version](https://img.shields.io/badge/Version-0.0.70-green)
+![Version](https://img.shields.io/badge/Version-0.0.72-green)
 ![Author](https://img.shields.io/badge/Author-Alejandro%20Cancelas%20Chapela-blueviolet)
 ![Template](https://img.shields.io/badge/Generado%20con-dskit-58a6ff?logo=github)
 
@@ -11,7 +11,7 @@
 
 **Tipo de ML:** `supervisado`  
 **Autor:** Alejandro Cancelas Chapela  
-**Versión:** 0.0.70 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
+**Versión:** 0.0.72 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
 
 
 ClimaSafe estima, para cada **provincia y día**, el nivel de riesgo por temperatura
@@ -20,24 +20,37 @@ ERA5, para anticipar días peligrosos antes de que ocurran. Es un sistema de **a
 se prioriza **no perderse días de riesgo** (recall), asumiendo más falsas alarmas antes
 que un aviso de menos. (La radiación UV queda como línea futura; hoy cubre calor y frío.)
 
+### Probar online
+
+Sin instalar nada:
+
+- **Demo interactiva** — [probar-ya](https://cacelass.github.io/climasafe/probar-ya/):
+  elige provincia y perfil y mira el riesgo.
+- **Documentación** — [climasafe/documentacion](https://cacelass.github.io/climasafe/documentacion/).
+- **Home del proyecto** — [cacelass.github.io](https://cacelass.github.io/).
+
 ### Enfoque de modelado
 
-- **Target**: percentiles de mortalidad atribuida de MoMo (X30 calor / X31 frío),
-  calculados **por provincia** para no penalizar a las provincias pequeñas.
-- **Features**: índices de sensación térmica (Heat Index, WBGT, Wind Chill) de la hora de
-  mayor riesgo del día, + **distribución diaria** de las 24 h (media/desv/mín-máx, horas
-  sobre/bajo umbral), + **persistencia temporal** (lags y medias móviles del pasado, p. ej.
-  `wind_chill_mean_roll7`, `dias_consec_bajo_umbral`) — el frío es acumulativo, así que la
-  *racha* de días fríos pesa más que el día suelto.
-- **Split por fecha** (no aleatorio) para no filtrar días de la misma ola entre train y test.
-- **Tres modelos**: **XGBoost (calor)**, **RandomForest (frío)** y **LSTM province_hybrid**
-  (LSTM + embedding provincia + INE + features diarias, tarea multi-tarea calor/frío).
-  Elegidos por **recall de las clases de riesgo** (`Rec_riesgo`), no por accuracy.
-- Seguimiento con **MLflow** y validación cruzada **temporal por años**.
-- Rec_riesgo actual (con umbrales calibrados): XGBoost **0.668** (calor), RF **0.612** (frío),
-  LSTM **0.737** calor / **0.708** frío.
-- Detalle y justificación de cada decisión en
-  [`documentacion/ml/conclusiones_modelos.md`](documentacion/ml/conclusiones_modelos.md).
+Riesgo diario **por provincia** a partir de ERA5: el target son percentiles de
+mortalidad atribuida de MoMo (X30 calor / X31 frío), calculados por provincia
+para no penalizar a las pequeñas. Las features combinan sensación térmica
+(Heat Index, WBGT, Wind Chill) de la hora de mayor riesgo, distribución diaria
+de las 24 h (media/desv/mín-máx, horas sobre/bajo umbral) y **persistencia
+temporal** (lags y medias móviles) — el frío es acumulativo, así que la *racha*
+de días fríos pesa más que el día suelto. Split **por fecha** (no aleatorio)
+para no filtrar días de la misma ola entre train y test, seguimiento con
+**MLflow**, validación cruzada temporal por años y modelos elegidos por
+**recall de las clases de riesgo** (`Rec_riesgo`), no por accuracy.
+
+| Modelo | Rol | Rec_riesgo (umbrales calibrados) |
+|--------|-----|----------------------------------|
+| XGBoost | calor | **0.668** |
+| RandomForest | frío | **0.612** |
+| LSTM province_hybrid | multi-tarea calor/frío (LSTM + embedding provincia + INE + features diarias) | **0.737** calor / **0.708** frío |
+
+Detalle y justificación de cada decisión en
+[`documentacion/ml/conclusiones_modelos.md`](documentacion/ml/conclusiones_modelos.md)
+y en [`documentacion/ml/lstm_hibrida.md`](documentacion/ml/lstm_hibrida.md).
 
 ---
 
@@ -186,22 +199,19 @@ curl -s https://generativelanguage.googleapis.com/v1beta/openai/models \
 
 ## El bot de Telegram
 
-El bot actual es **determinista** (sin LLM externo): ejecuta el pipeline real
+Bot **determinista** (sin LLM externo): ejecuta el pipeline real
 (`predict_ensemble`) y responde con la clase de riesgo y recomendaciones.
+El antiguo bot conversacional (`spacebot`) se eliminó en BOT-002; la capa
+conversacional hoy la sirven las **MCP tools** y el LLM local opcional
+(Qwen 2.5 + RAG). Setup completo en `skills/climasafeai/SKILL.md` y detalle
+de todos los componentes en [`documentacion/componentes.md`](documentacion/componentes.md).
 
-```bash
-make bot-start      # arranca el bot (carga .env por ti)
-# o directamente:
-uv run python -m climasafeai.bot.telegram_bot
-```
+| Comando | Qué hace |
+|---------|----------|
+| `make bot-start` | Arranca el bot (carga `.env` por ti) |
+| `uv run python -m climasafeai.bot.telegram_bot` | Arranque directo |
 
 Requiere `TELEGRAM_BOT_TOKEN` en `.env` (te lo da @BotFather).
-
-> **Nota:** el antiguo bot conversacional (`spacebot`) se eliminó en BOT-002 y
-> sus targets de `make` ya no existen. La capa conversacional hoy la sirven las
-> **MCP tools** (`agents.tools.prediction_mcp_tool`, 12 tools: predicción,
-> perfiles, rutinas, avisos) y el LLM local opcional (Qwen 2.5 + RAG). El skill
-> con el setup completo está en `skills/climasafeai/SKILL.md`.
 
 ---
 

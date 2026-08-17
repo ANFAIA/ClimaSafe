@@ -4,6 +4,7 @@
         lab notebook tb \
         docs \
         pages-deploy pages-deploy-dry \
+        build release \
         profile \
         mlflow \
         monitor tune serve query \
@@ -66,6 +67,10 @@ help:
 	@echo "    make lint           ruff check (solo lectura, sin modificar)"
 	@echo "    make format         ruff format (aplica cambios en sitio)"
 	@echo "    make typecheck      chequeo de tipos con ty (informativo, no bloquea)"
+	@echo ""
+	@echo "  Empaquetado y release"
+	@echo "    make build           uv build → dist/*.whl (wheel instalable)"
+	@echo "    make release         git_agent: changelog + tag + bump (sin push)"
 	@echo ""
 	@echo "  Jupyter"
 	@echo "    make lab            JupyterLab  (puerto 8888)"
@@ -409,6 +414,25 @@ pages-deploy:
 
 pages-deploy-dry:
 	PUSH=no bash scripts/pages_deploy.sh
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Empaquetado y release
+#  - build    → `uv build` genera dist/*.whl + dist/*.tar.gz (wheel instalable)
+#  - release  → delega en el git_agent del arnés: changelog + tag + bump.
+#               Lee la versión de pyproject.toml (fuente única) y llama a
+#               `git tag_release`, que hace bump en pyproject.toml/README.md,
+#               actualiza CHANGELOG.md y crea el tag v<version> en un único
+#               commit. El target NO ejecuta git por su cuenta (solo el
+#               git_agent escribe el historial) y NO hace push — eso lo
+#               decide el humano.
+# ─────────────────────────────────────────────────────────────────────────────
+build:
+	uv build
+
+release:
+	@echo "▶  Release vía git_agent (changelog + tag + bump) — sin push."
+	@$(UVRUN) python -m agents --json run git tag_release \
+		--version "$$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Limpieza

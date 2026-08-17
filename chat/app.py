@@ -58,7 +58,31 @@ _state: dict[str, Any] = {
 _PROJECT = "ClimaSafeAI"
 _ML_TYPE = "supervisado"
 _TASK_TYPE = "clasificacion"
-_VERSION = "0.0.1"
+
+
+def _resolve_version() -> str:
+    """Versión única (PACK-001): pyproject.toml es la fuente de verdad.
+
+    La sube `harness finish` en cada cierre. Se prefiere la versión instalada
+    del paquete; si no está instalado se lee pyproject.toml; si nada funciona,
+    "0.0.0". Nada hardcodeado.
+    """
+    try:
+        from importlib.metadata import version as _pkg_version
+
+        return _pkg_version("climasafeai")
+    except Exception:
+        pass
+    try:
+        import tomllib
+
+        with open(PROJECT_DIR / "pyproject.toml", "rb") as fh:
+            return tomllib.load(fh)["project"]["version"]
+    except Exception:
+        return "0.0.0"
+
+
+_VERSION = _resolve_version()
 
 
 # ---------------------------------------------------------------------------

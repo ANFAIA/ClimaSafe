@@ -26,10 +26,23 @@ echo ' | |__| | ____) || . \  | |   | |'
 echo ' |_____/ |_____/ |_|\_\ |_|   |_|'
 
 printf "${RESET}"
+fi
+
+# ── Versión única (PACK-001) ─────────────────────────────────────────────────
+# pyproject.toml es la fuente de verdad (la sube `harness finish` en cada
+# cierre). tomllib si hay python3; si no, un parseo simple con grep/sed.
+VERSION="0.0.0"
+if [ -f "/app/pyproject.toml" ]; then
+    VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('/app/pyproject.toml','rb'))['project']['version'])" 2>/dev/null || true)"
+    if [ -z "${VERSION}" ]; then
+        VERSION="$(grep -m1 '^version' /app/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null || true)"
+    fi
+    VERSION="${VERSION:-0.0.0}"
+fi
 
 printf "\n"
 printf "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
-printf "  ${BOLD}ClimaSafeAI${RESET}  ·  v0.0.1\n"
+printf "  ${BOLD}ClimaSafeAI${RESET}  ·  v${VERSION}\n"
 printf "  ML type : ${YELLOW}supervisado${RESET}\n"
 printf "  Plantilla: ${BLUE}https://github.com/cacelass/dskit${RESET}\n"
 printf "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"

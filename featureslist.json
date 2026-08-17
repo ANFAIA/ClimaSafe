@@ -1921,8 +1921,12 @@
         "el README queda con badges correctos, menos densidad y una seccion Probar online apuntando al home",
         "make test + make lint pasan"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-17",
+      "owner": "pack",
+      "review_rounds": 0,
+      "closed": "2026-08-17"
     },
     {
       "id": "LLM-015",
@@ -1977,10 +1981,11 @@
         "No existe Dockerfile ni docker-compose.yml en la raiz del proyecto",
         "make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-14",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-14"
     }
   ]
 }

@@ -1,0 +1,15 @@
+# PACK-001 — el sdist no debe caminar los ~19 GB de datos/modelos/notebooks
+# (128k ficheros): el build de setuptools tarda una eternidad en findall().
+# El wheel solo empaqueta climasafeai* y agents* (ver [tool.setuptools.packages.find]).
+prune data
+prune models
+prune notebooks
+prune reports
+prune site
+prune dist
+prune .venv
+prune .git
+prune .pytest_cache
+prune graphify-out
+prune logs
+prune agents/workspace/audit
