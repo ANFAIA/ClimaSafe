@@ -4428,3 +4428,22 @@
 
 - add factores_riesgo.json (force-add, gitignored)
 
+## [Unreleased] — 2026-08-18
+
+### Añadido
+
+- cierra MCP-004
+- cierra LLM-016
+- cierra LLM-015
+- cierra PACK-001
+- aviso medico-legal emergente + disclaimer permanente en demo y web del proyecto
+
+### Corrección de bugs
+
+- basetemp de pytest fuera de /tmp (se llenaba y rompia la puerta de forma no determinista)
+- trackea overrides/main.html (el *.html del gitignore lo ignoraba — rompia mkdocs en CI)
+
+### Mantenimiento
+
+- arregla make lint (ruff check verde, format separado), suite tests de CI/CD, boton a riesgo-personalizacion y movil en la demo
+

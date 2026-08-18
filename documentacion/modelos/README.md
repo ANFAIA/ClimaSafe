@@ -20,6 +20,7 @@ para exploración en notebook.
 
 | Modelo | Carpeta | Estado | Prioridad | Comentario |
 |--------|---------|--------|-----------|------------|
+| **Bayesiano jerárquico por provincia** | [`bayes_jerarquico.md`](bayes_jerarquico.md) | Contraste | Media | Partial pooling (efectos aleatorios por provincia) con Metropolis-Hastings propio, sin pymc. Da intervalos de credibilidad; decisión BAYES-001: se queda como contraste, no entra en el ensemble |
 | PatchTST (Transformer) | [`transformers/`](transformers/) | Pendiente | Baja | Forecasting series temporales |
 | TimeSFormer | [`transformers/`](transformers/) | Pendiente | Baja | Forecasting con atención temporal |
 | GNN (STGCN, GraphWaveNet) | [`gnn/`](gnn/) | Pendiente | Baja | Correlación espacial entre provincias |
