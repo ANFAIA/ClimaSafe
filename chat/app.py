@@ -208,7 +208,7 @@ def _welcome_message() -> str:
         f"|---|---|\n"
         f"| **Tipo ML** | `supervisado` |\n"
         f"| **Tarea** | `{_TASK_TYPE}` |\n"
-        f"| **Versión** | `0.0.1` |\n\n"
+        f"| **Versión** | `{_VERSION}` |\n\n"
         f"{status_line}\n\n"
         f"---\n\n"
         f"**Comandos disponibles:**\n"
@@ -403,7 +403,7 @@ async def process_message(msg: str, session: dict) -> str:
 app = FastAPI(
     title="ClimaSafeAI — Chat",
     description="Interfaz web de chat para ClimaSafeAI. Generado por dskit.",
-    version="0.0.1",
+    version=_VERSION,
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

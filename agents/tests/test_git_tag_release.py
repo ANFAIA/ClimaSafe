@@ -65,6 +65,34 @@ def test_tag_release_refuses_to_overwrite_existing_tag(context):
     assert not result.success
 
 
+def test_tag_release_changelog_etiqueta_version_del_tag(context):
+    """DEPLOY-001: el release escribe '## [v<version>]' en el CHANGELOG, no '[Unreleased]'."""
+    _write_versioned_files(context.root)
+    subprocess.run(["git", "add", "-A"], cwd=context.root, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "chore: setup"], cwd=context.root, check=True)
+
+    agent = GitAgent(context=context)
+    result = agent.tag_release(version="1.1.0")
+
+    assert result.success
+    changelog = (context.root / "CHANGELOG.md").read_text()
+    assert "## [v1.1.0]" in changelog
+    assert "## [Unreleased]" not in changelog
+
+
+def test_generate_changelog_default_sigue_siendo_unreleased(context):
+    """DEPLOY-001: sin changelog_version, la entrada sigue siendo [Unreleased]."""
+    (context.root / "mi_paquete" / "cambio.py").write_text("x = 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=context.root, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "feat: cambio normal"], cwd=context.root, check=True)
+
+    agent = GitAgent(context=context)
+    result = agent.generate_changelog()
+
+    assert result.success
+    assert "## [Unreleased]" in result.data
+
+
 def test_tag_release_generates_cicd_when_missing(context):
     (context.root / "Makefile").write_text("test:\n\t@echo test\nlint:\n\t@echo lint\n")
     _write_versioned_files(context.root)

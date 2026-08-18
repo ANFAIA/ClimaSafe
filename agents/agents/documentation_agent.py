@@ -72,14 +72,20 @@ class DocumentationAgent(BaseAgent):
             data={"all_targets": sorted(targets), "undocumented": undocumented}, warnings=warnings,
         )
 
-    def update_changelog(self, *, since_tag: str | None = None, dry_run: bool = True) -> AgentResult:
+    def update_changelog(self, *, since_tag: str | None = None, dry_run: bool = True,
+                         changelog_version: str | None = None) -> AgentResult:
         """
         Genera una entrada de changelog (vía GitAgent) e, si `dry_run=False`,
         la inserta en `CHANGELOG.md` justo después de la cabecera del
         archivo (antes de la primera entrada de versión existente).
+
+        `changelog_version` (solo lo pasa `tag_release`) etiqueta la entrada
+        con la versión del release en vez de `[Unreleased]`.
         """
         git_agent = GitAgent(context=self.ctx)
-        changelog_result = git_agent.run("generate_changelog", since_tag=since_tag)
+        changelog_result = git_agent.run(
+            "generate_changelog", since_tag=since_tag, changelog_version=changelog_version,
+        )
         if not changelog_result.success or not changelog_result.data:
             return AgentResult(
                 changelog_result.success, self.name, "update_changelog",

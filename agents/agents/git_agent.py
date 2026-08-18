@@ -140,7 +140,17 @@ class GitAgent(BaseAgent):
             warnings=warnings,
         )
 
-    def generate_changelog(self, *, since_tag: str | None = None, max_count: int = 100) -> AgentResult:
+    def generate_changelog(self, *, since_tag: str | None = None, max_count: int = 100,
+                           changelog_version: str | None = None) -> AgentResult:
+        """
+        Genera una entrada de changelog con los commits desde el último tag
+        (o desde el inicio del repo si no hay ninguno).
+
+        Si `changelog_version` se pasa (lo hace `tag_release`), la entrada se
+        etiqueta con esa versión (`## [vX.Y.Z] — fecha`) en vez del
+        `## [Unreleased]` por defecto: un release que crea tag debe dejar la
+        versión reflejada en el CHANGELOG, no una entrada "Unreleased" eterna.
+        """
         guard = self._guard_repo("generate_changelog")
         if guard:
             return guard
@@ -167,7 +177,8 @@ class GitAgent(BaseAgent):
             "revert": "### Reversiones",
         }
 
-        lines = [f"## [Unreleased] — {date.today().isoformat()}", ""]
+        version_label = f"v{changelog_version}" if changelog_version else "Unreleased"
+        lines = [f"## [{version_label}] — {date.today().isoformat()}", ""]
         for commit_type, title in section_titles.items():
             if commit_type in grouped:
                 lines.append(title)
@@ -256,12 +267,17 @@ class GitAgent(BaseAgent):
             warnings=diff_result.warnings,
         )
 
-    def commit_with_changelog(self, *, message: str, since_tag: str | None = None) -> AgentResult:
+    def commit_with_changelog(self, *, message: str, since_tag: str | None = None,
+                              changelog_version: str | None = None) -> AgentResult:
         """
         Actualiza CHANGELOG.md (delegando en `DocumentationAgent`, no
         reimplementando esa lógica aquí — ver Filosofía en `agents/README.md`:
         "no tienen que ser independientes, pueden ayudarse entre sí") y hace
         `git add` + `git commit` incluyendo ese cambio en el mismo commit.
+
+        `changelog_version` se pasa solo desde `tag_release` (etiqueta la
+        entrada del changelog con la versión del tag); un commit normal deja
+        la entrada como `[Unreleased]`.
 
         Import perezoso de `DocumentationAgent` dentro del método (no a nivel
         de módulo): `documentation_agent.py` ya importa `GitAgent` a nivel de
@@ -277,7 +293,9 @@ class GitAgent(BaseAgent):
         from agents.agents.documentation_agent import DocumentationAgent
 
         doc_agent = DocumentationAgent(context=self.ctx)
-        changelog_result = doc_agent.run("update_changelog", since_tag=since_tag, dry_run=False)
+        changelog_result = doc_agent.run(
+            "update_changelog", since_tag=since_tag, dry_run=False, changelog_version=changelog_version,
+        )
 
         warnings = list(changelog_result.warnings)
         if changelog_result.success and changelog_result.data:
@@ -374,7 +392,9 @@ class GitAgent(BaseAgent):
                     warnings.append(f"'{filename}' tiene problemas de CI sin resolver: {validation.data['problems']}")
 
         commit_message = message or f"chore(release): {version}"
-        commit_result = self.commit_with_changelog(message=commit_message, since_tag=since_tag)
+        commit_result = self.commit_with_changelog(
+            message=commit_message, since_tag=since_tag, changelog_version=version,
+        )
         warnings.extend(commit_result.warnings)
         if not commit_result.success:
             return AgentResult(
