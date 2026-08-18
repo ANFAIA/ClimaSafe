@@ -4510,3 +4510,18 @@
 - cierra BAYES-001 y DEPLOY-001
 - arregla make lint (ruff check verde, format separado), suite tests de CI/CD, boton a riesgo-personalizacion y movil en la demo
 
+## [Unreleased] — 2026-08-18
+
+### Añadido
+
+- cierra DEPLOY-001
+- cierra BAYES-001
+
+### Documentación
+
+- cierra DOC-002
+
+### Mantenimiento
+
+- cierra BAYES-001 y DEPLOY-001
+

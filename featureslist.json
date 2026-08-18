@@ -464,8 +464,11 @@
         "La web sigue funcionando con backend para quien no pueda ejecutar WASM",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-18",
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "HOST-001",

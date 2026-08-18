@@ -66,6 +66,33 @@ cp -r web/probar-ya ~/Documentos/migithub/cacelass.github.io/climasafe/probar-ya
 
 El enlace «← index» apunta a `../index.html` (raíz del sitio).
 
+## Qué se queda en el servidor y por qué
+
+La demo es estática: la predicción corre entera en el navegador. Lo que **no**
+se porta (y por qué) está desarrollado en
+`documentacion/wasm/estudio_wasm.md` (WEB-002):
+
+- **Datos meteorológicos**: se obtienen de Open-Meteo (CORS) con fallback
+  offline a `scenarios.json`. La base de datos meteorológica del servidor no
+  se expone.
+- **Perfiles en SQLite**: son datos personales de salud; la demo no persiste
+  nada (solo localStorage para el aviso médico). El guardado de perfiles sigue
+  siendo del servidor.
+- **Base de factores mantenida**: la demo usa un snapshot estático
+  (`models/factores_riesgo.json`); la fuente de verdad y su actualización
+  viven en el servidor.
+- **Modelos joblib/.pt y entrenamiento**: solo llega al navegador el artefacto
+  ONNX ya validado; el reentrenamiento es del servidor/CI.
+- **UV index (OpenUV)**: requiere API key → `uv_index=null` en la demo.
+
+## Sin llamadas al backend (criterio WEB-002)
+
+La demo no llama a ningún endpoint propio: solo `fetch` a Open-Meteo y a
+ficheros locales. Verificación en vivo: abrir DevTools → pestaña **Red**,
+pulsar «Predecir» y comprobar que solo aparecen peticiones a ficheros
+estáticos locales y a `api.open-meteo.com`. Automatizable con
+`tests/test_demo_sin_backend.py`.
+
 ## Test de paridad (node)
 
 ```bash
