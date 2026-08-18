@@ -21,6 +21,7 @@ Estructura general de la documentación del proyecto.
 | `proximos_pasos.md` | Roadmap y tareas pendientes priorizadas |
 | `conclusion-base-conocimiento.md` | Decisión técnica sobre SQLite + MCP |
 | `conformal_prediction.md` | Metodología de predicción conforme |
+| `claves_api.md` | Claves de API y configuración ERA5 (`.cdsapirc`) |
 | `arquitectura/pipeline_prediccion.md` | Flujo completo de predicción (ensemble, override, personalización) |
 | `arquitectura/base_datos.md` | Esquema SQLite, DBManager, RAG semántico |
 | `ml/contrafactuales.md` | Explicaciones contrafactuales (cómo reducir el riesgo) |

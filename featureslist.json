@@ -446,8 +446,11 @@
         "No queda informacion duplicada entre README, AGENTS.md, CLAUDE.md y documentacion/: se demuestra con las rutas de lo que se ha consolidado",
         "init.sh sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-18",
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "WEB-002",

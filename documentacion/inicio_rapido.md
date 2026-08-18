@@ -2,6 +2,9 @@
 
 Cómo pasar de cero a una predicción de riesgo en unos minutos.
 
+> Antes de `make data`: claves de API y `.cdsapirc` (ERA5) en
+> [`claves_api.md`](claves_api.md).
+
 ## 1. Entorno
 
 ```bash
