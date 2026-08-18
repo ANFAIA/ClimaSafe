@@ -482,8 +482,11 @@
         "Queda documentado como se reproduce el despliegue, y ejecutado al menos una vez de cero",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-18",
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "WEB-003",

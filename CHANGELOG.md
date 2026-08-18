@@ -4525,3 +4525,19 @@
 
 - cierra BAYES-001 y DEPLOY-001
 
+## [Unreleased] — 2026-08-18
+
+### Añadido
+
+- cierra WEB-002
+- cierra DEPLOY-001
+- cierra BAYES-001
+
+### Documentación
+
+- cierra DOC-002
+
+### Mantenimiento
+
+- cierra BAYES-001 y DEPLOY-001
+

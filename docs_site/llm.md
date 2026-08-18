@@ -16,9 +16,9 @@ el formato LiteLLM:
 | Proveedor | Ejemplo |
 |---|---|
 | Ollama local | `ollama/qwen3:climasafe` · `ollama/qwen2.5:1.5b` |
-| Groq | `groq/llama-3.3-70b-versatile` |
+| Groq | `groq/openai/gpt-oss-20b` |
 | OpenAI | `gpt-4o` |
-| Gemini | `gemini/gemini-1.5-flash` |
+| Gemini | `gemini/gemini-3.6-flash` |
 
 `LLMConfig` acepta cualquiera de esos formatos, así que **el sistema soporta
 cualquier modelo** de cualquier proveedor — solo hay que indicarlo.

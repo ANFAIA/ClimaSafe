@@ -886,6 +886,49 @@ class TestBienvenida:
         assert "/start" in mod.BIENVENIDA
 
 
+class TestModeloPorDefecto:
+    """HOST-001: sin Ollama el bot cae al LLM remoto si hay clave, y solo
+    sin ninguna clave se queda en determinista."""
+
+    @staticmethod
+    def _sin_ollama(monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        monkeypatch.setattr(
+            mod, "check_ollama", lambda: {"available": False, "models": [], "best_model": ""}
+        )
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        return mod
+
+    def test_sin_ollama_con_groq_usa_modelo_api(self, monkeypatch):
+        mod = self._sin_ollama(monkeypatch)
+        monkeypatch.setenv("GROQ_API_KEY", "groq-de-prueba")
+        assert mod._modelo_por_defecto() == mod.MODELO_API
+        assert mod.MODELO_API.startswith("groq/")
+
+    def test_sin_ollama_con_solo_gemini_usa_modelo_gemini(self, monkeypatch):
+        mod = self._sin_ollama(monkeypatch)
+        monkeypatch.setenv("GEMINI_API_KEY", "gemini-de-prueba")
+        assert mod._modelo_por_defecto() == mod.MODELO_API_GEMINI
+        assert mod.MODELO_API_GEMINI.startswith("gemini/")
+
+    def test_sin_ollama_y_sin_claves_determinista(self, monkeypatch):
+        mod = self._sin_ollama(monkeypatch)
+        assert mod._modelo_por_defecto() == mod.MODELO_DETERMINISTA
+
+    def test_con_ollama_sigue_usando_el_mejor_local(self, monkeypatch):
+        import climasafeai.bot.telegram_bot as mod
+
+        monkeypatch.setattr(
+            mod,
+            "check_ollama",
+            lambda: {"available": True, "models": ["qwen3:1.7b"], "best_model": "ollama/qwen3:1.7b"},
+        )
+        monkeypatch.setenv("GROQ_API_KEY", "groq-de-prueba")
+        assert mod._modelo_por_defecto() == "ollama/qwen3:1.7b"
+
+
 class TestLogging:
     """BOT-004: el token no puede acabar en el log, y las lineas no se duplican."""
 
@@ -919,6 +962,36 @@ class TestLogging:
             texto = (tmp_path / "logs" / "bot.log").read_text()
             assert token not in texto
             assert "TOKEN_OCULTO" in texto
+        finally:
+            for h in list(raiz.handlers):
+                raiz.removeHandler(h)
+            for h in previos:
+                raiz.addHandler(h)
+
+    def test_las_claves_api_no_aparecen_en_el_log(self, tmp_path, monkeypatch):
+        """HOST-001: las claves *_API_KEY del LLM remoto se tapan igual que el
+        token. Un error de litellm de Gemini puede traer la URL con ?key=..."""
+        import logging
+        from climasafeai.bot.telegram_bot import _setup_logging
+
+        clave_groq = "gsk_fake_groq_aaaaaaaaaaaaaaaa"
+        clave_gemini = "AIza_fake_gemini_bbbbbbbbbbbbbbbb"
+        raiz, previos, token, setup = self._preparar(tmp_path, monkeypatch)
+        monkeypatch.setenv("GROQ_API_KEY", clave_groq)
+        monkeypatch.setenv("GEMINI_API_KEY", clave_gemini)
+        try:
+            setup()
+            logging.getLogger("litellm").info(
+                "Error en LiteLLM (gemini/gemini-3.6-flash): url with key=%s y auth %s",
+                clave_gemini,
+                clave_groq,
+            )
+            for h in raiz.handlers:
+                h.flush()
+            texto = (tmp_path / "logs" / "bot.log").read_text()
+            assert clave_gemini not in texto
+            assert clave_groq not in texto
+            assert "<OCULTO>" in texto
         finally:
             for h in list(raiz.handlers):
                 raiz.removeHandler(h)
@@ -1175,6 +1248,26 @@ class TestChatAbiertoTrasStart:
         assert recibido["pregunta"] == "¿qué es SPF?"
         assert "PELIGRO" in recibido["contexto"]
         assert recibido["contexto"].startswith("Parte que le acabas de dar")
+
+    @pytest.mark.asyncio
+    async def test_chat_libre_cae_a_plantilla_si_el_llm_no_contesta(self, monkeypatch):
+        """HOST-001: si el LLM remoto falla (caído o sin cuota), el chat libre
+        responde con la plantilla determinista, no con un error visible."""
+        import climasafeai.bot.telegram_bot as mod
+
+        monkeypatch.setattr(mod, "ask_with_rag", lambda *a, **k: {"answer": None})
+        _conversaciones[1] = {
+            "estado": Estado.DONE,
+            "modelo": mod.MODELO_API,
+            "ultima_prediccion": _RESPONSE_LLM,
+            "data": {"_prediccion_hecha": True},
+        }
+
+        r = await procesar_mensaje(1, "¿qué es SPF?")
+
+        assert r == mod.CHAT_LIBRE_SIN_LLM
+        assert "El LLM no respondió" not in r
+        assert "no responde" in r
 
     @pytest.mark.parametrize("comando", ["salir", "exit", "/salir"])
     @pytest.mark.asyncio

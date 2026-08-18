@@ -112,7 +112,9 @@ MODELO_LOCAL_GPU = "ollama/qwen2.5:7b"
 # LLM-014: el fine-tuned de LLM-013 se sirve sobre qwen3 (Modelfile-qwen3);
 # el 2.5:climasafe quedó obsoleto tras el reentrenamiento.
 MODELO_FINE_TUNED = "ollama/qwen3:climasafe"
-MODELO_API_DEFECTO = "groq/llama-3.3-70b-versatile"
+# HOST-001: llama-3.3-70b-versatile dejó de existir en el free tier de Groq
+# (404 verificado el 18-08-2026); gpt-oss-20b es el sustituto del free tier.
+MODELO_API_DEFECTO = "groq/openai/gpt-oss-20b"
 
 # RAG-003: distancia coseno máxima (sqlite-vec: 0 = idéntico, 2 = opuesto)
 # para inyectar contexto en una pregunta de usuario. Lo que queda por encima
@@ -162,9 +164,9 @@ class LLMConfig:
 
     El modelo sigue el formato de LiteLLM:
       - Local Ollama:  "ollama/qwen2.5:1.5b"
-      - Groq:          "groq/llama-3.3-70b-versatile"
+      - Groq:          "groq/openai/gpt-oss-20b"
       - OpenAI:        "gpt-4o"
-      - Gemini:        "gemini/gemini-1.5-flash"
+      - Gemini:        "gemini/gemini-3.6-flash"
     """
 
     model: str = MODELO_LOCAL_CPU

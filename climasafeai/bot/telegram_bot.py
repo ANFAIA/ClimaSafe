@@ -219,23 +219,39 @@ AVISO_SIN_UBICACION = (
 
 
 # Strings de modelo LiteLLM. El usuario puede escribir cualquier modelo
-# soportado por LiteLLM: "ollama/qwen2.5:1.5b", "groq/llama-3.3-70b-versatile", etc.
+# soportado por LiteLLM: "ollama/qwen2.5:1.5b", "groq/openai/gpt-oss-20b", etc.
 MODELO_LOCAL = "ollama/qwen2.5:1.5b"
-MODELO_API = "groq/llama-3.3-70b-versatile"
+# HOST-001: el free tier de Groq retiró llama-3.3-70b-versatile (404 real
+# verificado el 18-08-2026); gpt-oss-20b responde en el free tier (8K TPM /
+# 200K TPD según la tabla pública de rate limits de Groq).
+MODELO_API = "groq/openai/gpt-oss-20b"
+# HOST-001: alternativa para cuentas sin key de Groq (verificado con la
+# GEMINI_API_KEY real el 18-08-2026: gemini-2.5-flash da 404 "no longer
+# available", gemini-3.6-flash responde).
+MODELO_API_GEMINI = "gemini/gemini-3.6-flash"
 MODELO_DETERMINISTA = "__determinista__"  # valor centinela: sin LLM
 
 
 def _modelo_por_defecto() -> str:
-    """Auto-detecta el mejor modelo local; si no hay Ollama, determinista.
+    """Auto-detecta el mejor modelo local; si no hay Ollama, LLM remoto o determinista.
 
     Antes devolvía `MODELO_LOCAL` fijo (el 1.5B) aunque hubiera un 7B instalado, y
     la diferencia se nota: el 1.5B contesta con titulares en negrita y viñetas —
     indistinguible de la plantilla— mientras el 7B da el parte de una línea.
     `check_ollama()` ya calcula cuál es el mejor, así que se usa.
+
+    HOST-001: si Ollama no está (portátil apagado o bot en un host sin LLM
+    local), se cae al LLM remoto gratuito si hay clave; solo sin ninguna clave
+    se queda en determinista. Sin este salto, un bot desplegado sin Ollama
+    contestaría siempre con plantilla y el LLM remoto no se usaría nunca.
     """
     st = check_ollama()
     if st.get("available"):
         return st.get("best_model") or MODELO_LOCAL
+    if os.getenv("GROQ_API_KEY"):
+        return MODELO_API
+    if os.getenv("GEMINI_API_KEY"):
+        return MODELO_API_GEMINI
     return MODELO_DETERMINISTA
 
 
@@ -806,6 +822,17 @@ BIENVENIDA = (
 CHAT_CIERRE = (
     "¿Te queda alguna duda? Pregúntamela (p. ej. qué es SPF) y te la resuelvo. "
     "Para calcular otra salida, escribe /start."
+)
+
+# HOST-001: plantilla determinista del chat de preguntas libres. Si el LLM
+# remoto está caído o agotó su cuota, el chat libre no puede redactar una
+# respuesta personalizada; en vez de un error visible se responde con esta
+# plantilla, que remite al parte oficial (que ya es determinista).
+CHAT_LIBRE_SIN_LLM = (
+    "El modelo de redacción no responde ahora mismo (puede estar caído o "
+    "haber agotado su cuota), así que te respondo sin él. El parte que te "
+    "acabo de dar es la información de esta salida; puedes repasarlo o "
+    "escribir /start para calcular otra."
 )
 
 # Estado en memoria: {chat_id: {"estado": Estado, "data": dict, ...}}
@@ -1690,7 +1717,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         return "Modo cambiado a *Qwen 2.5 1.5B* (CPU + RAG)."
     if texto.startswith("/api"):
         conv["modelo"] = MODELO_API
-        return "Modo cambiado a *API externa* (Groq Llama 3 70B)."
+        return "Modo cambiado a *API externa* (Groq gpt-oss-20b)."
     if texto.startswith("/determinista"):
         conv["modelo"] = MODELO_DETERMINISTA
         return "Modo cambiado a *Determinista* (plantilla, sin LLM)."
@@ -2343,9 +2370,12 @@ async def _preguntar_al_rag(texto: str, conv: dict, contexto: str | None = None)
             perfil_usuario["ocupacion"] = data["ocupacion"]
     # Llamar a ask_with_rag con el perfil para adaptación contextual
     res = await asyncio.to_thread(ask_with_rag, texto, 3, 3, config, contexto, perfil_usuario)
-    return res.get("answer") or (
-        f"El LLM no respondió. Revisa que {conv['modelo']} esté disponible."
-    )
+    # HOST-001: si el LLM no contesta (servicio caído o cuota agotada), se
+    # responde con la plantilla determinista. Antes se devolvía un error
+    # visible ("El LLM no respondió. Revisa que ... esté disponible"), que no
+    # resolvía la duda y delataba el modelo interno; el parte ya entregado es
+    # la información oficial de la salida.
+    return res.get("answer") or CHAT_LIBRE_SIN_LLM
 
 
 async def _finalizar_parte(chat_id: int) -> None:
@@ -2889,24 +2919,41 @@ async def procesar_update(update: dict) -> None:
 # ── Entry point ───────────────────────────────────────────────────────────
 
 class _OcultarToken(logging.Filter):
-    """Tapa el token de Telegram en cualquier linea que pase por el log.
+    """Tapa el token de Telegram y las claves *_API_KEY en cualquier linea del log.
 
     La Bot API lleva el token en la RUTA (api.telegram.org/bot<TOKEN>/sendMessage) y
     httpx registra la URL entera en INFO. El resultado era el token en claro en cada
     linea de logs/bot.log — un fichero que se rota y se queda en disco, y con el que
     cualquiera puede controlar el bot.
+
+    HOST-001: al usar LLM remoto (Groq/Gemini), un error de litellm puede
+    traer la URL de la llamada y, con Gemini, la key viaja en el query string
+    (?key=...). El filtro se extiende a cualquier variable *_API_KEY del
+    entorno para que las claves del LLM tampoco acaben en el log.
     """
 
     _MARCA = "bot<TOKEN_OCULTO>"
 
-    def filter(self, record: logging.LogRecord) -> bool:
+    def _secretos(self) -> list[str]:
+        """Token de Telegram + valores de las claves *_API_KEY del entorno."""
+        secretos: list[str] = []
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         if token:
-            if isinstance(record.msg, str) and token in record.msg:
-                record.msg = record.msg.replace(f"bot{token}", self._MARCA).replace(token, "<OCULTO>")
+            secretos.append(token)
+        for nombre, valor in os.environ.items():
+            if nombre != "TELEGRAM_BOT_TOKEN" and nombre.endswith("_API_KEY") and valor:
+                secretos.append(valor)
+        return secretos
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        for secreto in self._secretos():
+            if not secreto:
+                continue
+            if isinstance(record.msg, str) and secreto in record.msg:
+                record.msg = record.msg.replace(f"bot{secreto}", self._MARCA).replace(secreto, "<OCULTO>")
             if record.args:
                 record.args = tuple(
-                    a.replace(f"bot{token}", self._MARCA).replace(token, "<OCULTO>")
+                    a.replace(f"bot{secreto}", self._MARCA).replace(secreto, "<OCULTO>")
                     if isinstance(a, str) else a
                     for a in (record.args if isinstance(record.args, tuple) else (record.args,))
                 )
