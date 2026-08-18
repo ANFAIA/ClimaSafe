@@ -279,8 +279,9 @@
         "DEPLOY_IA.md se ejecuta de cero en una maquina o contenedor limpio y se pega el log completo",
         "make test pasa y el bot determinista sigue funcionando igual"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "blocked_reason": "No hay driver NVIDIA/CUDA cargado (falta /proc/driver/nvidia; la GTX 1650 aparece en lspci pero sin driver). entrenar.sh --check lo confirma: sin CUDA no hay entrenamiento LoRA ni cuantizacion 4-bit. Reabrir cuando este instalado el driver NVIDIA y Ollama sirviendo. Prerrequisito adicional: LLM-017 (dataset regenerado + QC a 0) antes de entrenar."
     },
     {
       "id": "CHAT-001",
@@ -377,8 +378,11 @@
         "Queda decidido y escrito si entra en el ensemble, lo sustituye, o se queda como modelo de contraste",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-18",
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "LLM-003",
@@ -426,8 +430,11 @@
         "Los commits los sigue haciendo el agente git con Conventional Commits y sin coautoria, y el agente de release no hace push por su cuenta",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-18",
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "DOC-002",
@@ -1828,11 +1835,12 @@
         "los enlaces internos del home sirven 200 servidos como estaticos",
         "el home y las paginas siguen el estilo visual del repo personal"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-13",
       "owner": "pages",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "WEB-011",
@@ -1998,6 +2006,39 @@
       "started": "2026-08-14",
       "review_rounds": 0,
       "closed": "2026-08-14"
+    },
+    {
+      "id": "LLM-017",
+      "title": "Regenerar el dataset LLM con el generador corregido y re-ejecutar el QC a 0 hallazgos",
+      "description": "Seguimiento de LLM-015 (reunion 2026-08-13): el QC encontro 184 duplicados en train y 97/100 pares de val incompletos (sin max/UV). Las correcciones de generar_dataset.py ya estan (invariant texto, dedupe, variacion ampliada) pero data/llm/ no se ha regenerado. Pendiente operativo del cierre de LLM-015.",
+      "acceptance_criteria": [
+        "se regenera data/llm/train.jsonl y val.jsonl con climasafeai/llm/generar_dataset.py (corregido en LLM-015) usando los datos reales disponibles (requiere los parquet de frio y red si hace falta)",
+        "se re-ejecuta climasafeai/llm/revisar_dataset.py sobre el dataset regenerado y el informe muestra 0 hallazgos solidos (0 criticas",
+        "duplicados e inputs incompletos a 0)",
+        "se re-empaqueta data/llm/colab_dataset.zip con empaquetar_dataset_colab.py (300/100 + marca Tiempo en esa franja) y se actualizan los sha256 si cambian",
+        "se documenta el resumen del QC en progress o en documentacion/llm",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "LLM-015"
+      ]
+    },
+    {
+      "id": "LLM-018",
+      "title": "Actualizar el notebook de Colab al fine-tuning sobre Qwen3 instruct y al dataset regenerado",
+      "description": "Seguimiento de LLM-016 (reunion 2026-08-13): la conclusion del estudio base vs instruct es que el proximo LoRA debe partir de Qwen3 instruct (no del base). El notebook notebooks/llm-fine-tuning-colab.ipynb (LLM-013 lo adapto a qwen3-1.7b) debe actualizarse: usar instruct como base y consumir el dataset regenerado en LLM-017.",
+      "acceptance_criteria": [
+        "el notebook usa el modelo base instruct (p.ej. unsloth/Qwen3-1.7B-Instruct) en vez del base sin instrucciones, segun la conclusion de documentacion/llm/base-vs-instruct.md",
+        "el notebook espera/consume el dataset regenerado en LLM-017 (mismas marcas y conteos 300/100, o se actualiza la verificacion)",
+        "titulo, descripciones y nombres de artefactos coherentes con instruct",
+        "las celdas de verificacion (sha256/marca Tiempo en esa franja) se alinean con colab_dataset.zip regenerado",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "LLM-017"
+      ]
     }
   ]
 }
