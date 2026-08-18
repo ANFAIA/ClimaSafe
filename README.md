@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%2F%20RandomForest-orange)
 ![Tracking](https://img.shields.io/badge/Experiment%20Tracking-MLflow-blue?logo=mlflow)
-![Version](https://img.shields.io/badge/Version-0.0.81-green)
+![Version](https://img.shields.io/badge/Version-0.0.82-green)
 ![Author](https://img.shields.io/badge/Author-Alejandro%20Cancelas%20Chapela-blueviolet)
 ![Template](https://img.shields.io/badge/Generado%20con-dskit-58a6ff?logo=github)
 
@@ -11,7 +11,7 @@
 
 **Tipo de ML:** `supervisado`  
 **Autor:** Alejandro Cancelas Chapela  
-**Versión:** 0.0.81 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
+**Versión:** 0.0.82 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
 
 ClimaSafe estima, para cada **provincia y día**, el nivel de riesgo por temperatura
 (`0` seguro / `1` precaución / `2` peligro) a partir de variables meteorológicas de

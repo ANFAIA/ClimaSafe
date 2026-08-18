@@ -2233,14 +2233,26 @@ async def ejecutar_prediccion(chat_id: int) -> str:
     modelo = conv.get("modelo", MODELO_DETERMINISTA)
     lugar = data.get("lugar")
     if modelo != MODELO_DETERMINISTA:
-        config = LLMConfig(model=modelo)
-        texto = await asyncio.to_thread(ask_con_perfil, perfil, result, config, lugar)
-        if texto:
-            logger.info("Respuesta redactada por %s", modelo)
+        # BOT-006: la recomendación post-predicción se redacta con el LLM
+        # local (Ollama) si está disponible — el que ve el contexto real de
+        # esta predicción y no cuesta tokens — y con la plantilla determinista
+        # de BOT-005 si no lo hay. Se comprueba en el momento de predecir, no
+        # al arrancar la conversación: Ollama puede haberse caído (o
+        # levantado) entre medias. El LLM remoto (HOST-001) queda para el chat
+        # libre y los comandos de modelo, no para el parte.
+        st = check_ollama()
+        if st.get("available"):
+            config = LLMConfig(model=st.get("best_model") or MODELO_LOCAL)
+            texto = await asyncio.to_thread(ask_con_perfil, perfil, result, config, lugar)
+            if texto:
+                logger.info("Respuesta redactada por %s", config.model)
+            else:
+                # Sin esta línea la degradación es invisible: el usuario ve la
+                # plantilla y cree que el LLM está funcionando.
+                logger.warning("%s no contestó; se responde con la plantilla", config.model)
         else:
-            # Sin esta línea la degradación es invisible: el usuario ve la
-            # plantilla y cree que el LLM está funcionando.
-            logger.warning("%s no contestó; se responde con la plantilla", modelo)
+            texto = None
+            logger.info("Sin LLM local: respuesta con plantilla")
     else:
         texto = None
         logger.info("Modo determinista: respuesta con plantilla")

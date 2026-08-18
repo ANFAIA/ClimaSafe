@@ -1124,6 +1124,119 @@ _RESULTADO_PELIGRO = {
 _RESPONSE_LLM = "Aldán — Riesgo PELIGRO (72%). Evita la actividad."
 
 
+class TestBOT006RecomendacionPostPrediccion:
+    """BOT-006: tras la predicción, el parte se redacta con el LLM local
+    (Ollama) si está disponible — con el contexto real de esa predicción — y
+    con la plantilla determinista de BOT-005 si no lo hay, sin cambiar su
+    formato. La detección se hace en el momento de predecir, no al arrancar
+    la conversación: Ollama puede haberse caído o levantado entre medias.
+    Sin red: check_ollama y ask_con_perfil van monkeypatcheados."""
+
+    @staticmethod
+    def _conversacion(modelo: str) -> None:
+        _conversaciones[1] = {
+            "estado": Estado.DONE,
+            "modelo": modelo,
+            "data": {
+                "sexo": "hombre",
+                "edad": 57,
+                "porcentaje_grasa": 20.5,
+                "fototipo": "3",
+                "aclimatado": False,
+                "nivel_actividad": "moderada",
+                "entrenado": True,
+                "duracion_h": 2,
+                "hora_inicio": 17,
+                "comorbilidades": {"cardiovascular"},
+                "farmacos": {"diureticos_asa"},
+                "estado_previo": {"fiesta"},
+                "situacion_social": {"vive_solo"},
+                "lat": 42.29,
+                "lon": -8.81,
+                "provincia": "Pontevedra",
+                "lugar": "Aldán",
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_con_ollama_el_parte_lo_redacta_el_llm_local(self, monkeypatch):
+        """Criterio 1 y 2: con LLM local disponible, la recomendación
+        post-predicción la redacta ask_con_perfil con el mejor modelo local,
+        aunque la conversación hubiera quedado con el remoto (HOST-001)."""
+        import climasafeai.bot.telegram_bot as mod
+
+        recibido: dict = {}
+
+        def _fake_perfil(_p, _r, config=None, _l=None):
+            recibido["config"] = config
+            return _RESPONSE_LLM
+
+        monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        monkeypatch.setattr(
+            mod,
+            "check_ollama",
+            lambda: {
+                "available": True,
+                "models": ["qwen2.5:1.5b"],
+                "best_model": "ollama/qwen2.5:1.5b",
+            },
+        )
+        monkeypatch.setattr(mod, "ask_con_perfil", _fake_perfil)
+        self._conversacion(mod.MODELO_API)  # el default de HOST-001 sin Ollama
+
+        texto = await mod.ejecutar_prediccion(1)
+
+        assert texto == _RESPONSE_LLM
+        assert recibido["config"].model == "ollama/qwen2.5:1.5b"
+
+    @pytest.mark.asyncio
+    async def test_sin_ollama_el_parte_usa_la_plantilla_determinista(self, monkeypatch):
+        """Criterio 3: sin LLM local, la respuesta es la plantilla de BOT-005
+        sin cambiar su formato, aunque la conversación hubiera elegido el LLM
+        remoto (el default de HOST-001 con clave)."""
+        import climasafeai.bot.telegram_bot as mod
+
+        def _no_llamado(*_a, **_k):
+            raise AssertionError("ask_con_perfil no debe llamarse sin LLM local")
+
+        monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        monkeypatch.setattr(
+            mod,
+            "check_ollama",
+            lambda: {"available": False, "models": [], "best_model": ""},
+        )
+        monkeypatch.setattr(mod, "ask_con_perfil", _no_llamado)
+        self._conversacion(mod.MODELO_API)
+
+        texto = await mod.ejecutar_prediccion(1)
+
+        assert texto == _format_template(_RESULTADO_PELIGRO, "Aldán")
+        assert "PELIGRO" in texto
+
+    @pytest.mark.asyncio
+    async def test_llm_local_no_contesta_cae_a_plantilla(self, monkeypatch):
+        """Criterio 3: el LLM local está pero no contesta → plantilla, igual
+        que la degradación que ya existía con el modelo remoto."""
+        import climasafeai.bot.telegram_bot as mod
+
+        monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        monkeypatch.setattr(
+            mod,
+            "check_ollama",
+            lambda: {
+                "available": True,
+                "models": ["qwen2.5:1.5b"],
+                "best_model": "ollama/qwen2.5:1.5b",
+            },
+        )
+        monkeypatch.setattr(mod, "ask_con_perfil", lambda *_a, **_k: None)
+        self._conversacion(mod.MODELO_LOCAL)
+
+        texto = await mod.ejecutar_prediccion(1)
+
+        assert texto == _format_template(_RESULTADO_PELIGRO, "Aldán")
+
+
 class TestChatAbiertoTrasStart:
     """CHAT-003: al terminar /start con LLM el chat queda abierto para dudas.
 
@@ -1182,6 +1295,11 @@ class TestChatAbiertoTrasStart:
         import climasafeai.bot.telegram_bot as mod
 
         monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        monkeypatch.setattr(
+            mod,
+            "check_ollama",
+            lambda: {"available": True, "models": ["qwen2.5:7b"], "best_model": "ollama/qwen2.5:7b"},
+        )
         monkeypatch.setattr(
             mod,
             "ask_con_perfil",
@@ -1321,6 +1439,11 @@ class TestChatAbiertoTrasStart:
         import climasafeai.bot.telegram_bot as mod
 
         monkeypatch.setattr(mod, "predict_ensemble", lambda **kw: _RESULTADO_PELIGRO)
+        monkeypatch.setattr(
+            mod,
+            "check_ollama",
+            lambda: {"available": True, "models": ["qwen2.5:7b"], "best_model": "ollama/qwen2.5:7b"},
+        )
         monkeypatch.setattr(
             mod,
             "ask_con_perfil",

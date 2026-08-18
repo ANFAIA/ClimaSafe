@@ -565,8 +565,11 @@
         "El coste de tokens o latencia de la llamada al LLM se mide y se pega",
         "Hay tests del modo con LLM y del fallback, y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-18",
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "DOC-003",
