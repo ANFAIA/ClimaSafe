@@ -47,6 +47,9 @@ data/**/*.csv
 data/**/*.tsv
 data/**/*.json
 !data/factores_riesgo.json
+# RAG-004: el set de evaluacion del retrieval se versiona (a diferencia de
+# los datos generados, que cambian con cada resync).
+!data/rag/eval_set.json
 data/**/*.jsonl
 data/**/*.parquet
 data/**/*.feather

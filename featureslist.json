@@ -834,8 +834,11 @@
         "Las preguntas cubren los tres casos que ya se sabe que fallan hoy: SPF con fototipo (devuelve factores de frio), diabetes con temperatura (devuelve arquitectura del modelo) y farmacos (este si acierta)",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-18",
+      "review_rounds": 0,
+      "closed": "2026-08-18"
     },
     {
       "id": "RAG-005",

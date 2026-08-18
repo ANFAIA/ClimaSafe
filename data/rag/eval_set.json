@@ -1,0 +1,303 @@
+{
+  "version": 1,
+  "descripcion": "Set de evaluacion del retrieval RAG (RAG-004). Cada pregunta etiqueta lo que DEBERIA recuperarse de la base de conocimiento real: factores (clave 'tipo/clave', p. ej. 'calor/diabetes') y documentos (ruta relativa al repo desde 'documentacion/', p. ej. 'documentacion/riesgo/formulas_deterministas.md'). Las etiquetas se verificaron contra documentacion/ y data/factores_riesgo.json / data/climasafe.db; no son lo que el motor recupera hoy (ese es el objeto de la medicion).",
+  "definiciones": {
+    "recall_at_k": "|recuperados ∩ esperados| / |esperados| — fraccion de los items etiquetados que aparecen en el top-k de ese canal (factores o documentos). Solo se calcula si la pregunta tiene esperados en ese canal.",
+    "precision_at_k": "|recuperados ∩ esperados| / k — fraccion de los k slots del top-k ocupados por items etiquetados. Solo se calcula si la pregunta tiene esperados en ese canal."
+  },
+  "preguntas": [
+    {
+      "id": "spf-001",
+      "pregunta": "¿qué es SPF?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/riesgo/formulas_deterministas.md"],
+      "nota": "Caso fallido conocido: hoy recupera factores de frio (0.547-0.595) y la seccion 'Quemadura solar — UV + fototipo' no aparece ni en top-400."
+    },
+    {
+      "id": "spf-002",
+      "pregunta": "¿qué es SPF y cómo influye mi fototipo en el riesgo de quemarme al sol?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/riesgo/formulas_deterministas.md"],
+      "nota": "Variante con fototipo: la distancia del ruido de frio baja (encamado 0.495) y puede colarse por debajo del umbral."
+    },
+    {
+      "id": "quemadura-001",
+      "pregunta": "¿cuántos minutos tarda en quemarse la piel una persona con fototipo II?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/riesgo/formulas_deterministas.md"],
+      "nota": "La tabla de tiempos por fototipo (OMS) esta en formulas_deterministas.md seccion 3."
+    },
+    {
+      "id": "diabetes-001",
+      "pregunta": "tengo diabetes, ¿cuánto me sube el riesgo con 38 grados?",
+      "factores_esperados": ["calor/diabetes"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/effects-of-air-temperature-on-climate-sensitive-mortality-and-morbidity-outcomes.md"],
+      "nota": "Caso fallido conocido: el factor entra a 0.419, pero el paper (Bunker 2016, incluye diabetes) rankea 399/400."
+    },
+    {
+      "id": "diabetes-002",
+      "pregunta": "¿cómo afecta el calor a las personas con diabetes?",
+      "factores_esperados": ["calor/diabetes"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/effects-of-air-temperature-on-climate-sensitive-mortality-and-morbidity-outcomes.md"]
+    },
+    {
+      "id": "diabetes-003",
+      "pregunta": "¿la diabetes aumenta la mortalidad en temperaturas extremas?",
+      "factores_esperados": ["calor/diabetes"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/effects-of-air-temperature-on-climate-sensitive-mortality-and-morbidity-outcomes.md"]
+    },
+    {
+      "id": "farmacos-001",
+      "pregunta": "¿cuánto sube el riesgo con diuréticos?",
+      "factores_esperados": ["calor/diureticos_asa"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/layton-2020-medications-heat.md"],
+      "nota": "Caso fallido conocido: el factor acierta (0.427), pero el paper (Layton 2020) esta a 0.566 y no se inyecta."
+    },
+    {
+      "id": "farmacos-002",
+      "pregunta": "¿qué medicamentos aumentan el riesgo en una ola de calor?",
+      "factores_esperados": ["calor/diureticos_asa", "calor/antipsicoticos"],
+      "documentos_esperados": [
+        "documentacion/papers/factores-riesgo/layton-2020-medications-heat.md",
+        "documentacion/papers/factores-riesgo/antipsychotics-heat-mortality-sci-reports-2025.md",
+        "documentacion/papers/factores-riesgo/wong-2024-psychotropics-heat.md"
+      ]
+    },
+    {
+      "id": "farmacos-003",
+      "pregunta": "¿los diuréticos de asa aumentan la pérdida de líquidos en verano?",
+      "factores_esperados": ["calor/diureticos_asa"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/layton-2020-medications-heat.md"]
+    },
+    {
+      "id": "farmacos-004",
+      "pregunta": "¿los antipsicóticos aumentan la mortalidad durante calor extremo?",
+      "factores_esperados": ["calor/antipsicoticos"],
+      "documentos_esperados": [
+        "documentacion/papers/factores-riesgo/antipsychotics-heat-mortality-sci-reports-2025.md",
+        "documentacion/papers/factores-riesgo/wong-2024-psychotropics-heat.md"
+      ]
+    },
+    {
+      "id": "cardio-001",
+      "pregunta": "¿qué riesgo tiene una persona con cardiopatía durante una ola de calor?",
+      "factores_esperados": ["calor/cardiovascular"],
+      "documentos_esperados": [
+        "documentacion/papers/factores-riesgo/heat-exposure-and-cardiovascular-health-outcomes-a-systematic-review-and-meta-an.md",
+        "documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md"
+      ]
+    },
+    {
+      "id": "respiratoria-001",
+      "pregunta": "¿el calor agrava las enfermedades respiratorias?",
+      "factores_esperados": ["calor/respiratoria"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/effects-of-air-temperature-on-climate-sensitive-mortality-and-morbidity-outcomes.md"],
+      "nota": "El meta-analisis de Bunker 2016 cubre mortalidad y morbilidad respiratoria por temperatura."
+    },
+    {
+      "id": "mental-001",
+      "pregunta": "¿el calor extremo afecta a las personas con problemas de salud mental?",
+      "factores_esperados": ["calor/mental"],
+      "documentos_esperados": [
+        "documentacion/papers/factores-riesgo/wong-2024-psychotropics-heat.md",
+        "documentacion/papers/factores-riesgo/antipsychotics-heat-mortality-sci-reports-2025.md"
+      ]
+    },
+    {
+      "id": "aclimatacion-001",
+      "pregunta": "¿qué pasa si no estoy aclimatado al calor?",
+      "factores_esperados": ["calor/no_aclimatado"],
+      "documentos_esperados": ["documentacion/papers/aclimatacion/consensus-recommendations-on-training-and-competing-in-the-heat.md"]
+    },
+    {
+      "id": "obesidad-001",
+      "pregunta": "¿la obesidad aumenta el riesgo de golpe de calor al hacer esfuerzo?",
+      "factores_esperados": ["calor/grasa_alta_esfuerzo"],
+      "documentos_esperados": []
+    },
+    {
+      "id": "mujer-001",
+      "pregunta": "¿las mujeres tienen más riesgo de mortalidad por calor?",
+      "factores_esperados": ["calor/sexo_mujer"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/heat-related-and-cold-related-deaths-in-england-and-wales-who-is-at-risk.md"],
+      "nota": "El estudio Inglaterra y Gales observa el mayor riesgo de mortalidad por calor en mujeres."
+    },
+    {
+      "id": "sueno-001",
+      "pregunta": "¿dormir mal la noche anterior aumenta el riesgo térmico?",
+      "factores_esperados": ["calor/falta_sueno"],
+      "documentos_esperados": []
+    },
+    {
+      "id": "convalecencia-001",
+      "pregunta": "¿estar convaleciente de una enfermedad reciente aumenta el riesgo en verano?",
+      "factores_esperados": ["calor/enfermedad_reciente"],
+      "documentos_esperados": []
+    },
+    {
+      "id": "grasa-baja-001",
+      "pregunta": "¿tener poca grasa corporal protege del calor?",
+      "factores_esperados": ["calor/grasa_baja_protector"],
+      "documentos_esperados": []
+    },
+    {
+      "id": "encamado-001",
+      "pregunta": "¿qué riesgo tiene una persona encamada durante una ola de calor?",
+      "factores_esperados": ["calor/encamado"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md"],
+      "nota": "Semenza 1996: encamado/no sale de casa OR 5.5, base del coeficiente situacional."
+    },
+    {
+      "id": "no-sale-001",
+      "pregunta": "¿no salir de casa aumenta el riesgo con el calor?",
+      "factores_esperados": ["calor/no_sale"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md"]
+    },
+    {
+      "id": "vive-solo-001",
+      "pregunta": "¿vivir solo aumenta el riesgo durante una ola de calor?",
+      "factores_esperados": ["calor/vive_solo"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md"]
+    },
+    {
+      "id": "alcohol-001",
+      "pregunta": "¿el consumo reciente de alcohol aumenta el riesgo en días de calor?",
+      "factores_esperados": ["calor/alcohol"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md"]
+    },
+    {
+      "id": "aire-001",
+      "pregunta": "¿no tener aire acondicionado aumenta el riesgo en una ola de calor?",
+      "factores_esperados": ["calor/sin_aire_acondicionado"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md"]
+    },
+    {
+      "id": "laboral-001",
+      "pregunta": "¿qué riesgo tiene un trabajador de la construcción en verano?",
+      "factores_esperados": ["calor/esfuerzo_termico_laboral", "calor/estres_termico_laboral"],
+      "documentos_esperados": ["documentacion/papers/ocupacional/heat-and-worker-health.md"]
+    },
+    {
+      "id": "laboral-002",
+      "pregunta": "¿el estrés térmico en el trabajo aumenta los accidentes laborales?",
+      "factores_esperados": ["calor/estres_termico_laboral"],
+      "documentos_esperados": [
+        "documentacion/papers/ocupacional/heat-and-worker-health.md",
+        "documentacion/papers/ocupacional/association-between-heat-stress-and-occupational-injury-among-thai-workers-findi.md"
+      ]
+    },
+    {
+      "id": "mortalidad-001",
+      "pregunta": "¿cómo se relaciona la temperatura ambiente con la mortalidad?",
+      "factores_esperados": [],
+      "documentos_esperados": [
+        "documentacion/papers/factores-riesgo/hajat-2009-heat-mortality-review.md",
+        "documentacion/papers/factores-riesgo/mortality-risk-attributable-to-high-and-low-ambient-temperature-a-multicountry-o.md"
+      ]
+    },
+    {
+      "id": "ola-calor-001",
+      "pregunta": "¿qué pasó en la ola de calor de Chicago de 1995?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/semenza-1996-chicago-heat-wave.md"]
+    },
+    {
+      "id": "ola-calor-002",
+      "pregunta": "¿cómo afectan las olas de calor a la salud pública en Europa?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/planes-accion/heatwaves-and-public-health-in-europe.md"]
+    },
+    {
+      "id": "alertas-001",
+      "pregunta": "¿los sistemas de alerta temprana por calor salvan vidas?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/planes-accion/heat-watch-warning-systems-save-lives-estimated-costs-and-benefits-for-philadelp.md"]
+    },
+    {
+      "id": "planes-001",
+      "pregunta": "¿qué es un plan de acción frente al calor (HHAP)?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/planes-accion/who-heat-health-action-plans.md"]
+    },
+    {
+      "id": "planes-002",
+      "pregunta": "¿qué dice el plan nacional español contra el exceso de temperaturas?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/planes-accion/plan-nacional-calor-sanidad.md"]
+    },
+    {
+      "id": "indice-001",
+      "pregunta": "¿cómo se calcula el índice de calor (heat index)?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/indices-biometeorologicos/rothfusz-1990-heat-index.md"]
+    },
+    {
+      "id": "indice-002",
+      "pregunta": "¿cómo se calcula el wind chill (sensación térmica por viento)?",
+      "factores_esperados": [],
+      "documentos_esperados": [
+        "documentacion/papers/indices-biometeorologicos/nws-wind-chill-2001.md",
+        "documentacion/riesgo/formulas_deterministas.md"
+      ]
+    },
+    {
+      "id": "indice-003",
+      "pregunta": "¿qué es el índice UTCI y para qué sirve?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/indices-biometeorologicos/an-introduction-to-the-universal-thermal-climate-index-utci.md"]
+    },
+    {
+      "id": "indice-004",
+      "pregunta": "¿qué es el índice WBGT y cómo valora el estrés térmico?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/indices-biometeorologicos/insst-ntp-322-wbgt.md"]
+    },
+    {
+      "id": "frio-001",
+      "pregunta": "¿qué factores aumentan el riesgo de una persona mayor en invierno?",
+      "factores_esperados": ["frio/vivienda_fria", "frio/cardiovascular", "frio/respiratoria"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/excess-winter-mortality-in-europe-a-cross-country-analysis-identifying-key-risk.md"]
+    },
+    {
+      "id": "frio-002",
+      "pregunta": "¿cómo afecta el frío a la mortalidad cardiovascular?",
+      "factores_esperados": ["frio/cardiovascular"],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/a-systematic-review-and-meta-analysis-of-cold-exposure-and-cardiovascular-diseas.md"]
+    },
+    {
+      "id": "frio-003",
+      "pregunta": "¿el frío es un factor de riesgo para la salud?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/cold-an-underrated-risk-factor-for-health.md"]
+    },
+    {
+      "id": "frio-004",
+      "pregunta": "¿por qué hay más muertes en invierno en el sur de Europa?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/excess-winter-mortality-in-europe-a-cross-country-analysis-identifying-key-risk.md"]
+    },
+    {
+      "id": "frio-005",
+      "pregunta": "¿qué es la mortalidad invernal excesiva?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/excess-winter-mortality-in-europe-a-cross-country-analysis-identifying-key-risk.md"]
+    },
+    {
+      "id": "calor-frio-001",
+      "pregunta": "¿qué causa más muertes: el calor o el frío?",
+      "factores_esperados": [],
+      "documentos_esperados": ["documentacion/papers/factores-riesgo/mortality-risk-attributable-to-high-and-low-ambient-temperature-a-multicountry-o.md"],
+      "nota": "Pregunta mixta/ambigua: el multicountry de Gasparrini atribuye mas carga al frio."
+    },
+    {
+      "id": "calor-frio-002",
+      "pregunta": "¿cómo afectan las temperaturas extremas a las personas mayores?",
+      "factores_esperados": [],
+      "documentos_esperados": [
+        "documentacion/papers/factores-riesgo/heat-related-and-cold-related-deaths-in-england-and-wales-who-is-at-risk.md",
+        "documentacion/papers/factores-riesgo/effects-of-air-temperature-on-climate-sensitive-mortality-and-morbidity-outcomes.md"
+      ],
+      "nota": "Pregunta mixta: ambos estudios se centran en poblacion mayor (65+)."
+    }
+  ]
+}
