@@ -1828,7 +1828,7 @@ async def procesar_mensaje(chat_id: int, texto: str | None) -> str | None:
         # BOT-011: además del parte, se pasan los datos REALES de la predicción
         # (%, factores, ubicación) para que la respuesta sea personalizada.
         contexto = _contexto_parte_conversacion(conv)
-        return await _preguntar_al_rag(texto, conv, contexto)
+        return await _preguntar_al_rag(texto, conv, contexto, str(chat_id))
 
     if estado == Estado.IDLE:
         return BIENVENIDA
@@ -2243,7 +2243,9 @@ async def ejecutar_prediccion(chat_id: int) -> str:
         st = check_ollama()
         if st.get("available"):
             config = LLMConfig(model=st.get("best_model") or MODELO_LOCAL)
-            texto = await asyncio.to_thread(ask_con_perfil, perfil, result, config, lugar)
+            texto = await asyncio.to_thread(
+                ask_con_perfil, perfil, result, config, lugar, str(chat_id)
+            )
             if texto:
                 logger.info("Respuesta redactada por %s", config.model)
             else:
@@ -2343,7 +2345,9 @@ def _contexto_parte_conversacion(conv: dict) -> str:
     return "\n\n".join(partes)
 
 
-async def _preguntar_al_rag(texto: str, conv: dict, contexto: str | None = None) -> str:
+async def _preguntar_al_rag(
+    texto: str, conv: dict, contexto: str | None = None, sesion_id: str = "default"
+) -> str:
     """Pregunta libre al LLM con RAG. `contexto` es el parte ya entregado."""
     config = LLMConfig(model=conv["modelo"])
     # Extraer el último resultado de la predicción para obtener el perfil de usuario y factores
@@ -2381,7 +2385,9 @@ async def _preguntar_al_rag(texto: str, conv: dict, contexto: str | None = None)
         if data.get("ocupacion"):
             perfil_usuario["ocupacion"] = data["ocupacion"]
     # Llamar a ask_with_rag con el perfil para adaptación contextual
-    res = await asyncio.to_thread(ask_with_rag, texto, 3, 3, config, contexto, perfil_usuario)
+    res = await asyncio.to_thread(
+        ask_with_rag, texto, 3, 3, config, contexto, perfil_usuario, sesion_id
+    )
     # HOST-001: si el LLM no contesta (servicio caído o cuota agotada), se
     # responde con la plantilla determinista. Antes se devolvía un error
     # visible ("El LLM no respondió. Revisa que ... esté disponible"), que no

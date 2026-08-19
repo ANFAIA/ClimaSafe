@@ -1167,7 +1167,7 @@ class TestBOT006RecomendacionPostPrediccion:
 
         recibido: dict = {}
 
-        def _fake_perfil(_p, _r, config=None, _l=None):
+        def _fake_perfil(_p, _r, config=None, _l=None, sesion_id="default"):
             recibido["config"] = config
             return _RESPONSE_LLM
 
@@ -1303,7 +1303,7 @@ class TestChatAbiertoTrasStart:
         monkeypatch.setattr(
             mod,
             "ask_con_perfil",
-            lambda _p, _r, _c=None, _l=None: _RESPONSE_LLM,
+            lambda _p, _r, _c=None, _l=None, _s="default": _RESPONSE_LLM,
         )
         _, enviados = self._capturar_enviados(monkeypatch)
         _conversaciones[1] = {
@@ -1346,7 +1346,7 @@ class TestChatAbiertoTrasStart:
 
         recibido: dict = {}
 
-        def _fake_rag(q, k1, k2, c, ctx=None, perfil=None):
+        def _fake_rag(q, k1, k2, c, ctx=None, perfil=None, sesion_id="default"):
             recibido["pregunta"] = q
             recibido["contexto"] = ctx
             recibido["perfil"] = perfil
@@ -1447,12 +1447,12 @@ class TestChatAbiertoTrasStart:
         monkeypatch.setattr(
             mod,
             "ask_con_perfil",
-            lambda _p, _r, _c=None, _l=None: _RESPONSE_LLM,
+            lambda _p, _r, _c=None, _l=None, _s="default": _RESPONSE_LLM,
         )
         monkeypatch.setattr(
             mod,
             "ask_with_rag",
-            lambda q, k1, k2, c, ctx=None, perfil=None: {
+            lambda q, k1, k2, c, ctx=None, perfil=None, sesion_id="default": {
                 "answer": "Usa SPF 30+ y renueva cada 2 horas."
             },
         )
@@ -1758,7 +1758,7 @@ class TestPartePorcentaje:
 
         capturado: dict = {}
 
-        def _fake_chat(messages, config):
+        def _fake_chat(messages, config, **kwargs):
             # LLM-003 antepone SYSTEM_PARTE como messages[0]; los datos del
             # parte van en el mensaje con role=user.
             user_msgs = [m for m in messages if m["role"] == "user"]
@@ -2053,7 +2053,7 @@ class TestChatParteConcisa:
 
         recibido: dict = {}
 
-        def _fake_rag(q, k1, k2, c, ctx=None, perfil=None):
+        def _fake_rag(q, k1, k2, c, ctx=None, perfil=None, sesion_id="default"):
             recibido["pregunta"] = q
             recibido["contexto"] = ctx
             recibido["perfil"] = perfil

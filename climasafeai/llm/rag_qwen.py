@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,6 +22,7 @@ import litellm
 
 from climasafeai.db.manager import DBManager
 from climasafeai.features.personalizacion import _OCUPACION_NIVELES, recomendar_horario
+from climasafeai.llm.costes import registrar_llamada
 from climasafeai.models.recomendaciones import recomendacion_resumen
 
 logger = logging.getLogger(__name__)
@@ -217,16 +219,22 @@ class LLMConfig:
 def _chat_litellm(
     messages: list[dict[str, str]],
     config: LLMConfig,
+    sesion_id: str = "default",
 ) -> str | None:
     """Envía un chat a cualquier LLM via LiteLLM.
 
     LiteLLM normaliza la API de 100+ proveedores (Ollama, Groq, OpenAI…).
     El proveedor se deduce del prefijo del model name.
+
+    ARNES-004: cada llamada se registra en el contador de tokens/coste
+    (`climasafeai.llm.costes`), con latencia medida aquí. `sesion_id` agrupa
+    el acumulado (p. ej. el chat_id del bot).
     """
     # ARNES-003: debug opcional del payload. Apagado por defecto: no toca
     # `messages` ni cambia la llamada, solo registra lo que se envía.
     if _debug_llm_activo():
         logger.info("[CLIMASAFE_DEBUG_LLM] %s", _debug_payload(messages, config))
+    inicio = time.monotonic()
     try:
         resp = litellm.completion(
             model=config.model,
@@ -234,17 +242,19 @@ def _chat_litellm(
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         )
-        # El coste de una conversación solo se puede comparar si queda escrito:
-        # `usage` viene del proveedor, no es una estimación nuestra.
+        latencia = time.monotonic() - inicio
+        # ARNES-004: el coste de una conversación solo se puede comparar si
+        # queda escrito: `usage` viene del proveedor, no es una estimación.
         usage = getattr(resp, "usage", None)
-        if usage is not None:
-            logger.info(
-                "tokens %s: %s prompt + %s completion = %s",
-                config.model,
-                getattr(usage, "prompt_tokens", "?"),
-                getattr(usage, "completion_tokens", "?"),
-                getattr(usage, "total_tokens", "?"),
-            )
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage is not None else 0
+        completion_tokens = getattr(usage, "completion_tokens", 0) if usage is not None else 0
+        registrar_llamada(
+            config.model,
+            prompt_tokens,
+            completion_tokens,
+            latencia,
+            sesion_id=sesion_id,
+        )
         # BOT-022: si qwen3 se sirve con thinking activo, el razonamiento
         # llega en un bloque <think> que no es parte de la respuesta; se
         # limpia antes de devolverla. Para qwen2.5 es un no-op.
@@ -257,7 +267,6 @@ def _chat_litellm(
         # límite (completion_tokens == max_tokens), así que se comprueba
         # también ese caso.
         finish = getattr(resp.choices[0], "finish_reason", None)
-        completion_tokens = getattr(usage, "completion_tokens", 0) if usage is not None else 0
         if finish == "length" or (
             isinstance(completion_tokens, int) and completion_tokens >= config.max_tokens
         ):
@@ -269,6 +278,7 @@ def _chat_litellm(
             content += AVISO_TRUNCADO
         return content
     except Exception as exc:
+        latencia = time.monotonic() - inicio
         logger.error("Error en LiteLLM (%s): %s", config.model, exc)
         return None
 
@@ -435,6 +445,7 @@ def ask_with_rag(
     config: LLMConfig | None = None,
     contexto: str | None = None,
     perfil: dict | None = None,
+    sesion_id: str = "default",
 ) -> dict[str, Any]:
     """RAG completo: busca en factores + documentación y responde con cualquier LLM.
 
@@ -506,7 +517,7 @@ def ask_with_rag(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    answer = _chat_litellm(messages, config)
+    answer = _chat_litellm(messages, config, sesion_id=sesion_id)
 
     return {
         "answer": answer,
@@ -521,6 +532,7 @@ def ask_raw(
     question: str,
     config: LLMConfig | None = None,
     contexto: str | None = None,
+    sesion_id: str = "default",
 ) -> dict[str, Any]:
     """LLM raw sin RAG — sin contexto aumentado.
 
@@ -539,7 +551,7 @@ def ask_raw(
         {"role": "system", "content": SYSTEM_RAW},
         {"role": "user", "content": f"{contexto}\n\n{question}" if contexto else question},
     ]
-    answer = _chat_litellm(messages, config)
+    answer = _chat_litellm(messages, config, sesion_id=sesion_id)
 
     return {
         "answer": answer,
@@ -752,6 +764,7 @@ def ask_con_perfil(
     resultado_prediccion: dict,
     config: LLMConfig | None = None,
     lugar: str | None = None,
+    sesion_id: str = "default",
 ) -> str | None:
     """Redacta la respuesta de una predicción usando el LLM.
 
@@ -860,7 +873,7 @@ FRASE DE CIERRE:
         {"role": "user", "content": prompt},
     ]
     try:
-        respuesta = _chat_litellm(messages, config)
+        respuesta = _chat_litellm(messages, config, sesion_id=sesion_id)
     except Exception as exc:
         logger.warning("LLM falló al redactar respuesta: %s", exc)
         return None

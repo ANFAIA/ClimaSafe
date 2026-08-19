@@ -904,8 +904,11 @@
         "Para modelos locales (Ollama) el coste es cero pero los tokens y la latencia se siguen midiendo: es el dato que justifica elegir local",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-19",
+      "review_rounds": 0,
+      "closed": "2026-08-19"
     },
     {
       "id": "ARNES-005",
