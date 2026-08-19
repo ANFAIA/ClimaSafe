@@ -309,8 +309,12 @@ def _parsear_input(input_txt: str) -> tuple[dict, dict]:
     if m:
         parte = m.group(1)
         for campo, patron, cast in (
-            ("t_media", r"([\d.]+) °C de media", float),
-            ("t_max", r"máx\s*([\d.]+) °C", float),
+            # El signo negativo es obligatorio: los ejemplos de frío real
+            # (parquet 2016-2026) llevan medias y máximas bajo cero, y sin él
+            # el QC leía "-6.2" como media "6.2" y la máx negativa como None
+            # (→ todo el canal frío quedaba "no verificable").
+            ("t_media", r"(-?[\d.]+) °C de media", float),
+            ("t_max", r"máx\s*(-?[\d.]+) °C", float),
             ("rh", r"humedad\s*([\d.]+) %", float),
             ("viento_kmh", r"viento\s*([\d.]+) km/h", float),
             ("uv", r"\bUV\s*(\d+(?:\.\d+)?)", float),
@@ -363,10 +367,11 @@ def _construir_weather(perfil: dict, clima: dict) -> dict | None:
     `perfil_horario_desde_df` y los overrides físicos del ensemble (HI >= 39,
     HI >= 27 + UV > 3) vean exactamente el extremo que el parte declara. Las
     features de persistencia (horas sobre umbral, grados-día...) se DERIVAN de
-    la temperatura del parte en vez de usar constantes: con valores fijos el
-    QC daba sistemáticamente una clase más alta que la respuesta (sesgo de la
-    reconstrucción, no del dataset). Sin t_media no hay weather que construir
-    (señal de input roto).
+    la temperatura del parte en vez de usar constantes. El df_features (el día
+    que ven los modelos tabulares) se construye DIA_DELTA por debajo de la
+    ventana: el parte declara la media/máx de la ventana de actividad, no del
+    día (ver nota en _construir_weather). Sin t_media no hay weather que
+    construir (señal de input roto).
     """
     import pandas as pd
 
@@ -379,6 +384,20 @@ def _construir_weather(perfil: dict, clima: dict) -> dict | None:
     inicio = int(perfil.get("hora_inicio") or 12)
     duracion = max(1, round(float(perfil.get("duracion_h") or 1)))
 
+    # El día entero NO es la ventana de actividad. El parte declara la media y
+    # la máxima de la VENTANA (2-6 h, el tramo que el perfil está expuesto), no
+    # del día: medido con el forecast real (2026-08-19, 13 escenarios), la
+    # ventana de tarde queda +3..+17 °C sobre la media diaria. Reconstruir el
+    # día con la media de la ventana (como se hacía) convertía un día de 21 °C
+    # con pico de 30.9 en un día tórrido de 30.9, el ensemble disparaba la prob
+    # de calor (0.07 → 0.50) y el QC acusaba de PELIGRO a respuestas que el
+    # pipeline real, con el weather completo, había dado SEGURO. El día
+    # sintético se queda DIA_DELTA por debajo de la ventana (el pico de la
+    # ventana es la máxima del día, no su media).
+    DIA_DELTA = 8.0
+    dia_t2m = t_media - DIA_DELTA
+    dia_hi = t_max - DIA_DELTA
+
     # Persistencia derivada del parte: coherente con el día que describe.
     horas_sobre_umbral = max(0, int((t_max - 27.0) * 2)) if t_max > 27.0 else 0
     horas_bajo_umbral = max(0, int((5.0 - t_media) * 2)) if t_media < 5.0 else 0
@@ -390,10 +409,13 @@ def _construir_weather(perfil: dict, clima: dict) -> dict | None:
     horas = list(range(max(0, inicio - 2), inicio + duracion + 3))
     filas = []
     for h in horas:
+        # Dentro de la ventana, el extremo que el parte declara (t_max): es lo
+        # que ve perfil_horario y lo que activa los overrides físicos. Fuera de
+        # la ventana, el día (dia_t2m).
         if inicio <= h < inicio + duracion:
             temp = t_max
         else:
-            temp = t_media
+            temp = dia_t2m
         # La hora puede pasar de 24 (ventana nocturna): se envuelve.
         hh = h % 24
         filas.append({
@@ -405,23 +427,25 @@ def _construir_weather(perfil: dict, clima: dict) -> dict | None:
         })
     df_hora = pd.DataFrame(filas)
 
+    # df_features describe el DÍA (lo que consumen los modelos tabulares), así
+    # que usa dia_t2m/dia_hi, no los valores de la ventana.
     df_features = pd.DataFrame([{
         "fecha": "2024-07-15", "datetime": "2024-07-15 14:00",
-        "t2m_c": t_media, "rh": rh, "wind_speed_kmh": viento, "sp": 101300.0,
-        "heat_index_c": t_max, "wbgt_c": t_max - 1.0, "wind_chill_c": t_max - 1.0,
-        "heat_index_mean": t_media, "heat_index_std": 2.0,
-        "heat_index_min": t_media - 3.0,
+        "t2m_c": dia_t2m, "rh": rh, "wind_speed_kmh": viento, "sp": 101300.0,
+        "heat_index_c": dia_hi, "wbgt_c": dia_hi - 1.0, "wind_chill_c": dia_hi - 1.0,
+        "heat_index_mean": dia_hi - 1.0, "heat_index_std": 2.0,
+        "heat_index_min": dia_hi - 3.0,
         "horas_sobre_umbral": horas_sobre_umbral,
-        "wind_chill_mean": t_media - 1.0, "wind_chill_std": 1.0,
-        "wind_chill_max": t_max, "horas_bajo_umbral": horas_bajo_umbral,
-        "heat_index_c_lag1": t_media - 1.0, "heat_index_c_roll3": t_media,
-        "heat_index_c_roll7": t_media - 1.0,
+        "wind_chill_mean": dia_hi - 1.0, "wind_chill_std": 1.0,
+        "wind_chill_max": dia_hi, "horas_bajo_umbral": horas_bajo_umbral,
+        "heat_index_c_lag1": dia_hi - 1.0, "heat_index_c_roll3": dia_hi,
+        "heat_index_c_roll7": dia_hi - 1.0,
         "dias_consec_sobre_umbral": dias_consec_sobre,
         "grados_dia_calor_roll7": grados_calor,
         "grados_dia_calor_roll14": grados_calor * 1.5,
-        "wind_chill_mean_roll3": t_media - 1.0,
-        "wind_chill_mean_roll7": t_media - 1.0,
-        "wind_chill_mean_roll14": t_media - 1.0,
+        "wind_chill_mean_roll3": dia_hi - 1.0,
+        "wind_chill_mean_roll7": dia_hi - 1.0,
+        "wind_chill_mean_roll14": dia_hi - 1.0,
         "grados_dia_frio_roll7": grados_frio,
         "grados_dia_frio_roll14": grados_frio * 1.5,
         "dias_consec_bajo_umbral": 1 if t_media < 5.0 else 0,
@@ -433,7 +457,7 @@ def _construir_weather(perfil: dict, clima: dict) -> dict | None:
     return {
         "lat": lat,
         "lon": lon,
-        "current": {"t2m_c": t_media, "rh": rh,
+        "current": {"t2m_c": dia_t2m, "rh": rh,
                     "wind_speed_kmh": viento, "sp": 101300.0},
         "df_hora": df_hora,
         "df_features": df_features,

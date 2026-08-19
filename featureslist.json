@@ -2034,10 +2034,13 @@
         "se documenta el resumen del QC en progress o en documentacion/llm",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "LLM-015"
-      ]
+      ],
+      "started": "2026-08-19",
+      "review_rounds": 0,
+      "closed": "2026-08-19"
     },
     {
       "id": "LLM-018",
