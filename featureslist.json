@@ -2053,10 +2053,13 @@
         "las celdas de verificacion (sha256/marca Tiempo en esa franja) se alinean con colab_dataset.zip regenerado",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "LLM-017"
-      ]
+      ],
+      "started": "2026-08-19",
+      "review_rounds": 0,
+      "closed": "2026-08-19"
     }
   ]
 }
