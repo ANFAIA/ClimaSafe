@@ -870,10 +870,13 @@
         "Cada cambio (solapamiento, modelo) se mide contra la linea base de RAG-004: si no mejora el recall, se revierte y se dice",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "RAG-004"
-      ]
+      ],
+      "started": "2026-08-19",
+      "review_rounds": 0,
+      "closed": "2026-08-19"
     },
     {
       "id": "ARNES-003",

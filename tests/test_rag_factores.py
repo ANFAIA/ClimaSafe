@@ -13,7 +13,32 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import climasafeai.db.rag as rag_mod
 from climasafeai.db.manager import DBManager
+
+
+class _FakeEmbedder:
+    """Determinista y agnóstico al modelo real de embeddings (RAG-006: el
+    por defecto cambió a distiluse; estos tests verifican el formato del texto
+    indexado y que el LLM cita números/fuentes, no el ranking del modelo).
+
+    - "diuret" → vector propio: solo diuréticos_asa lo contiene, así que la
+      query de diuréticos lo recupera en primera posición (DOI estable).
+    - factores de frío → otro vector; el resto de calor → un tercero, para que
+      una query de calor recupere solo calor.
+    """
+
+    def encode(self, texto: str):
+        if "diur" in texto:
+            return [1.0] + [0.0] * (rag_mod.EMBEDDING_DIM - 1)
+        if "tipo: frio" in texto:
+            return [0.0, 0.0, 1.0] + [0.0] * (rag_mod.EMBEDDING_DIM - 3)
+        return [0.0, 1.0] + [0.0] * (rag_mod.EMBEDDING_DIM - 2)
+
+
+@pytest.fixture(autouse=True)
+def embedder_falso(monkeypatch):
+    monkeypatch.setattr(rag_mod, "_get_embedder", lambda: _FakeEmbedder())
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────
