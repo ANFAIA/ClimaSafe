@@ -65,6 +65,13 @@ body {
   background: rgba(79, 142, 247, 0.08);
   color: #6ba3ff;
 }
+/* Accesibilidad (WEB-013): el tema resuelve --md-typeset-a-color contra
+   --md-primary-fg-color (#0f1420) en el esquema slate, dejando los <code>
+   dentro de enlaces casi invisibles (contraste 1.1:1). Fuerza el azul del
+   sitio: 6.6:1 sobre el fondo del code, cumple WCAG 2.1 AA (4.5:1). */
+.md-typeset a code {
+  color: #6ba3ff;
+}
 .md-typeset pre > code {
   background: #0c1018;
   color: #e2e8f4;

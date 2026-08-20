@@ -2108,8 +2108,12 @@
         "Se corrigen en el codigo las violaciones critical/serious detectadas y se re-ejecuta axe en verde",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-20",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-20"
     },
     {
       "id": "WEB-014",
@@ -2260,6 +2264,19 @@
         "Ambos niveles existen en la web (docs publica) y en el repo",
         "El README/entrada enruta a cada nivel segun el perfil del lector",
         "La guia de usuario es legible de una pasada y no duplica la tecnica",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-019",
+      "title": "Dar mas vistosidad a las landings de presentacion de los proyectos en cacelass.github.io usando shaders (recurso https://shaders.com/)",
+      "description": "Dar mas vistosidad a las landings de presentacion de los proyectos en cacelass.github.io usando shaders (recurso https://shaders.com/)",
+      "acceptance_criteria": [
+        "Se evalua la viabilidad de usar shaders.com para las landings de presentacion de los proyectos (home y/o projects/climasafe.html y similares)",
+        "Se aplica de forma que NO rompa la accesibilidad (WCAG 2.1 AA, WEB-013) ni degrade el rendimiento o los navegadores sin WebGL (fallback gracioso)",
+        "Las landings mantienen el contenido y los enlaces actuales",
         "make test sigue en verde"
       ],
       "status": "pending",
