@@ -126,3 +126,46 @@ def test_api_predict_semanal_devuelve_la_serie(monkeypatch):
     assert out["horizonte_dias"] == 7
     assert out["completo"] is True
     assert out["dias"][0]["banda"] == [0.49, 0.59]
+    # FORECAST-004: el endpoint pasa `banda_origen` cuando el cálculo la da.
+    assert out["banda_origen"] == "conformal"
+
+
+def test_api_predict_semanal_incompleto_avisa_hasta_donde(monkeypatch):
+    """FORECAST-004: el endpoint semanal reporta `completo=False` y
+    `forecast_hasta` cuando el forecast no cubre los 7 días: la UI puede
+    avisar explícitamente sin extrapolar en silencio."""
+    import asyncio
+
+    import chat.app as web
+    import climasafeai.models.ensemble as ens
+
+    def _fake(lat=None, lon=None, provincia="Madrid", perfil=None, resolucion=60):
+        return {
+            "horizonte_dias": 7,
+            "completo": False,
+            "forecast_hasta": "2026-08-12",
+            "dias": [
+                {"fecha": "2026-08-10", "prob": 0.54, "clase": "PRECAUCION",
+                 "confianza_conformal": "alta", "set_size_conformal": 1,
+                 "banda": [0.49, 0.59]},
+                {"fecha": "2026-08-11", "prob": 0.61, "clase": "PRECAUCION",
+                 "confianza_conformal": "media", "set_size_conformal": 2,
+                 "banda": [0.46, 0.76]},
+                {"fecha": "2026-08-12", "prob": 0.40, "clase": "SEGURO",
+                 "confianza_conformal": "alta", "set_size_conformal": 1,
+                 "banda": [0.35, 0.45]},
+            ],
+            "banda_origen": "conformal",
+        }
+
+    monkeypatch.setattr(ens, "prediccion_semanal", _fake)
+    out = asyncio.run(web.api_predict_semanal(
+        {"lat": 40.4, "lon": -3.7, "provincia": "Madrid", "perfil": {"edad": 57}}
+    ))
+    assert out["completo"] is False
+    assert out["forecast_hasta"] == "2026-08-12"
+    assert len(out["dias"]) == 3
+    assert out["horizonte_dias"] == 7
+    # cada día predicho conserva su banda; el resto no está en la serie
+    assert all(d["banda"] is not None for d in out["dias"])
+    assert out["banda_origen"] == "conformal"

@@ -756,6 +756,7 @@
       <div class="card-title">Tendencia semanal</div>
       <p id="weekly-status" style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px"></p>
       <div id="weekly-legend" style="display:flex;flex-wrap:wrap;gap:8px;font-size:0.8rem;margin-bottom:4px"></div>
+      <p id="weekly-banda-explica" style="display:none;font-size:0.8rem;color:var(--text-light);margin:0 0 8px 0"></p>
       <div style="position:relative">
         <canvas id="weekly-chart"></canvas>
       </div>
@@ -2243,6 +2244,7 @@ function nuevaConsulta() {
   document.getElementById('group-contrafactual-card').style.display = 'none';
   document.getElementById('weekly-card').style.display = 'none';
   document.getElementById('weekly-status').textContent = '';
+  document.getElementById('weekly-banda-explica').style.display = 'none';
   if (_weeklyChart) { _weeklyChart.destroy(); _weeklyChart = null; }
   document.getElementById('dot3').classList.remove('active');
   document.getElementById('dot3').classList.remove('done');
@@ -2848,24 +2850,31 @@ async function verTendenciaSemanal() {
     // Criterio FORECAST-001: cuando el forecast no cubre los 7 días se indica
     // explícitamente hasta dónde llega; nunca se extrapola en silencio.
     if (data.completo) {
-      status.textContent = 'Forecast completo: ' + data.horizonte_dias + ' días cubiertos. '
-        + 'La banda sale del prediction set conformal (α=0.1) de cada día.';
+      status.textContent = 'Forecast completo: ' + data.horizonte_dias + ' días cubiertos.';
     } else {
       status.textContent = 'Aviso: el forecast meteorológico llega hasta ' + data.forecast_hasta
         + ' (' + data.dias.length + ' de ' + data.horizonte_dias + ' días). '
-        + 'No se extrapola más allá de lo que cubre el forecast.';
+        + 'El resto de días no se dibujan: no hay datos fiables y no se extrapola en silencio.';
     }
-    _pintarSemanal(data.dias);
+    // FORECAST-004: la banda se explica en pantalla en lenguaje llano y se
+    // muestra `banda_origen` cuando el backend la incluye.
+    const explica = document.getElementById('weekly-banda-explica');
+    explica.innerHTML = 'La franja azul es la banda de confianza: el intervalo de la '
+      + 'predicción conformal (α=0.1) donde puede caer el riesgo real de cada día.'
+      + (data.banda_origen ? ' <span class="meta">Origen: ' + data.banda_origen + '</span>' : '');
+    explica.style.display = 'block';
+    _pintarSemanal(data);
   } catch (e) {
     status.textContent = 'Error al calcular la tendencia semanal: ' + e.message;
   }
 }
 
-function _pintarSemanal(dias) {
+function _pintarSemanal(data) {
   const ctx = document.getElementById('weekly-chart');
   const legend = document.getElementById('weekly-legend');
   if (!ctx) return;
   if (_weeklyChart) _weeklyChart.destroy();
+  const dias = data.dias;
   const labels = dias.map(x => x.fecha.slice(5));
   const probs = dias.map(x => (x.prob != null ? x.prob * 100 : null));
   const lower = dias.map(x => (x.banda ? x.banda[0] * 100 : null));
@@ -2914,7 +2923,7 @@ function _pintarSemanal(dias) {
   const confSet = [...new Set(conf)];
   legend.innerHTML = confSet.map(c =>
     '<span><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:' + (confColor[c] || '#999') + '"></span> ' + (confLabel[c] || c) + '</span>'
-  ).join('') + '<span style="margin-left:auto">▬ riesgo · ▒ banda conformal</span>';
+  ).join('') + '<span style="margin-left:auto">▬ riesgo · ▒ franja donde puede caer el riesgo real</span>';
 }
 
 function mostrarOverride(d) {
