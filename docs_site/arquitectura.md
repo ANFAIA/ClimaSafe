@@ -56,6 +56,33 @@ train y test.
 | **MCP servers** | Tools para asistentes de IA: predecir riesgo, perfiles, rutinas, gráfica |
 | **RAG vectorial** | Factores y documentación indexados con sqlite-vec para responder con citas |
 
+## MCP: control de acceso y estándares
+
+El servidor MCP de predicción (`agents/tools/prediction_mcp_tool.py`) cerró el
+agujero de identidad: **ninguna tool sabía quién llamaba**, y cuatro de ellas
+leían o reasignaban perfiles ajenos con solo saber el alias. Ahora toda tool
+pasa por un control de acceso en un punto único (`_requiere_identidad`):
+
+- **Identidad por proceso en stdio** (`CLIMASAFE_MCP_TOKEN` o `--identidad`),
+  **bearer en HTTP** — un proceso = un llamante; el transporte se resuelve en
+  un solo sitio.
+- **`uid` opaco** (`usr_…`) sustituye a `alias`/`chat_id` como llave de
+  acceso; la credencial (`mcp_token_hash`) nunca sale en las respuestas.
+- **Minimización de campos**: un perfil ajeno no devuelve ni un campo; de un
+  perfil propio nunca salen `farmacos`, `comorbilidades`, `situacion_social`,
+  grasa, fototipo ni coordenadas.
+- **Solo lectura por defecto (MCP-002)**: las 5 tools que escriben en la BD
+  (`crear_perfil_mcp`, `crear_rutina_mcp`, `borrar_rutina_mcp`,
+  `vincular_chat_id_mcp`, `configurar_hora_aviso_mcp`) exigen
+  `CLIMASAFE_MCP_WRITE_TOKEN` al arrancar; sin él responden error y no tocan
+  nada. El token nunca entra en la firma de una tool ni en los logs.
+- **Spec 2025-06-18+ (MCP-004)**: ambos servidores (predicción y factores)
+  usan streamable HTTP (el de factores migró de SSE) y declaran tool
+  annotations (`title`, `readOnlyHint`, `destructiveHint`).
+
+> Detalle: [`documentacion/arquitectura/control_acceso_mcp.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/arquitectura/control_acceso_mcp.md)
+> y [`documentacion/arquitectura/auditoria-mcp-espec.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/arquitectura/auditoria-mcp-espec.md)
+
 ## Persistencia
 
 SQLite (`data/climasafe.db`): perfiles, rutinas, consultas y RAG vectorial.

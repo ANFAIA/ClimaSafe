@@ -28,9 +28,14 @@ con factores de la literatura epidemiológica y se traduce a clase.
 
 | Página | Qué explica |
 |---|---|
-| [Modelos y pesos](modelos-pesos.md) | Los 3 modelos + la fórmula, cómo se combinan (ensemble conformal), métricas, umbrales y los factores individuales con su peso. |
+| [Modelos y pesos](modelos-pesos.md) | Los 4 modelos + la fórmula, cómo se combinan (ensemble conformal), métricas, umbrales, el modelo bayesiano de contraste y los factores individuales con su peso. |
+| [Riesgo y personalización](riesgo-personalizacion.md) | Índices de sensación térmica y la tabla completa de factores individuales con su peso y su fuente. |
 | [Arquitectura](arquitectura.md) | El flujo completo: datos → features → modelos → ensemble → personalización → canales (web, demo, bot, MCP, RAG). |
 | [Papers](papers.md) | La base científica: guías y estudios que sustentan índices, factores y umbrales. |
+| [LLM](llm.md) | El papel del LLM (redacción, no predicción), modelos soportados, fine-tuning, RAG y hosting remoto gratuito. |
+
+La documentación completa del proyecto (notas internas, decisiones y actas)
+vive en el repositorio: [`documentacion/`](https://github.com/ANFAIA/ClimaSafe/tree/main/documentacion).
 
 ---
 

@@ -26,6 +26,37 @@ predicción.
   riesgo de los modelos disponibles (para calor: XGBoost + LSTM + Fórmula; para
   frío: RandomForest + LSTM + Fórmula).
 
+## Modelo bayesiano jerárquico por provincia (BAYES-001) — contraste
+
+Como **modelo de contraste** (no entra en el ensemble) se implementó una
+regresión logística **ordinal acumulativa** de 3 clases con **efectos
+aleatorios por provincia** (partial pooling): cada provincia tiene su propia
+curva informada por la distribución nacional, así que las provincias con pocos
+episodios se encogen hacia la media en vez de sobreajustar. Se muestrea con
+Metropolis-Hastings propio (numpy/scipy, sin pymc) y se compara contra el
+componente tabular del ensemble reentrenado en la misma partición temporal
+(test = último 20 % de fechas, 34 470 filas):
+
+| Métrica (test temporal) | Calor: XGBoost → Jerárquico | Frío: RandomForest → Jerárquico |
+|---|---|---|
+| F1 macro | 0.4850 → **0.5484** (+0.063) | 0.4562 → **0.4779** (+0.022) |
+| Brier | 0.0571 → **0.0454** | 0.0944 → **0.0476** |
+| Accuracy | 0.8815 → 0.8616 | 0.7758 → **0.8998** |
+
+En calor la ganancia de F1 es **mayor donde menos datos hay** (provincias con
+pocos episodios: +0.0919; con muchos: +0.0549). En frío el beneficio es de
+**calibración**, no de ordenación de clases.
+
+**Decisión:** el jerárquico **NO entra en el ensemble ni lo sustituye** — no
+mejora consistentemente (en frío pierde en provincias con pocos episodios,
+−0.035) y su intervalo de credibilidad al 90 % no es un intervalo predictivo
+calibrado de la clase (cobertura 0.37 calor / 0.29 frío). Se queda como
+contraste; la vía de entrada futura (recalibrar el intervalo o añadirlo al
+ensemble como miembro con peso `1/conformal_set_size`) está documentada.
+
+> Estudio completo (implementación, comparativa y limitaciones):
+> [`documentacion/modelos/bayes_jerarquico.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/modelos/bayes_jerarquico.md)
+
 ## Umbrales y calibración
 
 - **Calibración isotónica post-hoc en frío** (en calor reduce sensibilidad en

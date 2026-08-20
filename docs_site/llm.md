@@ -48,7 +48,7 @@ defecto**: si está instalado, `mejor_disponible()` lo prioriza.
 
 ## Modelo base vs modelo de instrucciones — conclusiones
 
-> Estudio completo: [`documentacion/llm/base-vs-instruct.md`](../documentacion/llm/base-vs-instruct.md)
+> Estudio completo: [`documentacion/llm/base-vs-instruct.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/llm/base-vs-instruct.md)
 > — incluye la comparación real de salidas y la decisión para el próximo LoRA.
 
 Hay dos variantes del mismo modelo:
@@ -76,12 +76,58 @@ las veces e inventa el resto.
   `qwen3:1.7b` (mejor instruido) supera claramente al `qwen2.5:1.5b` (clase
   38 % vs 32 %, pero sobre todo inventa cifras 13 % vs 100 %).
 
+## LLM remoto gratuito (HOST-001)
+
+El LLM puede vivir fuera del portátil sin coste: **Groq free tier**, modelo
+`groq/openai/gpt-oss-20b` — cuota publicada y verificada por llamada real
+(30 RPM / 1.000 RPD / 8K TPM / 200K TPD). Una conversación completa del bot
+son ~4.800 tokens medidos, así que la cuota da ~1 conversación/minuto y ~40
+al día; el 429 no cuesta dinero y el bot degrada a plantilla determinista si
+el servicio cae. El modelo anterior (`groq/llama-3.3-70b-versatile`) **ya no
+existe** en el free tier (404 real, 18-08-2026); con `GEMINI_API_KEY` sola la
+alternativa automática es `gemini/gemini-3.6-flash`.
+
+> Estudio completo (cuotas de Groq, Gemini y OpenRouter, y la decisión):
+> [`documentacion/bot/hosting_llm_gratis.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/bot/hosting_llm_gratis.md)
+
 ## RAG
 
 Además del fine-tuning, los factores de riesgo y la documentación se indexan
 con **sqlite-vec** (embeddings semánticos). Ante una pregunta, el sistema
 recupera los fragmentos relevantes y el LLM responde citando las fuentes
 (RAG sobre `documentacion/`).
+
+### Modelo de embeddings: distiluse (RAG-006)
+
+El retrieval se cambió **por los números**: el modelo por defecto es ahora
+`distiluse-base-multilingual-cased-v2` (512 dims), que mejora el recall@5 en
+los dos canales frente a la línea base (`all-MiniLM-L6-v2`, 384):
+
+| Config | factores recall@5 | documentos recall@5 |
+|---|---|---|
+| Línea base (all-MiniLM-L6-v2) | 0.780 | 0.325 |
+| **distiluse-base-multilingual-cased-v2** | **0.940** | **0.611** |
+
+El solapamiento de chunks (200 caracteres) se probó y se **revertió**:
+empeora el recall de documentos en ambos modelos (0.325→0.286 con MiniLM;
+0.611→0.526 con distiluse), porque el chunking es por secciones y el solape
+diluye el embedding. `CHUNK_OVERLAP = 0` queda como defecto.
+
+> Comparativa completa:
+> [`documentacion/rag_006_comparativa_embeddings.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/rag_006_comparativa_embeddings.md)
+
+### QC del dataset de fine-tuning (LLM-017)
+
+El dataset de entrenamiento se regeneró y pasó el QC con **0 hallazgos**
+(`data/llm/train.jsonl` 300 pares + `val.jsonl` 100 pares): 0 críticas, 0
+duplicados y 0 inputs incompletos en ambos splits (50 verificados por split;
+los incoherentes menores de clase son ruido del detector, no del dataset).
+Se compuso en bloques calor/frío con dedupe global por clave normalizada y
+Jaccard de tokens > 0.9, cuotas por clase (las tres ≥ 10 %) y split
+estratificado.
+
+> Resumen del QC:
+> [`documentacion/llm/qc-llm-017.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/llm/qc-llm-017.md)
 
 ## Estado actual y pipeline
 

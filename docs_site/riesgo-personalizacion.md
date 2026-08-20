@@ -73,3 +73,6 @@ Heat Index / Wind Chill / UV descritos arriba.
 - `climasafeai/features/personalizacion.py` — factores individuales.
 - `climasafeai/features/weather_indices.py` — Heat Index, Wind Chill, WBGT.
 - `data/factores_riesgo.json` — base versionada de factores (coef, DOI, calidad).
+
+> Documentación completa (tabla de factores con RR/OR, intervalos y calidad):
+> [`documentacion/riesgo/personalizacion_individual.md`](https://github.com/ANFAIA/ClimaSafe/blob/main/documentacion/riesgo/personalizacion_individual.md)
