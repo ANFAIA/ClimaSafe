@@ -1830,8 +1830,9 @@
         "un perfil inexistente sigue pidiendo datos sin reventar",
         "hay tests del endpoint de carga de perfil con datos reales de la BD y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-20"
     },
     {
       "id": "FORECAST-004",
@@ -2092,6 +2093,173 @@
       "owner": "claude",
       "review_rounds": 0,
       "closed": "2026-08-20"
+    },
+    {
+      "id": "WEB-013",
+      "title": "Revision de accesibilidad (axe-core) de todo cacelass.github.io y de la web del proyecto ClimaSafe",
+      "description": "Revision de accesibilidad (axe-core) de todo cacelass.github.io y de la web del proyecto ClimaSafe",
+      "acceptance_criteria": [
+        "Se ejecuta npx @axe-core/cli sobre las paginas de cacelass.github.io (home, projects, climasafe/*, probar-ya, documentacion) y se pega el informe por pagina",
+        "Se fija el objetivo en WCAG 2.1 AA con 0 errores critical/serious en las paginas de ClimaSafe (probar-ya, mcp, telegram, documentacion, home, project) y se documentan los menores que queden",
+        "Se corrigen en el codigo las violaciones critical/serious detectadas y se re-ejecuta axe en verde",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-014",
+      "title": "Deteccion del idioma del navegador (i18n es/en) por defecto en todo cacelass.github.io y la web del proyecto, con selector manual",
+      "description": "Deteccion del idioma del navegador (i18n es/en) por defecto en todo cacelass.github.io y la web del proyecto, con selector manual",
+      "acceptance_criteria": [
+        "Se extrae el idioma del navegador (navigator.language) y la web carga en ese idioma por defecto en home, pages de proyecto, demo probar-ya y documentacion",
+        "Idiomas soportados: espanol e ingles (los mas usados en el sector)",
+        "cualquier otro navegador cae a espanol",
+        "Hay un selector manual para cambiar de idioma que se recuerda en localStorage y tiene prioridad sobre el del navegador",
+        "La documentacion (mkdocs) se incluye en el alcance o se documenta explicitamente como fase posterior si es demasiado grande",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-015",
+      "title": "Guardar el perfil de la demo probar-ya en localStorage para reutilizarlo en el mismo navegador",
+      "description": "Guardar el perfil de la demo probar-ya en localStorage para reutilizarlo en el mismo navegador",
+      "acceptance_criteria": [
+        "El perfil introducido en la demo probar-ya se guarda en localStorage (no cookies, por limite de tamano)",
+        "Al volver a abrir la demo en el mismo navegador se restauran los datos del perfil automaticamente",
+        "Hay un boton Borrar mis datos y un aviso de privacidad de que los datos no salen del navegador",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-016",
+      "title": "LLM en el navegador con transformers.js (Granite pequeno, ~1GB) descargado en runtime desde HuggingFace y ejecutado localmente",
+      "description": "LLM en el navegador con transformers.js (Granite pequeno, ~1GB) descargado en runtime desde HuggingFace y ejecutado localmente",
+      "acceptance_criteria": [
+        "La demo probar-ya carga un modelo LLM pequeno (Granite, ~1GB) con transformers.js descargado en tiempo de ejecucion desde HuggingFace a la maquina donde lo ejecuta el usuario (no empaquetado en el repo/GitHub) y cacheado en el navegador",
+        "El modelo ejecuta localmente en el navegador (redacta el parte/chat sin enviar datos a ningun servidor)",
+        "Si no hay red o falla la descarga, la demo usa el pipeline ML actual (fallback) sin romperse",
+        "Se documenta el modelo concreto elegido, su peso de descarga y la privacidad",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-017",
+      "title": "Revisar el render de los titulos/encabezados (no se cortan ni desbordan) en el sitio y la demo",
+      "description": "Revisar el render de los titulos/encabezados (no se cortan ni desbordan) en el sitio y la demo",
+      "acceptance_criteria": [
+        "Se revisa que los titulos y encabezados del sitio y de la demo no se cortan ni desbordan en ninguna resolucion/dispositivo",
+        "Se identifican los titulos que se parten en dos lineas o se cortan y se corrigen con CSS responsive (text-wrap, overflow, tamanos)",
+        "Se verifica en las rutas principales de cacelass.github.io y probar-ya a varios anchos",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-018",
+      "title": "Linkear patrocinadores ANFIA y CESGA con sus logos y recomendar proyectos similares en la web del proyecto ClimaSafe",
+      "description": "Linkear patrocinadores ANFIA y CESGA con sus logos y recomendar proyectos similares en la web del proyecto ClimaSafe",
+      "acceptance_criteria": [
+        "La web del proyecto ClimaSafe muestra los logos de ANFIA (https://anfaia.org/) y CESGA (https://www.cesga.es/) como patrocinadores, enlazando a sus sitios",
+        "Se recomiendan proyectos similares de ANFIA (SkillNet, MalariaSentinel, Agentic-Smart-Health) enlazandolos",
+        "Se usa el logo de ANFIA y CESGA (con permiso confirmado) para dar renombre al repo",
+        "Alcance solo en el repo/pagina de ClimaSafe, no en el home general",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "BOT-023",
+      "title": "OpenRouter como complemento a Groq: modelos gratuitos, elegir el mas grande free por defecto, en bot y web",
+      "description": "OpenRouter como complemento a Groq: modelos gratuitos, elegir el mas grande free por defecto, en bot y web",
+      "acceptance_criteria": [
+        "OpenRouter se anade como proveedor complementario a Groq (HOST-001) via LiteLLM, configurable por env (OPENROUTER_API_KEY)",
+        "Se detecta y selecciona por defecto el modelo gratuito mas grande disponible de OpenRouter (free)",
+        "Aplica tanto al bot de Telegram como a la web (chat)",
+        "Si no hay clave o cuota, cae al fallback determinista/plantilla",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DEPLOY-003",
+      "title": "release-please para los tags/version basada en Conventional Commits, solo en el repo ANFAIA; los commits los sigue haciendo el agente git",
+      "description": "release-please para los tags/version basada en Conventional Commits, solo en el repo ANFAIA; los commits los sigue haciendo el agente git",
+      "acceptance_criteria": [
+        "Se evalua e integra release-please (o el agente de release) para generar tags y version basada en los Conventional Commits, solo en el repo ANFAIA",
+        "El agente git sigue haciendo los commits (Conventional Commits sin coautoria)",
+        "release-please o el agente de release genera el tag/version",
+        "La version sale de una unica fuente de verdad y no choca con el bump de harness finish",
+        "Queda escrito como conviven los dos (agente commits + tag automatico) y que el repo personal queda fuera de alcance",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "PACK-002",
+      "title": "Empaquetado para tecnicos y no tecnicos: instalable por pip/npm y publicar imagen Docker (revertir el descarte de Docker)",
+      "description": "Empaquetado para tecnicos y no tecnicos: instalable por pip/npm y publicar imagen Docker (revertir el descarte de Docker)",
+      "acceptance_criteria": [
+        "El proyecto se puede instalar por pip (y/o npm) para usuarios tecnicos, con instrucciones claras",
+        "Se crea una imagen Docker del proyecto (se revierte el descarte de MSG-004) para que los no tecnicos lo levanten con un comando, y se publica en un registry",
+        "El Dockerfile sirve el servicio (bot/API/web) y no el despliegue interno con agentes (que se mantiene)",
+        "make test sigue en verde",
+        "dmg/Flathub/Electron/Homebrew quedan documentados como futuros si aplica"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "LLM-019",
+      "title": "Benchmark de modelos LLM gratuitos (Groq/OpenRouter/Gemini free) sobre val.jsonl con coste",
+      "description": "Benchmark de modelos LLM gratuitos (Groq/OpenRouter/Gemini free) sobre val.jsonl con coste",
+      "acceptance_criteria": [
+        "Se extiende el benchmark (LLM-003) a los modelos gratuitos de Groq, OpenRouter y Gemini free",
+        "Mismas metricas: formato pedido, no inventa cifras, latencia y ademas coste por peticion",
+        "Se compara sobre data/llm/val.jsonl y se pega una tabla comparable",
+        "Se decide por los numeros si se cambia el modelo por defecto y se deja escrito el porque",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ML-001",
+      "title": "Arquitectura ML plug-and-play: anadir modelos con manifiestos JSON y descubrimiento por carpeta, sin cambiar el resto",
+      "description": "Arquitectura ML plug-and-play: anadir modelos con manifiestos JSON y descubrimiento por carpeta, sin cambiar el resto",
+      "acceptance_criteria": [
+        "Un desarrollador puede anadir un modelo ML nuevo sin cambiar todo el codigo: se registra con un manifest JSON y se coloca en una carpeta",
+        "Se usa un patron de diseno/convencion (fabrica/registro por manifiesto) y descubrimiento por carpeta (listado del directorio de modelos) en vez de hardcodear la lista",
+        "Se documenta el spec del manifest y se entrega con un modelo de ejemplo que el ensemble descubre",
+        "La salida del ensemble es compatible hacia atras (mismo contrato)",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "DOC-007",
+      "title": "Dos niveles de documentacion (usuarios no tecnicos y tecnicos) en la web y en el repo",
+      "description": "Dos niveles de documentacion (usuarios no tecnicos y tecnicos) en la web y en el repo",
+      "acceptance_criteria": [
+        "Hay dos niveles claros: una guia de usuario para no tecnicos (como usarlo) y documentacion tecnica para desarrolladores",
+        "Ambos niveles existen en la web (docs publica) y en el repo",
+        "El README/entrada enruta a cada nivel segun el perfil del lector",
+        "La guia de usuario es legible de una pasada y no duplica la tecnica",
+        "make test sigue en verde"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }

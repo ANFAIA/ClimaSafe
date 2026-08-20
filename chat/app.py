@@ -717,7 +717,9 @@ async def api_predict(body: dict, date: str | None = None):
         # mudo, aunque la predicción hubiera salido bien.
         alias = raw_perfil.get("alias")
         try:
-            datos_perfil = {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
+            datos_perfil = _sin_strings_vacios(
+                {k: v for k, v in raw_perfil.items() if k not in ("perfil_id", "alias")}
+            )
             # Quitar campos internos que no deben persistir en SQLite
             for _k in ("_perfil_horario", "perfil_id", "alias"):
                 datos_perfil.pop(_k, None)
@@ -2035,12 +2037,25 @@ async def api_get_perfil(perfil_id: int):
     return p
 
 
+def _sin_strings_vacios(datos: dict) -> dict:
+    """Los selects del frontend mandan ``''`` para «sin elegir» (ocupacion,
+    deporte, nivel_actividad...). Un string vacío viola los CHECK de las
+    columnas (``ocupacion IN (...)``, ``fototipo BETWEEN 1 AND 6``, ``sexo``...)
+    y tumbaba el guardado con un 500 mudo: el perfil no se guardaba y la página
+    individual no podía precargarlo (WEB-009). ``''`` → ``None`` (los CHECK
+    admiten NULL).
+    """
+    return {k: (None if v == "" else v) for k, v in datos.items()}
+
+
 @app.post("/api/perfil")
 async def api_save_perfil(body: dict):
     """Guarda un perfil (sin predecir). Si incluye alias, busca o crea."""
     alias = body.get("alias")
     perfil_id = body.get("perfil_id")
-    datos = {k: v for k, v in body.items() if k not in ("perfil_id", "alias")}
+    datos = _sin_strings_vacios(
+        {k: v for k, v in body.items() if k not in ("perfil_id", "alias")}
+    )
 
     # Mismo fallo que /api/predict: un campo que no sea columna de `perfiles`
     # llegaba al INSERT y salia como 500 mudo. Aqui SI es un error de verdad —
