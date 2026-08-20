@@ -1009,10 +1009,13 @@
         "El gasto medido se compara contra los ~7.900 tokens por mensaje de spacebot, que es la referencia que motivo esta feature",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "ARNES-004"
-      ]
+      ],
+      "started": "2026-08-20",
+      "review_rounds": 0,
+      "closed": "2026-08-20"
     },
     {
       "id": "MCP-APPS-001",
@@ -1845,10 +1848,11 @@
         "se pega una captura o el DOM generado de la grafica semanal con la explicacion visible",
         "hay tests del endpoint semanal y make test pasa"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-20",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-20"
     },
     {
       "id": "WEB-010",

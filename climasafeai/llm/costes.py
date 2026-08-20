@@ -10,9 +10,67 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ── Tope de presupuesto de tokens por petición (ARNES-010) ─────────────
+#
+# El gasto de una petición se acota para que un descontrol no se traduzca en
+# una factura. El tope es configurable por variable de entorno
+# (CLIMASAFE_MAX_TOKENS_PETICION, en tokens) y el valor por defecto se elige
+# contra la referencia que motivó la feature: spacebot gasta ~7.900 tokens por
+# mensaje, así que 10.000 deja margen a la petición legítima (≈ +27%) y corta
+# los picos. El corte ocurre en `_chat_litellm` (climasafeai.llm.rag_qwen),
+# que es la única puerta al LLM: la excepción PresupuestoExcedidoError es el
+# error claro con el que se corta — nunca en silencio.
+
+ENV_TOPE_TOKENS = "CLIMASAFE_MAX_TOKENS_PETICION"
+TOPE_TOKENS_POR_PETICION = 10_000
+
+
+class PresupuestoExcedidoError(Exception):
+    """Se lanza cuando una petición al LLM supera el tope de tokens.
+
+    El mensaje lleva la cifra medida, la etiqueta de qué se midió y el tope:
+    es el error claro con el que se corta la petición.
+    """
+
+
+def tope_tokens_peticion() -> int:
+    """Tope de tokens por petición, desde CLIMASAFE_MAX_TOKENS_PETICION.
+
+    Si la variable no está puesta o no es un entero positivo, se usa
+    TOPE_TOKENS_POR_PETICION: un valor inválido no puede dejar el tope en 0
+    (cortaría todas las peticiones) ni romper el arranque.
+    """
+    raw = os.environ.get(ENV_TOPE_TOKENS, "").strip()
+    if raw:
+        try:
+            valor = int(raw)
+        except ValueError:
+            logger.warning("%s='%s' no es un entero; se usa el tope por defecto", ENV_TOPE_TOKENS, raw)
+        else:
+            if valor > 0:
+                return valor
+            logger.warning("%s=%s no es positivo; se usa el tope por defecto", ENV_TOPE_TOKENS, valor)
+    return TOPE_TOKENS_POR_PETICION
+
+
+def comprobar_presupuesto(tokens: int, *, etiqueta: str, tope: int | None = None) -> None:
+    """Lanza PresupuestoExcedidoError si `tokens` supera el tope de la petición.
+
+    Args:
+        tokens: Tokens medidos (estimados o reales, según `etiqueta`).
+        etiqueta: Qué se midió ("payload estimado", "usage real (prompt+completion)").
+        tope: Límite en tokens; si es None se lee de la configuración.
+    """
+    tope = tope_tokens_peticion() if tope is None else tope
+    if tokens > tope:
+        raise PresupuestoExcedidoError(
+            f"Presupuesto de tokens superado: {tokens} tokens ({etiqueta}) > tope {tope}."
+        )
 
 # ── Tabla de precios (única fuente de verdad) ────────────────────────────
 #

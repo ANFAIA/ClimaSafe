@@ -22,7 +22,12 @@ import litellm
 
 from climasafeai.db.manager import DBManager
 from climasafeai.features.personalizacion import _OCUPACION_NIVELES, recomendar_horario
-from climasafeai.llm.costes import registrar_llamada
+from climasafeai.llm.costes import (
+    PresupuestoExcedidoError,
+    comprobar_presupuesto,
+    registrar_llamada,
+    tope_tokens_peticion,
+)
 from climasafeai.models.recomendaciones import recomendacion_resumen
 
 logger = logging.getLogger(__name__)
@@ -216,6 +221,25 @@ class LLMConfig:
 # ── Consultas LiteLLM ──────────────────────────────────────────────────
 
 
+def _cortar_si_excede_presupuesto(
+    tokens: int, etiqueta: str, config: LLMConfig, sesion_id: str
+) -> None:
+    """ARNES-010: corta la petición si `tokens` supera el tope configurado.
+
+    La traza es el error claro que exige el criterio: quién se midió, la cifra,
+    el tope y la petición (modelo + sesión). Sin esto, el corte sería silencioso
+    y el gasto seguiría sin cota.
+    """
+    try:
+        comprobar_presupuesto(tokens, etiqueta=etiqueta)
+    except PresupuestoExcedidoError as exc:
+        logger.error(
+            "Petición cortada por presupuesto: %s modelo=%s sesion=%s",
+            exc, config.model, sesion_id,
+        )
+        raise
+
+
 def _chat_litellm(
     messages: list[dict[str, str]],
     config: LLMConfig,
@@ -234,6 +258,15 @@ def _chat_litellm(
     # `messages` ni cambia la llamada, solo registra lo que se envía.
     if _debug_llm_activo():
         logger.info("[CLIMASAFE_DEBUG_LLM] %s", _debug_payload(messages, config))
+    # ARNES-010: tope de presupuesto por petición. Primera comprobación ANTES
+    # de llamar, con la misma estimación ~4 chars/token de _debug_payload: si
+    # el prompt ya se pasa del tope, no se gasta ni un token con el proveedor.
+    _cortar_si_excede_presupuesto(
+        sum(_estimar_tokens(m.get("content", "")) for m in messages),
+        "payload estimado",
+        config,
+        sesion_id,
+    )
     inicio = time.monotonic()
     try:
         resp = litellm.completion(
@@ -255,6 +288,19 @@ def _chat_litellm(
             latencia,
             sesion_id=sesion_id,
         )
+        # ARNES-010: segunda comprobación con el usage REAL del proveedor. La
+        # estimación previa puede subestimar (es ~4 chars/token) y la salida
+        # (completion) también cuenta en el presupuesto de la petición. Como en
+        # el aviso de truncado (BOT-022), solo se mide si el usage trae ints de
+        # verdad: un proveedor sin usage no puede cortar por esta vía (la
+        # estimación previa ya cubrió el prompt).
+        if isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+            _cortar_si_excede_presupuesto(
+                prompt_tokens + completion_tokens,
+                "usage real (prompt+completion)",
+                config,
+                sesion_id,
+            )
         # BOT-022: si qwen3 se sirve con thinking activo, el razonamiento
         # llega en un bloque <think> que no es parte de la respuesta; se
         # limpia antes de devolverla. Para qwen2.5 es un no-op.
@@ -277,6 +323,11 @@ def _chat_litellm(
             )
             content += AVISO_TRUNCADO
         return content
+    except PresupuestoExcedidoError:
+        # ARNES-010: el corte ya tiene su traza clara en _cortar_si_excede_presupuesto;
+        # no debe reconvertirse en un None genérico: las ask_* lo esperan para
+        # devolver el error de presupuesto.
+        raise
     except Exception as exc:
         latencia = time.monotonic() - inicio
         logger.error("Error en LiteLLM (%s): %s", config.model, exc)
@@ -517,7 +568,18 @@ def ask_with_rag(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    answer = _chat_litellm(messages, config, sesion_id=sesion_id)
+    try:
+        answer = _chat_litellm(messages, config, sesion_id=sesion_id)
+    except PresupuestoExcedidoError as exc:
+        # ARNES-010: el presupuesto se cortó con un error claro; se devuelve
+        # en el dict para que el consumidor sepa el motivo, no un fallo genérico.
+        return {
+            "answer": None,
+            "sources_factores": factores,
+            "sources_docs": docs,
+            "model": config.model,
+            "error": str(exc),
+        }
 
     return {
         "answer": answer,
@@ -551,7 +613,18 @@ def ask_raw(
         {"role": "system", "content": SYSTEM_RAW},
         {"role": "user", "content": f"{contexto}\n\n{question}" if contexto else question},
     ]
-    answer = _chat_litellm(messages, config, sesion_id=sesion_id)
+    try:
+        answer = _chat_litellm(messages, config, sesion_id=sesion_id)
+    except PresupuestoExcedidoError as exc:
+        # ARNES-010: mismo contrato que ask_with_rag: el error de presupuesto
+        # llega claro en el dict, no como un fallo genérico del proveedor.
+        return {
+            "answer": None,
+            "sources_factores": [],
+            "sources_docs": [],
+            "model": config.model,
+            "error": str(exc),
+        }
 
     return {
         "answer": answer,
@@ -874,6 +947,11 @@ FRASE DE CIERRE:
     ]
     try:
         respuesta = _chat_litellm(messages, config, sesion_id=sesion_id)
+    except PresupuestoExcedidoError as exc:
+        # ARNES-010: el contrato es str|None y el bot degrada a la plantilla
+        # determinista cuando no hay texto; la traza del corte queda en el log.
+        logger.error("ask_con_perfil cortado por presupuesto: %s", exc)
+        return None
     except Exception as exc:
         logger.warning("LLM falló al redactar respuesta: %s", exc)
         return None
