@@ -4,6 +4,10 @@
 // UV se comportan como en Python con uv_index=None.
 import { generarFeaturesCompletas } from "./features.js";
 
+// i18n (WEB-014): errores visibles en el idioma activo; t() devuelve la clave
+// tal cual si js/i18n.js no está cargado (p.ej. en tests de paridad).
+const { t } = window.ClimaSafeI18n || { t: (k) => k };
+
 const OPENMETEO_BASE = "https://api.open-meteo.com/v1/forecast";
 const OPENMETEO_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive";
 const FORECAST_HORIZON_DAYS = 7;
@@ -215,9 +219,9 @@ export async function fetchWeatherData({ lat, lon, provincia, targetDate } = {})
 
   if (!targetRows.length) {
     if (target < hoy) {
-      throw new Error(`La fecha ${target} ya pasó. Solo se predice hoy o el futuro cubierto por el forecast meteorológico.`);
+      throw new Error(t("err_fecha_pasada", target));
     }
-    throw new Error(`El forecast meteorológico no cubre ${target}. No se puede predecir sin datos.`);
+    throw new Error(t("err_forecast", target));
   }
 
   // UV opcional: OpenUV requiere API key → se omite (uv_index = null).

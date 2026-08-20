@@ -59,6 +59,13 @@
     .nav-id a:hover { color: var(--accent2); }
     .nav-id strong { color: var(--text); font-weight: 500; }
     .nav-id span { color: var(--muted); }
+    .lang-select {
+      font-family: var(--mono); font-size: 0.72rem; color: var(--text);
+      background: var(--surface2); border: 1px solid var(--border-hi);
+      border-radius: var(--r); padding: 5px 6px; cursor: pointer;
+    }
+    .lang-select:hover { border-color: var(--accent); }
+    .lang-select:focus { outline: none; border-color: var(--accent); }
 
     .proj-hero { padding: 64px 0 40px; }
     .hero-eyebrow {
@@ -216,9 +223,10 @@
         <div class="nav-id"><a href="../../index.html" class="nav-back">← index</a> <strong>ClimaSafe</strong> <span>/ probar-ya</span></div>
       </div>
       <ul class="nav-links" style="display:flex;gap:18px;list-style:none;">
-        <li><a href="#formulario">formulario</a></li>
-        <li><a href="#resultado">resultado</a></li>
-        <li><a href="../../projects/climasafe.html">volver</a></li>
+        <li><a href="#formulario" data-i18n="nav_form">formulario</a></li>
+        <li><a href="#resultado" data-i18n="nav_resultado">resultado</a></li>
+        <li><a href="../../projects/climasafe.html" data-i18n="nav_volver">volver</a></li>
+        <li><select id="lang-select" class="lang-select" aria-label="Idioma / Language"><option value="es">ES</option><option value="en">EN</option></select></li>
       </ul>
     </div>
   </nav>
@@ -226,14 +234,14 @@
   <section class="proj-hero">
     <div class="container">
       <div class="hero-eyebrow">ClimaSafe · ONNX / WASM</div>
-      <h1>Prueba el modelo de riesgo<br /><span class="hl">sin servidor, en tu navegador.</span></h1>
-      <p class="hero-sub">
+      <h1><span data-i18n="hero_h1_1">Prueba el modelo de riesgo</span><br /><span class="hl" data-i18n="hero_h1_2">sin servidor, en tu navegador.</span></h1>
+      <p class="hero-sub" data-i18n="hero_sub" data-i18n-html>
         El pipeline completo de <code>predict_ensemble</code> (3 modelos ONNX + fórmula +
         ensemble conformal + personalización) portado a JavaScript. Los datos vienen de
         Open-Meteo; si no hay red, se usa un escenario precargado.
       </p>
       <div class="proj-links">
-        <a class="hero-cta" href="../../projects/climasafe.html">← Volver</a>
+        <a class="hero-cta" href="../../projects/climasafe.html" data-i18n="cta_back">← Volver</a>
         <a class="hero-cta" href="https://github.com/ANFAIA/ClimaSafe" target="_blank">github.com/ANFAIA/ClimaSafe</a>
       </div>
     </div>
@@ -244,187 +252,187 @@
       <div class="sec-head">
         <span class="sec-num">01</span>
         <div class="sec-divider"></div>
-        <span class="sec-tag">perfil y salida</span>
-        <span class="sec-title">¿Dónde, cuándo y quién?</span>
+        <span class="sec-tag" data-i18n="sec01_tag">perfil y salida</span>
+        <span class="sec-title" data-i18n="sec01_title">¿Dónde, cuándo y quién?</span>
       </div>
 
-      <div id="carga-modelos" class="status"><span class="spinner"></span>Cargando modelos ONNX (~26 MB)…</div>
+      <div id="carga-modelos" class="status"><span class="spinner"></span><span data-i18n="carga_models">Cargando modelos ONNX (~26 MB)…</span></div>
 
       <div class="card">
-        <h3>Salida y ubicación</h3>
+        <h3 data-i18n="card_salida">Salida y ubicación</h3>
         <div class="grid-2">
           <div class="field">
-            <label for="provincia">Provincia</label>
+            <label for="provincia" data-i18n="lbl_provincia">Provincia</label>
             <select id="provincia"></select>
           </div>
           <div class="field">
-            <label for="fecha">Fecha</label>
+            <label for="fecha" data-i18n="lbl_fecha">Fecha</label>
             <select id="fecha">
-              <option value="hoy">Hoy</option>
-              <option value="manana">Mañana</option>
+              <option value="hoy" data-i18n="opt_hoy">Hoy</option>
+              <option value="manana" data-i18n="opt_manana">Mañana</option>
             </select>
           </div>
         </div>
         <div class="grid-2">
           <div class="field">
-            <label for="lat">Latitud (opcional; por defecto la de la provincia)</label>
+            <label for="lat" data-i18n="lbl_lat">Latitud (opcional; por defecto la de la provincia)</label>
             <input type="number" id="lat" step="0.0001" placeholder="p. ej. 40.4168">
           </div>
           <div class="field">
-            <label for="lon">Longitud (opcional)</label>
+            <label for="lon" data-i18n="lbl_lon">Longitud (opcional)</label>
             <input type="number" id="lon" step="0.0001" placeholder="p. ej. -3.7038">
           </div>
         </div>
         <div class="field">
-          <label>Mapa — haz clic para fijar la ubicación</label>
+          <label data-i18n="lbl_mapa">Mapa — haz clic para fijar la ubicación</label>
           <div id="mapa" style="height:240px;border-radius:8px;border:1px solid var(--border);margin-top:4px;background:var(--surface2)"></div>
-          <p class="meta" style="font-size:0.78rem;color:var(--muted);margin-top:4px">
+          <p class="meta" style="font-size:0.78rem;color:var(--muted);margin-top:4px" data-i18n="meta_mapa">
             Al hacer clic se rellenan latitud/longitud y se elige la provincia más cercana.
           </p>
         </div>
       </div>
 
       <div class="card">
-        <h3>Persona</h3>
+        <h3 data-i18n="card_persona">Persona</h3>
         <div class="grid-3">
           <div class="field">
-            <label for="edad">Edad</label>
+            <label for="edad" data-i18n="lbl_edad">Edad</label>
             <input type="number" id="edad" min="1" max="110" value="45">
           </div>
           <div class="field">
-            <label for="sexo">Sexo</label>
+            <label for="sexo" data-i18n="lbl_sexo">Sexo</label>
             <select id="sexo">
-              <option value="hombre">Hombre</option>
-              <option value="mujer">Mujer</option>
+              <option value="hombre" data-i18n="opt_hombre">Hombre</option>
+              <option value="mujer" data-i18n="opt_mujer">Mujer</option>
             </select>
           </div>
           <div class="field">
-            <label for="grasa">% grasa corporal (opcional)</label>
+            <label for="grasa" data-i18n="lbl_grasa">% grasa corporal (opcional)</label>
             <input type="number" id="grasa" min="3" max="60" step="0.1" placeholder="p. ej. 22">
           </div>
         </div>
         <div class="grid-3">
           <div class="field">
-            <label for="nivel_actividad">Nivel de actividad</label>
+            <label for="nivel_actividad" data-i18n="lbl_nivel">Nivel de actividad</label>
             <select id="nivel_actividad">
-              <option value="reposo">Reposo</option>
-              <option value="ligera">Ligera</option>
-              <option value="moderada" selected>Moderada</option>
-              <option value="intensa">Intensa</option>
-              <option value="muy_intensa">Muy intensa</option>
+              <option value="reposo" data-i18n="opt_reposo">Reposo</option>
+              <option value="ligera" data-i18n="opt_ligera">Ligera</option>
+              <option value="moderada" selected data-i18n="opt_moderada">Moderada</option>
+              <option value="intensa" data-i18n="opt_intensa">Intensa</option>
+              <option value="muy_intensa" data-i18n="opt_muy_intensa">Muy intensa</option>
             </select>
           </div>
           <div class="field">
-            <label for="hora_inicio">Hora de inicio</label>
+            <label for="hora_inicio" data-i18n="lbl_hora">Hora de inicio</label>
             <select id="hora_inicio"></select>
           </div>
           <div class="field">
-            <label for="duracion">Duración (horas)</label>
+            <label for="duracion" data-i18n="lbl_duracion">Duración (horas)</label>
             <input type="number" id="duracion" min="0.5" max="12" step="0.5" value="2">
           </div>
         </div>
         <div class="checks" style="margin-top:4px;">
-          <label class="check"><input type="checkbox" id="aclimatado"> Aclimatado al calor</label>
-          <label class="check"><input type="checkbox" id="entrenado"> Entrenado para la actividad</label>
+          <label class="check"><input type="checkbox" id="aclimatado"> <span data-i18n="check_aclimatado">Aclimatado al calor</span></label>
+          <label class="check"><input type="checkbox" id="entrenado"> <span data-i18n="check_entrenado">Entrenado para la actividad</span></label>
         </div>
       </div>
 
       <div class="card">
-        <h3>¿Qué vas a hacer?</h3>
+        <h3 data-i18n="card_que">¿Qué vas a hacer?</h3>
         <div class="field">
-          <label for="tipo_actividad">Tipo de salida</label>
+          <label for="tipo_actividad" data-i18n="lbl_tipo">Tipo de salida</label>
           <select id="tipo_actividad">
-            <option value="reposo">Reposo / sin esfuerzo</option>
-            <option value="trabajo">Trabajo</option>
-            <option value="deporte" selected>Deporte / ejercicio</option>
-            <option value="competicion">Competición</option>
+            <option value="reposo" data-i18n="opt_sin_esfuerzo">Reposo / sin esfuerzo</option>
+            <option value="trabajo" data-i18n="opt_trabajo">Trabajo</option>
+            <option value="deporte" selected data-i18n="opt_deporte">Deporte / ejercicio</option>
+            <option value="competicion" data-i18n="opt_competicion">Competición</option>
           </select>
         </div>
         <div id="ocupacion-row" class="field oculto">
-          <label for="ocupacion">Ocupación en la salida</label>
+          <label for="ocupacion" data-i18n="lbl_ocupacion">Ocupación en la salida</label>
           <select id="ocupacion">
-            <option value="">— selecciona —</option>
-            <option value="oficina">Oficina / bajo techo</option>
-            <option value="reparto">Reparto / conducción</option>
-            <option value="mantenimiento">Mantenimiento exterior</option>
-            <option value="construccion">Construcción</option>
-            <option value="campo">Campo / agricultura</option>
+            <option value="" data-i18n="opt_sel">— selecciona —</option>
+            <option value="oficina" data-i18n="opt_oficina">Oficina / bajo techo</option>
+            <option value="reparto" data-i18n="opt_reparto">Reparto / conducción</option>
+            <option value="mantenimiento" data-i18n="opt_mantenimiento">Mantenimiento exterior</option>
+            <option value="construccion" data-i18n="opt_construccion">Construcción</option>
+            <option value="campo" data-i18n="opt_campo">Campo / agricultura</option>
           </select>
         </div>
         <div id="deporte-row" class="field">
-          <label for="deporte">Deporte (fija la intensidad por su MET)</label>
+          <label for="deporte" data-i18n="lbl_deporte">Deporte (fija la intensidad por su MET)</label>
           <select id="deporte">
-            <option value="">— ninguno —</option>
-            <option value="pasear">Pasear (3,5 MET)</option>
-            <option value="caminar">Caminar (4 MET)</option>
-            <option value="senderismo">Senderismo (6 MET)</option>
-            <option value="tenis_dobles">Tenis dobles (6 MET)</option>
-            <option value="ciclismo_suave">Bici tranquila (6,8 MET)</option>
-            <option value="ciclismo">Bici (7 MET)</option>
-            <option value="futbol">Fútbol (7 MET)</option>
-            <option value="correr_suave">Trotar (7,5 MET)</option>
-            <option value="trekking_mochila">Trekking con mochila (7,8 MET)</option>
-            <option value="tenis">Tenis individual (8 MET)</option>
-            <option value="btt">BTT / montaña (8,5 MET)</option>
-            <option value="futbol_competicion">Fútbol competición (9 MET)</option>
-            <option value="ciclismo_fuerte">Bici fuerte (9 MET)</option>
-            <option value="correr">Correr (10,5 MET)</option>
+            <option value="" data-i18n="opt_ninguno">— ninguno —</option>
+            <option value="pasear" data-i18n="opt_pasear">Pasear (3,5 MET)</option>
+            <option value="caminar" data-i18n="opt_caminar">Caminar (4 MET)</option>
+            <option value="senderismo" data-i18n="opt_senderismo">Senderismo (6 MET)</option>
+            <option value="tenis_dobles" data-i18n="opt_tenis_dobles">Tenis dobles (6 MET)</option>
+            <option value="ciclismo_suave" data-i18n="opt_ciclismo_suave">Bici tranquila (6,8 MET)</option>
+            <option value="ciclismo" data-i18n="opt_ciclismo">Bici (7 MET)</option>
+            <option value="futbol" data-i18n="opt_futbol">Fútbol (7 MET)</option>
+            <option value="correr_suave" data-i18n="opt_correr_suave">Trotar (7,5 MET)</option>
+            <option value="trekking_mochila" data-i18n="opt_trekking">Trekking con mochila (7,8 MET)</option>
+            <option value="tenis" data-i18n="opt_tenis">Tenis individual (8 MET)</option>
+            <option value="btt" data-i18n="opt_btt">BTT / montaña (8,5 MET)</option>
+            <option value="futbol_competicion" data-i18n="opt_futbol_comp">Fútbol competición (9 MET)</option>
+            <option value="ciclismo_fuerte" data-i18n="opt_ciclismo_fuerte">Bici fuerte (9 MET)</option>
+            <option value="correr" data-i18n="opt_correr">Correr (10,5 MET)</option>
           </select>
-          <p class="meta" style="font-size:0.78rem;color:var(--muted);margin-top:4px">
+          <p class="meta" style="font-size:0.78rem;color:var(--muted);margin-top:4px" data-i18n="meta_deporte">
             Si eliges deporte, la intensidad se fija sola según su MET (puedes ajustarla en «Persona»).
           </p>
         </div>
       </div>
 
       <div class="card">
-        <h3>Salud y entorno</h3>
+        <h3 data-i18n="card_salud">Salud y entorno</h3>
         <div class="field">
-          <label>Comorbilidades</label>
+          <label data-i18n="lbl_comorb">Comorbilidades</label>
           <div class="checks">
-            <label class="check"><input type="checkbox" value="cardiovascular" class="comorb"> Cardiovascular / HTA</label>
-            <label class="check"><input type="checkbox" value="diabetes" class="comorb"> Diabetes</label>
-            <label class="check"><input type="checkbox" value="respiratoria" class="comorb"> Respiratoria</label>
-            <label class="check"><input type="checkbox" value="mental" class="comorb"> Salud mental</label>
+            <label class="check"><input type="checkbox" value="cardiovascular" class="comorb"> <span data-i18n="check_cardiovascular">Cardiovascular / HTA</span></label>
+            <label class="check"><input type="checkbox" value="diabetes" class="comorb"> <span data-i18n="check_diabetes">Diabetes</span></label>
+            <label class="check"><input type="checkbox" value="respiratoria" class="comorb"> <span data-i18n="check_respiratoria">Respiratoria</span></label>
+            <label class="check"><input type="checkbox" value="mental" class="comorb"> <span data-i18n="check_mental">Salud mental</span></label>
           </div>
         </div>
         <div class="field">
-          <label>Medicación</label>
+          <label data-i18n="lbl_medicacion">Medicación</label>
           <div class="checks">
-            <label class="check"><input type="checkbox" value="diureticos_asa" class="farmaco"> Diuréticos de asa</label>
-            <label class="check"><input type="checkbox" value="antipsicoticos" class="farmaco"> Antipsicóticos</label>
+            <label class="check"><input type="checkbox" value="diureticos_asa" class="farmaco"> <span data-i18n="check_diureticos">Diuréticos de asa</span></label>
+            <label class="check"><input type="checkbox" value="antipsicoticos" class="farmaco"> <span data-i18n="check_antipsicoticos">Antipsicóticos</span></label>
           </div>
         </div>
         <div class="field">
-          <label>Situación social</label>
+          <label data-i18n="lbl_social">Situación social</label>
           <div class="checks">
-            <label class="check"><input type="checkbox" value="vive_solo" class="social"> Vive solo</label>
-            <label class="check"><input type="checkbox" value="no_sale" class="social"> No sale de casa</label>
-            <label class="check"><input type="checkbox" value="sin_aire_acondicionado" class="social"> Sin aire acondicionado</label>
-            <label class="check"><input type="checkbox" value="vivienda_fria" class="social"> Vivienda fría</label>
+            <label class="check"><input type="checkbox" value="vive_solo" class="social"> <span data-i18n="check_vive_solo">Vive solo</span></label>
+            <label class="check"><input type="checkbox" value="no_sale" class="social"> <span data-i18n="check_no_sale">No sale de casa</span></label>
+            <label class="check"><input type="checkbox" value="sin_aire_acondicionado" class="social"> <span data-i18n="check_sin_aire">Sin aire acondicionado</span></label>
+            <label class="check"><input type="checkbox" value="vivienda_fria" class="social"> <span data-i18n="check_vivienda_fria">Vivienda fría</span></label>
           </div>
         </div>
         <div class="field">
-          <label for="fototipo">Fototipo (Fitzpatrick)</label>
+          <label for="fototipo" data-i18n="lbl_fototipo">Fototipo (Fitzpatrick)</label>
           <select id="fototipo">
-            <option value="">— desconocido —</option>
-            <option value="1">I — siempre se quema</option>
-            <option value="2">II — se quema fácil</option>
-            <option value="3">III — se quema a veces</option>
-            <option value="4">IV — se quema poco</option>
-            <option value="5">V — rara vez se quema</option>
-            <option value="6">VI — nunca se quema</option>
+            <option value="" data-i18n="opt_desconocido">— desconocido —</option>
+            <option value="1" data-i18n="opt_foto_1">I — siempre se quema</option>
+            <option value="2" data-i18n="opt_foto_2">II — se quema fácil</option>
+            <option value="3" data-i18n="opt_foto_3">III — se quema a veces</option>
+            <option value="4" data-i18n="opt_foto_4">IV — se quema poco</option>
+            <option value="5" data-i18n="opt_foto_5">V — rara vez se quema</option>
+            <option value="6" data-i18n="opt_foto_6">VI — nunca se quema</option>
           </select>
         </div>
         <div class="checks" style="margin-top:4px;">
-          <label class="check"><input type="checkbox" id="falta_sueno"> Dormí mal / menos de 6 h</label>
-          <label class="check"><input type="checkbox" id="enfermedad_reciente"> Estoy resfriado / enfermo</label>
-          <label class="check"><input type="checkbox" id="fiesta"> Fiesta / celebración (alcohol + baile)</label>
-          <label class="check"><input type="checkbox" id="alcohol_reciente"> Consumí alcohol recientemente</label>
+          <label class="check"><input type="checkbox" id="falta_sueno"> <span data-i18n="check_dormi">Dormí mal / menos de 6 h</span></label>
+          <label class="check"><input type="checkbox" id="enfermedad_reciente"> <span data-i18n="check_enfermo">Estoy resfriado / enfermo</span></label>
+          <label class="check"><input type="checkbox" id="fiesta"> <span data-i18n="check_fiesta">Fiesta / celebración (alcohol + baile)</span></label>
+          <label class="check"><input type="checkbox" id="alcohol_reciente"> <span data-i18n="check_alcohol">Consumí alcohol recientemente</span></label>
         </div>
       </div>
 
       <div style="text-align:center;margin-top:8px;">
-        <button id="predecir" class="hero-cta" disabled>Predecir riesgo →</button>
+        <button id="predecir" class="hero-cta" disabled data-i18n="btn_predecir">Predecir riesgo →</button>
       </div>
       </div>
 
@@ -437,22 +445,22 @@
       <div class="sec-head">
         <span class="sec-num">02</span>
         <div class="sec-divider"></div>
-        <span class="sec-tag">resultado</span>
-        <span class="sec-title">Riesgo para la salida elegida</span>
+        <span class="sec-tag" data-i18n="sec02_tag">resultado</span>
+        <span class="sec-title" data-i18n="sec02_title">Riesgo para la salida elegida</span>
       </div>
       <div id="resultado-vacio" class="card">
-        <p class="meta">Completa el formulario y pulsa «Predecir riesgo». El resultado (clase, % de
+        <p class="meta" data-i18n="resultado_vacio">Completa el formulario y pulsa «Predecir riesgo». El resultado (clase, % de
         riesgo, perfil horario y recomendaciones) aparecerá aquí.</p>
       </div>
       <div id="resultado-contenido" class="oculto">
         <div class="card">
           <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
             <div>
-              <div class="meta" style="margin-bottom:6px;">Clase final</div>
+              <div class="meta" style="margin-bottom:6px;" data-i18n="meta_clase">Clase final</div>
               <span id="clase-badge" class="clase-badge"></span>
             </div>
             <div>
-              <div class="meta" style="margin-bottom:6px;">Riesgo personalizado</div>
+              <div class="meta" style="margin-bottom:6px;" data-i18n="meta_riesgo">Riesgo personalizado</div>
               <div><span id="riesgo-big" class="riesgo-big"></span><span class="meta"> %</span></div>
             </div>
             <div id="info-salida" class="meta" style="flex:1;min-width:200px;"></div>
@@ -462,29 +470,29 @@
         </div>
 
         <div class="card">
-          <h3>Perfil horario — Heat Index del día</h3>
+          <h3 data-i18n="card_perfil">Perfil horario — Heat Index del día</h3>
           <div id="perfil-barras" class="perfil-barras"></div>
           <div id="perfil-eje" class="eje-x"></div>
           <p class="meta" style="margin-top:10px;" id="perfil-leyenda"></p>
         </div>
 
         <div class="card">
-          <h3>Recomendaciones</h3>
+          <h3 data-i18n="card_reco">Recomendaciones</h3>
           <ul id="recomendaciones" class="reco"></ul>
         </div>
 
         <div class="card">
           <details>
-            <summary>Detalle del ensemble (probabilidades poblacionales, factores, override)</summary>
+            <summary data-i18n="summary_detalle">Detalle del ensemble (probabilidades poblacionales, factores, override)</summary>
             <div id="detalle"></div>
           </details>
         </div>
 
         <div style="text-align:center;margin-top:8px;">
-          <a class="hero-cta" href="../documentacion/riesgo-personalizacion/" target="_blank" rel="noopener">Entender mejor el resultado →</a>
+          <a class="hero-cta" href="../documentacion/riesgo-personalizacion/" target="_blank" rel="noopener" data-i18n="cta_entender">Entender mejor el resultado →</a>
         </div>
 
-        <p class="aviso-disclaimer">
+        <p class="aviso-disclaimer" data-i18n="disclaimer">
           ClimaSafe no es un dispositivo médico y no sustituye el criterio clínico. Si presentas síntomas,
           contacta con emergencias (112) o con tu médico.
         </p>
@@ -494,7 +502,7 @@
 
   <footer>
     <div class="footer-inner">
-      <div class="footer-id"><span class="footer-dot"></span><strong>ClimaSafe</strong><span>· probar-ya · ONNX en el navegador</span></div>
+      <div class="footer-id"><span class="footer-dot"></span><strong>ClimaSafe</strong><span data-i18n="footer_extra">· probar-ya · ONNX en el navegador</span></div>
       <div class="footer-links" style="display:flex;gap:16px;list-style:none;">
         <a href="../index.html">← index</a>
         <a href="https://github.com/ANFAIA/ClimaSafe" target="_blank">github</a>
@@ -506,21 +514,24 @@
        en localStorage; el disclaimer también queda visible en resultados). -->
   <div id="aviso-medico" class="aviso-overlay" role="dialog" aria-modal="true" aria-label="Aviso médico-legal">
     <div class="aviso-modal">
-      <h3>Aviso médico-legal</h3>
-      <p><strong>ClimaSafe no es un dispositivo médico</strong> ni sustituye el criterio clínico de un profesional sanitario.</p>
+      <h3 data-i18n="aviso_title">Aviso médico-legal</h3>
+      <p data-i18n="aviso_p1" data-i18n-html><strong>ClimaSafe no es un dispositivo médico</strong> ni sustituye el criterio clínico de un profesional sanitario.</p>
       <ul>
-        <li>La estimación de riesgo se basa en modelos estadísticos e índices de la literatura epidemiológica; puede contener errores y no debe usarse para diagnosticar, decidir tratamientos ni planificar actividades de riesgo.</li>
-        <li>Es una <strong>demo educativa y de investigación</strong>: en la UE, los sistemas de salud pueden clasificarse como de alto riesgo según el Reglamento de Inteligencia Artificial.</li>
-        <li>Si presentas síntomas (mareo, confusión, dificultad para respirar, dolor en el pecho…), <strong>contacta con emergencias (112) o con tu médico</strong>.</li>
+        <li data-i18n="aviso_li1">La estimación de riesgo se basa en modelos estadísticos e índices de la literatura epidemiológica; puede contener errores y no debe usarse para diagnosticar, decidir tratamientos ni planificar actividades de riesgo.</li>
+        <li data-i18n="aviso_li2" data-i18n-html>Es una <strong>demo educativa y de investigación</strong>: en la UE, los sistemas de salud pueden clasificarse como de alto riesgo según el Reglamento de Inteligencia Artificial.</li>
+        <li data-i18n="aviso_li3" data-i18n-html>Si presentas síntomas (mareo, confusión, dificultad para respirar, dolor en el pecho…), <strong>contacta con emergencias (112) o con tu médico</strong>.</li>
       </ul>
       <div class="aviso-acciones">
-        <button id="aviso-aceptar" class="hero-cta">Entendido</button>
+        <button id="aviso-aceptar" class="hero-cta" data-i18n="btn_entendido">Entendido</button>
       </div>
     </div>
   </div>
 
+  <!-- i18n (WEB-014): detección navigator.language + selector con localStorage.
+       Debe cargarse antes del módulo main.js para que ClimaSafeI18n.t() exista. -->
+  <script src="js/i18n.js?v=20260820"></script>
   <!-- Cache-busting: GitHub Pages cachea max-age=600; el ?v= obliga a cargar
        los módulos nuevos tras cada cambio (sube el número al tocar js/). -->
-  <script type="module" src="js/main.js?v=20260814"></script>
+  <script type="module" src="js/main.js?v=20260820"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ClimaSafeAI - Riesgo Termico</title>
+<title data-i18n="app_title">ClimaSafeAI - Riesgo Termico</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -36,6 +36,14 @@
   }
   header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
   header p { opacity: 0.85; font-size: 0.95rem; }
+
+  .lang-select {
+    background: rgba(255,255,255,0.95); color: #2c3e50;
+    border: 1px solid rgba(255,255,255,0.5); border-radius: 8px;
+    padding: 6px 10px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    margin-top: 10px;
+  }
+  .lang-select:focus { outline: none; border-color: #fff; }
 
   .pending-btn {
     display: none; margin-bottom: 16px; justify-content: center;
@@ -300,26 +308,30 @@
        localStorage; el disclaimer también queda visible en los resultados). -->
   <div id="aviso-medico" class="aviso-overlay" role="dialog" aria-modal="true" aria-label="Aviso médico-legal">
     <div class="aviso-modal">
-      <h2>Aviso médico-legal</h2>
-      <p><strong>ClimaSafe no es un dispositivo médico</strong> ni sustituye el criterio clínico de un profesional sanitario.</p>
+      <h2 data-i18n="aviso_h2">Aviso médico-legal</h2>
+      <p data-i18n="aviso_p1" data-i18n-html><strong>ClimaSafe no es un dispositivo médico</strong> ni sustituye el criterio clínico de un profesional sanitario.</p>
       <ul>
-        <li>La estimación de riesgo se basa en modelos estadísticos e índices de la literatura epidemiológica; puede contener errores y no debe usarse para diagnosticar, decidir tratamientos ni planificar actividades de riesgo.</li>
-        <li>Es una <strong>demo educativa y de investigación</strong>: en la UE, los sistemas de salud pueden clasificarse como de alto riesgo según el Reglamento de Inteligencia Artificial.</li>
-        <li>Si presentas síntomas (mareo, confusión, dificultad para respirar, dolor en el pecho…), <strong>contacta con emergencias (112) o con tu médico</strong>.</li>
+        <li data-i18n="aviso_li1">La estimación de riesgo se basa en modelos estadísticos e índices de la literatura epidemiológica; puede contener errores y no debe usarse para diagnosticar, decidir tratamientos ni planificar actividades de riesgo.</li>
+        <li data-i18n="aviso_li2" data-i18n-html>Es una <strong>demo educativa y de investigación</strong>: en la UE, los sistemas de salud pueden clasificarse como de alto riesgo según el Reglamento de Inteligencia Artificial.</li>
+        <li data-i18n="aviso_li3" data-i18n-html>Si presentas síntomas (mareo, confusión, dificultad para respirar, dolor en el pecho…), <strong>contacta con emergencias (112) o con tu médico</strong>.</li>
       </ul>
       <div style="text-align:right">
-        <button class="btn" onclick="aceptarAvisoMedico()">Entendido</button>
+        <button class="btn" onclick="aceptarAvisoMedico()" data-i18n="btn_entendido">Entendido</button>
       </div>
     </div>
   </div>
 
   <header>
     <h1>ClimaSafeAI</h1>
-    <p>Sistema de prediccion de riesgo termico personalizado</p>
+    <p data-i18n="header_sub">Sistema de prediccion de riesgo termico personalizado</p>
+    <select id="lang-select" class="lang-select" aria-label="Idioma / Language">
+      <option value="es">Español</option>
+      <option value="en">English</option>
+    </select>
     </header>
 
     <div class="pending-btn" id="pending-btn">
-      <button onclick="openPendingModal()">
+      <button onclick="openPendingModal()" data-i18n="pending_btn">
         Salieron nuevos papers
         <span class="badge" id="pending-count">0</span>
       </button>
@@ -328,9 +340,9 @@
     <div class="modal-overlay" id="pending-modal">
       <div class="modal">
         <button class="close-btn" onclick="closePendingModal()">&times;</button>
-        <h2>Nuevos factores de riesgo</h2>
+        <h2 data-i18n="pending_h2">Nuevos factores de riesgo</h2>
         <div id="pending-list"></div>
-        <p style="text-align:center;margin-top:12px;color:var(--text-light);font-size:0.85rem">
+        <p style="text-align:center;margin-top:12px;color:var(--text-light);font-size:0.85rem" data-i18n="pending_p">
           Los factores aprobados se añaden a la predicción automáticamente.
         </p>
       </div>
@@ -344,41 +356,41 @@
 
   <div class="step visible" id="step1">
     <div class="card">
-      <div class="card-title">Ubicacion</div>
-      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
+      <div class="card-title" data-i18n="card_ubicacion">Ubicacion</div>
+      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px" data-i18n="p_ubicacion">
         Escribe una provincia o haz clic en el mapa.
       </p>
       <div class="form-row">
         <div class="form-group" style="flex:3">
-          <label for="provincia">Provincia o coordenadas</label>
+          <label for="provincia" data-i18n="lbl_provincia">Provincia o coordenadas</label>
           <input type="text" id="provincia" value="Madrid" placeholder="Madrid / 40.4168,-3.7038">
         </div>
       </div>
 
       <div class="form-row" style="gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
-        <button class="btn-mode active" data-mode="individual" onclick="setModoPaso1('individual')" style="flex:1;padding:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Individual</button>
-        <button class="btn-mode" data-mode="grupo" onclick="setModoPaso1('grupo')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Grupo / Evento</button>
-        <button class="btn-mode" data-mode="chat" onclick="setModoPaso1('chat')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">💬 Chat</button>
+        <button class="btn-mode active" data-mode="individual" onclick="setModoPaso1('individual')" style="flex:1;padding:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s" data-i18n="mode_individual">Individual</button>
+        <button class="btn-mode" data-mode="grupo" onclick="setModoPaso1('grupo')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s" data-i18n="mode_grupo">Grupo / Evento</button>
+        <button class="btn-mode" data-mode="chat" onclick="setModoPaso1('chat')" style="flex:1;padding:10px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s" data-i18n="mode_chat">💬 Chat</button>
       </div>
 
       <div id="step1-individual-controls" class="form-row" style="gap:8px;margin-bottom:8px">
         <select id="perfil-select" aria-label="Cargar perfil" style="flex:2;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
-          <option value="">-- Cargar perfil --</option>
+          <option value="" data-i18n="opt_cargar_perfil">-- Cargar perfil --</option>
         </select>
-        <button class="btn" onclick="cargarPerfilSeleccionado()" id="btn-load-profile" style="padding:8px 16px">Cargar</button>
+        <button class="btn" onclick="cargarPerfilSeleccionado()" id="btn-load-profile" style="padding:8px 16px" data-i18n="btn_cargar">Cargar</button>
         <button class="btn btn-outline" onclick="borrarPerfil()" id="btn-delete-profile" style="padding:8px 16px;display:none">✕</button>
-        <button class="btn btn-outline" onclick="irAdmin()" style="padding:8px 12px;background:var(--accent);color:#fff" title="Administrar usuarios">👥 Usuarios</button>
+        <button class="btn btn-outline" onclick="irAdmin()" style="padding:8px 12px;background:var(--accent);color:#fff" title="Administrar usuarios" data-i18n="btn_usuarios">👥 Usuarios</button>
       </div>
       <div id="map"></div>
       <div id="step1-individual">
       <div class="btn-row">
-        <button class="btn" onclick="irPaso2()">Siguiente</button>
+        <button class="btn" onclick="irPaso2()" data-i18n="btn_siguiente">Siguiente</button>
       </div>
       </div>
 
       <div id="step1-grupo" style="display:none">
       <div class="btn-row">
-        <button class="btn" onclick="irPaso2()">Siguiente</button>
+        <button class="btn" onclick="irPaso2()" data-i18n="btn_siguiente">Siguiente</button>
       </div>
       </div>
     </div>
@@ -386,19 +398,19 @@
 
   <div class="step" id="step-chat">
     <div class="card">
-      <div class="card-title">Agente conversacional</div>
-      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">
+      <div class="card-title" data-i18n="card_agente">Agente conversacional</div>
+      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px" data-i18n="p_agente">
         El asistente te hace las preguntas de una en una y construye tu perfil;
         al terminar calcula tu riesgo con el mismo sistema de predicción del formulario.
       </p>
       <div id="chat-box" class="chat-box"></div>
       <div id="chat-opciones" class="chat-opciones"></div>
       <div class="chat-input-row">
-        <input type="text" id="chat-input" placeholder="Escribe tu respuesta..." autocomplete="off" onkeydown="if(event.key==='Enter')enviarChat()">
-        <button class="btn" onclick="enviarChat()" style="padding:8px 20px">Enviar</button>
+        <input type="text" id="chat-input" placeholder="Escribe tu respuesta..." autocomplete="off" onkeydown="if(event.key==='Enter')enviarChat()" data-i18n="placeholder_chat">
+        <button class="btn" onclick="enviarChat()" style="padding:8px 20px" data-i18n="btn_enviar">Enviar</button>
       </div>
       <div class="btn-row">
-        <button class="btn btn-outline" onclick="volverDesdeChat()">Volver</button>
+        <button class="btn btn-outline" onclick="volverDesdeChat()" data-i18n="btn_volver">Volver</button>
       </div>
     </div>
   </div>
@@ -407,52 +419,52 @@
     <div class="card">
       <div id="individual-form">
       <div class="collapse-header" onclick="togglePerfilCollapse()" id="perfil-collapse-header">
-        <span class="card-title" style="margin-bottom:0;border:none;padding:0">Datos personales</span>
+        <span class="card-title" style="margin-bottom:0;border:none;padding:0" data-i18n="card_datos">Datos personales</span>
         <span style="font-size:0.85rem;color:var(--text-light)" id="perfil-resumen"></span>
         <span id="perfil-toggle">+</span>
       </div>
       <div id="perfil-body" class="collapse-body">
       <div class="form-row">
-        <div class="form-group"><label>Fecha de nacimiento</label><input type="date" id="fecha_nacimiento" onchange="calcularEdad();actualizarResumenPerfil()"></div>
-        <div class="form-group"><label>Edad (calculada)</label><input type="text" id="edad" readonly style="background:var(--bg);color:var(--text-light)"></div>
-        <div class="form-group"><label>Sexo</label><select id="sexo" onchange="actualizarResumenPerfil()"><option value="">-</option><option value="hombre">Hombre</option><option value="mujer">Mujer</option></select></div>
+        <div class="form-group"><label data-i18n="lbl_fecha_nac">Fecha de nacimiento</label><input type="date" id="fecha_nacimiento" onchange="calcularEdad();actualizarResumenPerfil()"></div>
+        <div class="form-group"><label data-i18n="lbl_edad">Edad (calculada)</label><input type="text" id="edad" readonly style="background:var(--bg);color:var(--text-light)"></div>
+        <div class="form-group"><label data-i18n="lbl_sexo">Sexo</label><select id="sexo" onchange="actualizarResumenPerfil()"><option value="">-</option><option value="hombre" data-i18n="opt_hombre">Hombre</option><option value="mujer" data-i18n="opt_mujer">Mujer</option></select></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>% Grasa <span style="font-weight:400;color:var(--text-light);font-size:0.7rem">(solo aplica en esfuerzo)</span></label><input type="number" id="porcentaje_grasa" min="0" max="70" step="0.1"></div>
-        <div class="form-group"><label>Aclimatado</label>
+        <div class="form-group"><label data-i18n="lbl_grasa" data-i18n-html>% Grasa <span style="font-weight:400;color:var(--text-light);font-size:0.7rem">(solo aplica en esfuerzo)</span></label><input type="number" id="porcentaje_grasa" min="0" max="70" step="0.1"></div>
+        <div class="form-group"><label data-i18n="lbl_aclimatado">Aclimatado</label>
           <select id="aclimatado"><option value="">-</option><option value="si">Si</option><option value="no">No</option></select>
         </div>
-        <div class="form-group"><label>Fototipo</label>
+        <div class="form-group"><label data-i18n="lbl_fototipo">Fototipo</label>
           <select id="fototipo">
-            <option value="">-</option><option value="1">I (piel muy clara)</option>
-            <option value="2">II (piel clara)</option><option value="3">III (piel normal)</option>
-            <option value="4">IV (piel morena)</option><option value="5">V (piel oscura)</option>
-            <option value="6">VI (piel muy oscura)</option>
+            <option value="">-</option><option value="1" data-i18n="opt_foto_1">I (piel muy clara)</option>
+            <option value="2" data-i18n="opt_foto_2">II (piel clara)</option><option value="3" data-i18n="opt_foto_3">III (piel normal)</option>
+            <option value="4" data-i18n="opt_foto_4">IV (piel morena)</option><option value="5" data-i18n="opt_foto_5">V (piel oscura)</option>
+            <option value="6" data-i18n="opt_foto_6">VI (piel muy oscura)</option>
           </select>
         </div>
       </div>
       <div id="factor-sections-collapsed"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Actividad</label>
+        <div class="form-group"><label data-i18n="lbl_actividad">Actividad</label>
           <select id="nivel_actividad">
-            <option value="">-</option><option value="reposo">Reposo</option>
-            <option value="ligera">Ligera</option><option value="moderada">Moderada</option>
-            <option value="intensa">Intensa</option><option value="muy_intensa">Muy intensa</option>
+            <option value="">-</option><option value="reposo" data-i18n="opt_reposo">Reposo</option>
+            <option value="ligera" data-i18n="opt_ligera">Ligera</option><option value="moderada" data-i18n="opt_moderada">Moderada</option>
+            <option value="intensa" data-i18n="opt_intensa">Intensa</option><option value="muy_intensa" data-i18n="opt_muy_intensa">Muy intensa</option>
           </select>
         </div>
-        <div class="form-group"><label>Hora inicio (0-23)</label><input type="number" id="hora_inicio" min="0" max="23"></div>
-        <div class="form-group"><label>Duracion (h)</label><input type="number" id="duracion_actividad_h" min="0" max="24" step="0.5"></div>
+        <div class="form-group"><label data-i18n="lbl_hora">Hora inicio (0-23)</label><input type="number" id="hora_inicio" min="0" max="23"></div>
+        <div class="form-group"><label data-i18n="lbl_duracion">Duracion (h)</label><input type="number" id="duracion_actividad_h" min="0" max="24" step="0.5"></div>
       </div>
       <div id="factor-sections"></div>
       <div id="profile-name-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:999;justify-content:center;align-items:center">
         <div style="background:var(--card-bg);border-radius:12px;padding:24px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-          <div style="font-size:1rem;font-weight:600;margin-bottom:12px">Guardar perfil</div>
+          <div style="font-size:1rem;font-weight:600;margin-bottom:12px" data-i18n="modal_guardar">Guardar perfil</div>
           <input type="text" id="profile-name-input" placeholder="Nombre (alias)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1rem;box-sizing:border-box;margin-bottom:8px">
           <input type="text" id="profile-tags-input" placeholder="Etiquetas: electricista, fontanero" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-light);font-size:0.85rem;box-sizing:border-box">
           <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-            <button class="btn btn-outline" onclick="cerrarModalPerfil()" style="padding:8px 20px">Cancelar</button>
-            <button class="btn" onclick="guardarPerfilConNombre()" style="padding:8px 20px">Guardar</button>
+            <button class="btn btn-outline" onclick="cerrarModalPerfil()" style="padding:8px 20px" data-i18n="btn_cancelar">Cancelar</button>
+            <button class="btn" onclick="guardarPerfilConNombre()" style="padding:8px 20px" data-i18n="btn_guardar">Guardar</button>
           </div>
         </div>
       </div>
@@ -461,58 +473,58 @@
         <span id="profile-tags-display" style="display:none;font-size:0.8rem"></span>
       </div>
       <div class="form-row" style="margin-top:12px;align-items:center">
-        <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
+        <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)" data-i18n="lbl_prediccion">Predicción para:</div>
         <div style="display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:2px;border:1px solid var(--border)">
-          <button class="btn-date active" data-date="" onclick="setDate(this, '')">Hoy</button>
-          <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')">Mañana</button>
+          <button class="btn-date active" data-date="" onclick="setDate(this, '')" data-i18n="btn_hoy">Hoy</button>
+          <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')" data-i18n="btn_manana">Mañana</button>
         </div>
         <input type="hidden" id="target-date" value="">
       </div>
       <div class="btn-row" id="individual-btns">
-        <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
-        <button class="btn btn-outline" onclick="guardarPerfil()" style="background:#2ecc71;color:#fff">Guardar perfil</button>
-        <button class="btn" onclick="predecir()" id="btn-predict">Predecir riesgo</button>
+        <button class="btn btn-outline" onclick="irPaso1()" data-i18n="btn_atras">Atras</button>
+        <button class="btn btn-outline" onclick="guardarPerfil()" style="background:#2ecc71;color:#fff" data-i18n="btn_guardar_perfil">Guardar perfil</button>
+        <button class="btn" onclick="predecir()" id="btn-predict" data-i18n="btn_predecir">Predecir riesgo</button>
       </div>
 
       <div class="card" id="rutinas-card" style="margin-top:16px">
-        <div class="card-title">Rutinas semanales</div>
-        <p style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px">
+        <div class="card-title" data-i18n="card_rutinas">Rutinas semanales</div>
+        <p style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px" data-i18n="p_rutinas">
           El riesgo se calcula por la ventana de cada rutina. Días: 1=lunes … 7=domingo.
         </p>
         <div class="form-row" style="align-items:flex-end">
           <div class="form-group" style="max-width:160px">
-            <label>Aviso diario (HH:MM)</label>
+            <label data-i18n="lbl_aviso">Aviso diario (HH:MM)</label>
             <input type="text" id="aviso-hora" placeholder="08:00">
           </div>
-          <button class="btn btn-outline" onclick="guardarAvisos()" style="padding:8px 16px">Guardar aviso</button>
-          <button class="btn btn-outline" onclick="quitarAvisos()" style="padding:8px 16px">Quitar</button>
+          <button class="btn btn-outline" onclick="guardarAvisos()" style="padding:8px 16px" data-i18n="btn_guardar_aviso">Guardar aviso</button>
+          <button class="btn btn-outline" onclick="quitarAvisos()" style="padding:8px 16px" data-i18n="btn_quitar">Quitar</button>
         </div>
         <div class="form-row" style="align-items:flex-end">
-          <div class="form-group"><label>Días (1-7)</label><input type="text" id="rutina-dias" placeholder="1,2,3,4,5"></div>
-          <div class="form-group"><label>Nombre</label><input type="text" id="rutina-nombre" placeholder="trabajo / entreno"></div>
-          <div class="form-group"><label>Hora inicio</label><input type="number" id="rutina-inicio" min="0" max="23" step="0.5"></div>
-          <div class="form-group"><label>Hora fin</label><input type="number" id="rutina-fin" min="0" max="24" step="0.5"></div>
-          <button class="btn" onclick="crearRutina()" style="padding:8px 20px">Añadir</button>
+          <div class="form-group"><label data-i18n="lbl_dias">Días (1-7)</label><input type="text" id="rutina-dias" placeholder="1,2,3,4,5"></div>
+          <div class="form-group"><label data-i18n="lbl_nombre">Nombre</label><input type="text" id="rutina-nombre" placeholder="trabajo / entreno"></div>
+          <div class="form-group"><label data-i18n="lbl_hora_inicio">Hora inicio</label><input type="number" id="rutina-inicio" min="0" max="23" step="0.5"></div>
+          <div class="form-group"><label data-i18n="lbl_hora_fin">Hora fin</label><input type="number" id="rutina-fin" min="0" max="24" step="0.5"></div>
+          <button class="btn" onclick="crearRutina()" style="padding:8px 20px" data-i18n="btn_anadir">Añadir</button>
         </div>
         <div id="rutinas-lista"></div>
         <div class="form-row" style="align-items:center;justify-content:space-between;margin-top:8px">
-          <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Riesgo de hoy por ventana</div>
-          <button class="btn btn-outline" onclick="cargarPronosticoDia(false)" style="padding:6px 16px">Calcular</button>
+          <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)" data-i18n="lbl_riesgo_hoy">Riesgo de hoy por ventana</div>
+          <button class="btn btn-outline" onclick="cargarPronosticoDia(false)" style="padding:6px 16px" data-i18n="btn_calcular">Calcular</button>
         </div>
         <div id="pronostico-dia"></div>
       </div>
       </div>
 
       <div id="grupo-form" style="display:none">
-        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px;padding:8px 10px;background:var(--bg);border-radius:8px">
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px;padding:8px 10px;background:var(--bg);border-radius:8px" data-i18n="p_grupo_desc" data-i18n-html>
           <strong>Colectivo (ML):</strong> riesgo detallado por rangos de edad · 
           <strong>Volumen:</strong> estimación rápida de posibles atenciones médicas · 
           <strong>Por etiqueta:</strong> evaluar perfiles guardados
         </div>
         <div class="form-row" style="gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
-          <button class="btn-mode active" data-mode="numero" onclick="setSubModoPaso2('numero')" style="flex:1;padding:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s">Colectivo (ML)</button>
-          <button class="btn-mode" data-mode="volumen" onclick="setSubModoPaso2('volumen')" style="flex:1;padding:8px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Volumen</button>
-          <button class="btn-mode" data-mode="etiqueta" onclick="setSubModoPaso2('etiqueta')" style="flex:1;padding:8px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s">Por etiqueta</button>
+          <button class="btn-mode active" data-mode="numero" onclick="setSubModoPaso2('numero')" style="flex:1;padding:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;transition:all 0.2s" data-i18n="submodo_numero">Colectivo (ML)</button>
+          <button class="btn-mode" data-mode="volumen" onclick="setSubModoPaso2('volumen')" style="flex:1;padding:8px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s" data-i18n="submodo_volumen">Volumen</button>
+          <button class="btn-mode" data-mode="etiqueta" onclick="setSubModoPaso2('etiqueta')" style="flex:1;padding:8px;border:none;background:var(--bg);color:var(--text-light);font-weight:500;cursor:pointer;transition:all 0.2s" data-i18n="submodo_etiqueta">Por etiqueta</button>
         </div>
 
         <div id="grupo-numero">
@@ -643,16 +655,16 @@
 
         <div id="grupo-default-controls">
           <div class="form-row" style="margin-top:12px;align-items:center">
-            <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
+            <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)" data-i18n="lbl_prediccion">Predicción para:</div>
             <div style="display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:2px;border:1px solid var(--border)">
-              <button class="btn-date active" data-date="" onclick="setDate(this, '')">Hoy</button>
-              <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')">Mañana</button>
+              <button class="btn-date active" data-date="" onclick="setDate(this, '')" data-i18n="btn_hoy">Hoy</button>
+              <button class="btn-date" data-date="tomorrow" onclick="setDate(this, 'tomorrow')" data-i18n="btn_manana">Mañana</button>
             </div>
             <input type="hidden" id="grupo-target-date" value="">
           </div>
           <div class="btn-row">
-            <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
-            <button class="btn" onclick="predecirGrupo()" id="btn-predict-group">Predecir grupo</button>
+            <button class="btn btn-outline" onclick="irPaso1()" data-i18n="btn_atras">Atras</button>
+            <button class="btn" onclick="predecirGrupo()" id="btn-predict-group" data-i18n="btn_predecir_grupo">Predecir grupo</button>
           </div>
         </div>
       </div>
@@ -680,16 +692,16 @@
           <div class="form-group"><label>Duración (h, opcional)</label><input type="number" id="vol-duracion" min="0" max="24" step="0.5" placeholder="Todo el día"></div>
         </div>
         <div class="form-row" style="margin-top:12px;align-items:center">
-          <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)">Predicción para:</div>
+          <div style="font-size:0.85rem;font-weight:500;color:var(--text-light)" data-i18n="lbl_prediccion">Predicción para:</div>
           <div style="display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:2px;border:1px solid var(--border)">
-            <button class="btn-date active" data-date="" onclick="setDateVol(this, '')">Hoy</button>
-            <button class="btn-date" data-date="tomorrow" onclick="setDateVol(this, 'tomorrow')">Mañana</button>
+            <button class="btn-date active" data-date="" onclick="setDateVol(this, '')" data-i18n="btn_hoy">Hoy</button>
+            <button class="btn-date" data-date="tomorrow" onclick="setDateVol(this, 'tomorrow')" data-i18n="btn_manana">Mañana</button>
           </div>
           <input type="hidden" id="vol-target-date" value="">
         </div>
         <div class="btn-row">
-          <button class="btn btn-outline" onclick="irPaso1()">Atras</button>
-          <button class="btn" onclick="predecirVolumen()" id="btn-predict-volumen" style="background:#8e44ad">Estimar volumen</button>
+          <button class="btn btn-outline" onclick="irPaso1()" data-i18n="btn_atras">Atras</button>
+          <button class="btn" onclick="predecirVolumen()" id="btn-predict-volumen" style="background:#8e44ad" data-i18n="btn_estimar_volumen">Estimar volumen</button>
         </div>
       </div>
     </div>
@@ -786,7 +798,7 @@
           </select>
         </div>
         <div style="display:flex;align-items:flex-end">
-          <button class="btn" onclick="actualizarMapaResultados()" style="padding:6px 14px;font-size:0.85rem">Actualizar mapa</button>
+          <button class="btn" onclick="actualizarMapaResultados()" style="padding:6px 14px;font-size:0.85rem" data-i18n="btn_actualizar_mapa">Actualizar mapa</button>
         </div>
         <div style="display:flex;align-items:flex-end;gap:6px">
           <button class="btn" onclick="exportarMapaZona('png')" style="padding:6px 12px;font-size:0.85rem" title="Descargar el overlay de riesgo como PNG">PNG</button>
@@ -794,9 +806,9 @@
         </div>
       </div>
       <div style="display:flex;gap:12px;font-size:0.75rem;align-items:center;margin-bottom:6px">
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#27ae60;display:inline-block"></span> Seguro</span>
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#f39c12;display:inline-block"></span> Precaución</span>
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#e74c3c;display:inline-block"></span> Peligro</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#27ae60;display:inline-block"></span> <span data-i18n="leyenda_seguro">Seguro</span></span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#f39c12;display:inline-block"></span> <span data-i18n="leyenda_precaucion">Precaución</span></span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#e74c3c;display:inline-block"></span> <span data-i18n="leyenda_peligro">Peligro</span></span>
         <span id="rmap-stats" style="margin-left:auto;font-size:0.7rem;color:var(--text-light)"></span>
       </div>
       <div id="results-map-container" style="height:340px;border-radius:8px;border:1px solid var(--border)"></div>
@@ -808,42 +820,42 @@
     </div>
 
     <div class="card" id="explain-card" style="display:none">
-      <div class="card-title">Explicacion</div>
+      <div class="card-title" data-i18n="card_explicacion">Explicacion</div>
       <div id="explain-content"></div>
     </div>
 
     <div class="card" id="recs-card" style="display:none">
-      <div class="card-title">Recomendaciones</div>
+      <div class="card-title" data-i18n="card_reco">Recomendaciones</div>
       <ul class="rec-list" id="rec-list"></ul>
     </div>
 
     <div class="card" id="cf-card" style="display:none">
-      <div class="card-title">Como reducir tu riesgo</div>
+      <div class="card-title" data-i18n="card_cf">Como reducir tu riesgo</div>
       <div id="cf-list"></div>
       <div id="cf-loading" style="text-align:center;padding:12px;color:var(--text-light);font-size:0.85rem">Calculando impacto de cada cambio...</div>
     </div>
 
     <div class="card" id="opt-card" style="display:none">
-      <div class="card-title">Horario optimo</div>
-      <button class="btn" onclick="calcularHorarioOptimo()" style="background:#95a5a6">Calcular mejor horario</button>
+      <div class="card-title" data-i18n="card_horario">Horario optimo</div>
+      <button class="btn" onclick="calcularHorarioOptimo()" style="background:#95a5a6" data-i18n="btn_horario">Calcular mejor horario</button>
       <div class="opt-time" id="opt-time"></div>
     </div>
 
     <div class="card" id="factors-card" style="display:none">
       <div class="collapse-header" onclick="toggleFactors()">
-        <span class="card-title" style="margin-bottom:0;border:none;padding:0">Factores personales</span>
+        <span class="card-title" style="margin-bottom:0;border:none;padding:0" data-i18n="card_factores">Factores personales</span>
         <span id="factors-toggle">+</span>
       </div>
       <div id="factors-body" class="collapse-body"></div>
     </div>
 
     <div class="btn-row" style="justify-content:center">
-      <button class="btn btn-outline" onclick="nuevaConsulta()">Nueva consulta</button>
+      <button class="btn btn-outline" onclick="nuevaConsulta()" data-i18n="btn_nueva_consulta">Nueva consulta</button>
       <a class="btn btn-outline" href="https://cacelass.github.io/climasafe/documentacion/riesgo-personalizacion/" target="_blank" rel="noopener"
-         style="text-decoration:none;display:inline-flex;align-items:center">Entender mejor el resultado →</a>
+         style="text-decoration:none;display:inline-flex;align-items:center" data-i18n="cta_entender">Entender mejor el resultado →</a>
     </div>
 
-    <p class="aviso-disclaimer">
+    <p class="aviso-disclaimer" data-i18n="disclaimer">
       ClimaSafe no es un dispositivo médico y no sustituye el criterio clínico. Si presentas síntomas,
       contacta con emergencias (112) o con tu médico.
     </p>
@@ -3659,6 +3671,260 @@ function aceptarAvisoMedico() {
   if (overlay) overlay.classList.remove('open');
   try { localStorage.setItem('climasafe-aviso-medico-aceptado', '1'); } catch { /* sin almacenamiento */ }
 }
+</script>
+
+<!-- i18n (WEB-014): detección navigator.language + selector con localStorage.
+     Traduce el marco estático de la app (cabecera, aviso, navegación entre
+     pasos, botones principales). El contenido profundo generado por JS
+     (chat, panel de administración, detalle de factores) permanece en
+     español por defecto — decisión documentada en progress/implementer-WEB-014.md. -->
+<script>
+(function () {
+  "use strict";
+  var KEY = "climasafe_lang";
+  var DICT = {
+    es: {
+      app_title: "ClimaSafeAI - Riesgo Termico",
+      header_sub: "Sistema de prediccion de riesgo termico personalizado",
+      aviso_h2: "Aviso médico-legal",
+      aviso_p1: "<strong>ClimaSafe no es un dispositivo médico</strong> ni sustituye el criterio clínico de un profesional sanitario.",
+      aviso_li1: "La estimación de riesgo se basa en modelos estadísticos e índices de la literatura epidemiológica; puede contener errores y no debe usarse para diagnosticar, decidir tratamientos ni planificar actividades de riesgo.",
+      aviso_li2: "Es una <strong>demo educativa y de investigación</strong>: en la UE, los sistemas de salud pueden clasificarse como de alto riesgo según el Reglamento de Inteligencia Artificial.",
+      aviso_li3: "Si presentas síntomas (mareo, confusión, dificultad para respirar, dolor en el pecho…), <strong>contacta con emergencias (112) o con tu médico</strong>.",
+      btn_entendido: "Entendido",
+      pending_btn: "Salieron nuevos papers",
+      pending_h2: "Nuevos factores de riesgo",
+      pending_p: "Los factores aprobados se añaden a la predicción automáticamente.",
+      card_ubicacion: "Ubicacion",
+      p_ubicacion: "Escribe una provincia o haz clic en el mapa.",
+      lbl_provincia: "Provincia o coordenadas",
+      mode_individual: "Individual",
+      mode_grupo: "Grupo / Evento",
+      mode_chat: "💬 Chat",
+      opt_cargar_perfil: "-- Cargar perfil --",
+      btn_cargar: "Cargar",
+      btn_usuarios: "👥 Usuarios",
+      btn_siguiente: "Siguiente",
+      card_agente: "Agente conversacional",
+      p_agente: "El asistente te hace las preguntas de una en una y construye tu perfil; al terminar calcula tu riesgo con el mismo sistema de predicción del formulario.",
+      placeholder_chat: "Escribe tu respuesta...",
+      btn_enviar: "Enviar",
+      btn_volver: "Volver",
+      card_datos: "Datos personales",
+      lbl_fecha_nac: "Fecha de nacimiento",
+      lbl_edad: "Edad (calculada)",
+      lbl_sexo: "Sexo",
+      opt_hombre: "Hombre",
+      opt_mujer: "Mujer",
+      lbl_grasa: "% Grasa <span style=\"font-weight:400;color:var(--text-light);font-size:0.7rem\">(solo aplica en esfuerzo)</span>",
+      lbl_aclimatado: "Aclimatado",
+      lbl_fototipo: "Fototipo",
+      opt_foto_1: "I (piel muy clara)",
+      opt_foto_2: "II (piel clara)",
+      opt_foto_3: "III (piel normal)",
+      opt_foto_4: "IV (piel morena)",
+      opt_foto_5: "V (piel oscura)",
+      opt_foto_6: "VI (piel muy oscura)",
+      lbl_actividad: "Actividad",
+      opt_reposo: "Reposo",
+      opt_ligera: "Ligera",
+      opt_moderada: "Moderada",
+      opt_intensa: "Intensa",
+      opt_muy_intensa: "Muy intensa",
+      lbl_hora: "Hora inicio (0-23)",
+      lbl_duracion: "Duracion (h)",
+      modal_guardar: "Guardar perfil",
+      btn_cancelar: "Cancelar",
+      btn_guardar: "Guardar",
+      lbl_prediccion: "Predicción para:",
+      btn_hoy: "Hoy",
+      btn_manana: "Mañana",
+      btn_atras: "Atras",
+      btn_guardar_perfil: "Guardar perfil",
+      btn_predecir: "Predecir riesgo",
+      card_rutinas: "Rutinas semanales",
+      p_rutinas: "El riesgo se calcula por la ventana de cada rutina. Días: 1=lunes … 7=domingo.",
+      lbl_aviso: "Aviso diario (HH:MM)",
+      btn_guardar_aviso: "Guardar aviso",
+      btn_quitar: "Quitar",
+      lbl_dias: "Días (1-7)",
+      lbl_nombre: "Nombre",
+      lbl_hora_inicio: "Hora inicio",
+      lbl_hora_fin: "Hora fin",
+      btn_anadir: "Añadir",
+      lbl_riesgo_hoy: "Riesgo de hoy por ventana",
+      btn_calcular: "Calcular",
+      p_grupo_desc: "<strong>Colectivo (ML):</strong> riesgo detallado por rangos de edad · <strong>Volumen:</strong> estimación rápida de posibles atenciones médicas · <strong>Por etiqueta:</strong> evaluar perfiles guardados",
+      submodo_numero: "Colectivo (ML)",
+      submodo_volumen: "Volumen",
+      submodo_etiqueta: "Por etiqueta",
+      btn_predecir_grupo: "Predecir grupo",
+      btn_estimar_volumen: "Estimar volumen",
+      btn_actualizar_mapa: "Actualizar mapa",
+      leyenda_seguro: "Seguro",
+      leyenda_precaucion: "Precaución",
+      leyenda_peligro: "Peligro",
+      card_explicacion: "Explicacion",
+      card_reco: "Recomendaciones",
+      card_cf: "Como reducir tu riesgo",
+      card_horario: "Horario optimo",
+      btn_horario: "Calcular mejor horario",
+      card_factores: "Factores personales",
+      btn_nueva_consulta: "Nueva consulta",
+      cta_entender: "Entender mejor el resultado →",
+      disclaimer: "ClimaSafe no es un dispositivo médico y no sustituye el criterio clínico. Si presentas síntomas, contacta con emergencias (112) o con tu médico."
+    },
+    en: {
+      app_title: "ClimaSafeAI - Thermal Risk",
+      header_sub: "Personalised thermal risk prediction system",
+      aviso_h2: "Medical-legal notice",
+      aviso_p1: "<strong>ClimaSafe is not a medical device</strong> and does not replace the clinical judgement of a healthcare professional.",
+      aviso_li1: "The risk estimate is based on statistical models and epidemiological literature indices; it may contain errors and must not be used to diagnose, decide treatments or plan risky activities.",
+      aviso_li2: "It is an <strong>educational and research demo</strong>: in the EU, health systems may be classified as high-risk under the Artificial Intelligence Regulation.",
+      aviso_li3: "If you have symptoms (dizziness, confusion, trouble breathing, chest pain…), <strong>contact emergency services (112) or your doctor</strong>.",
+      btn_entendido: "Got it",
+      pending_btn: "New papers released",
+      pending_h2: "New risk factors",
+      pending_p: "Approved factors are added to the prediction automatically.",
+      card_ubicacion: "Location",
+      p_ubicacion: "Type a province or click on the map.",
+      lbl_provincia: "Province or coordinates",
+      mode_individual: "Individual",
+      mode_grupo: "Group / Event",
+      mode_chat: "💬 Chat",
+      opt_cargar_perfil: "-- Load profile --",
+      btn_cargar: "Load",
+      btn_usuarios: "👥 Users",
+      btn_siguiente: "Next",
+      card_agente: "Conversational agent",
+      p_agente: "The assistant asks you questions one by one and builds your profile; when done it computes your risk with the same prediction system as the form.",
+      placeholder_chat: "Type your answer...",
+      btn_enviar: "Send",
+      btn_volver: "Back",
+      card_datos: "Personal data",
+      lbl_fecha_nac: "Date of birth",
+      lbl_edad: "Age (calculated)",
+      lbl_sexo: "Sex",
+      opt_hombre: "Male",
+      opt_mujer: "Female",
+      lbl_grasa: "% Body fat <span style=\"font-weight:400;color:var(--text-light);font-size:0.7rem\">(only applies under effort)</span>",
+      lbl_aclimatado: "Heat-acclimatised",
+      lbl_fototipo: "Phototype",
+      opt_foto_1: "I (very light skin)",
+      opt_foto_2: "II (light skin)",
+      opt_foto_3: "III (normal skin)",
+      opt_foto_4: "IV (brown skin)",
+      opt_foto_5: "V (dark skin)",
+      opt_foto_6: "VI (very dark skin)",
+      lbl_actividad: "Activity",
+      opt_reposo: "Rest",
+      opt_ligera: "Light",
+      opt_moderada: "Moderate",
+      opt_intensa: "Intense",
+      opt_muy_intensa: "Very intense",
+      lbl_hora: "Start hour (0-23)",
+      lbl_duracion: "Duration (h)",
+      modal_guardar: "Save profile",
+      btn_cancelar: "Cancel",
+      btn_guardar: "Save",
+      lbl_prediccion: "Prediction for:",
+      btn_hoy: "Today",
+      btn_manana: "Tomorrow",
+      btn_atras: "Back",
+      btn_guardar_perfil: "Save profile",
+      btn_predecir: "Predict risk",
+      card_rutinas: "Weekly routines",
+      p_rutinas: "Risk is computed per routine window. Days: 1=Mon … 7=Sun.",
+      lbl_aviso: "Daily alert (HH:MM)",
+      btn_guardar_aviso: "Save alert",
+      btn_quitar: "Remove",
+      lbl_dias: "Days (1-7)",
+      lbl_nombre: "Name",
+      lbl_hora_inicio: "Start hour",
+      lbl_hora_fin: "End hour",
+      btn_anadir: "Add",
+      lbl_riesgo_hoy: "Today's risk per window",
+      btn_calcular: "Calculate",
+      p_grupo_desc: "<strong>Collective (ML):</strong> detailed risk by age range · <strong>Volume:</strong> quick estimate of possible medical attendances · <strong>By label:</strong> evaluate saved profiles",
+      submodo_numero: "Collective (ML)",
+      submodo_volumen: "Volume",
+      submodo_etiqueta: "By label",
+      btn_predecir_grupo: "Predict group",
+      btn_estimar_volumen: "Estimate volume",
+      btn_actualizar_mapa: "Update map",
+      leyenda_seguro: "Safe",
+      leyenda_precaucion: "Caution",
+      leyenda_peligro: "Danger",
+      card_explicacion: "Explanation",
+      card_reco: "Recommendations",
+      card_cf: "How to reduce your risk",
+      card_horario: "Optimal schedule",
+      btn_horario: "Calculate best time",
+      card_factores: "Personal factors",
+      btn_nueva_consulta: "New query",
+      cta_entender: "Understand the result better →",
+      disclaimer: "ClimaSafe is not a medical device and does not replace clinical judgement. If you have symptoms, contact emergency services (112) or your doctor."
+    }
+  };
+
+  var current = "es";
+
+  function getSaved() {
+    try {
+      var v = localStorage.getItem(KEY);
+      if (v === "es" || v === "en") return v;
+    } catch (e) { /* sin almacenamiento: se usa el navegador */ }
+    return null;
+  }
+
+  function detect() {
+    var saved = getSaved();
+    if (saved) return saved;
+    var nav = (navigator.language || navigator.userLanguage || "es").toLowerCase();
+    return nav.indexOf("en") === 0 ? "en" : "es";
+  }
+
+  function translate(lang) {
+    var dict = DICT[lang] || DICT.es;
+    document.documentElement.lang = lang;
+    var nodes = document.querySelectorAll("[data-i18n]");
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var key = el.getAttribute("data-i18n");
+      if (!(key in dict)) continue;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+        el.placeholder = dict[key];
+      } else if (el.getAttribute("data-i18n-html") !== null) {
+        el.innerHTML = dict[key];
+      } else {
+        el.textContent = dict[key];
+      }
+    }
+    var sel = document.getElementById("lang-select");
+    if (sel) sel.value = lang;
+  }
+
+  function ready() {
+    current = detect();
+    var sel = document.getElementById("lang-select");
+    if (sel) {
+      sel.addEventListener("change", function () {
+        var lang = sel.value === "en" ? "en" : "es";
+        try { localStorage.setItem(KEY, lang); } catch (e) { /* sin almacenamiento */ }
+        translate(lang);
+      });
+    }
+    translate(current);
+  }
+
+  window.ClimaSafeI18n = { get: function () { return current; } };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ready);
+  } else {
+    ready();
+  }
+})();
 </script>
 </body>
 </html>

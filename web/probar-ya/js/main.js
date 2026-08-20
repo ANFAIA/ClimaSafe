@@ -12,6 +12,10 @@ import { predictEnsemble } from "./modelos.js?v=20260814";
 import { generarRecomendaciones } from "./recomendaciones.js";
 import { nivelActividadDeDeporte } from "./personalizacion.js";
 
+// i18n (WEB-014): textos dinámicos vía el diccionario de js/i18n.js. Si el
+// mecanismo no está cargado (p.ej. en tests), t() devuelve la clave tal cual.
+const { t } = window.ClimaSafeI18n || { t: (k) => k };
+
 const $ = (id) => document.getElementById(id);
 
 // Aviso médico-legal: ventana emergente al cargar. Se recuerda la aceptación
@@ -34,7 +38,6 @@ function initAvisoMedico() {
   }
 }
 
-const CLASE_LABEL = { 0: "SEGURO", 1: "PRECAUCIÓN", 2: "PELIGRO" };
 const CLASE_COLOR = { 0: "clase-0", 1: "clase-1", 2: "clase-2" };
 
 let artefactos = null;
@@ -64,11 +67,11 @@ async function init() {
     try {
       escenarios = await leerJson("./scenarios.json");
     } catch { escenarios = null; }
-    $("carga-modelos").textContent = "Modelos listos. Configura el formulario y pulsa Predecir.";
+    $("carga-modelos").textContent = t("modelos_listos");
     $("predecir").disabled = false;
   } catch (e) {
     $("carga-modelos").className = "status err";
-    $("carga-modelos").textContent = `Error cargando modelos: ${e.message}`;
+    $("carga-modelos").textContent = t("error_carga", e.message);
     console.error(e);
   }
 }
@@ -266,7 +269,7 @@ function sumarDiasLocal(n) {
 function renderResultado(res, info) {
   const clase = res.clase_final;
   const badge = $("clase-badge");
-  badge.textContent = res.clase_final_label;
+  badge.textContent = t("clase_" + clase);
   badge.className = `clase-badge ${CLASE_COLOR[clase]}`;
 
   const probPers = Math.max(
@@ -288,7 +291,7 @@ function renderResultado(res, info) {
 
   $("modo-datos").textContent = info.offline
     ? `ℹ ${info.aviso}`
-    : "Datos meteorológicos de Open-Meteo (tiempo real).";
+    : t("datos_tiempo_real");
 
   renderPerfil(res);
   renderRecomendaciones(res);
@@ -302,7 +305,7 @@ function renderPerfil(res) {
   barras.innerHTML = "";
   eje.innerHTML = "";
   if (!perfil.length) {
-    $("perfil-leyenda").textContent = "Sin perfil horario disponible.";
+    $("perfil-leyenda").textContent = t("sin_perfil");
     return;
   }
   const hiMax = Math.max(...perfil.map((p) => p.HI));
@@ -338,7 +341,7 @@ function renderRecomendaciones(res) {
   }
   if (!recs.length) {
     const li = document.createElement("li");
-    li.textContent = "Sin recomendaciones específicas para este perfil.";
+    li.textContent = t("sin_reco");
     ul.appendChild(li);
   }
 }
@@ -349,11 +352,11 @@ function renderDetalle(res) {
 
   const fila = (modelo, probRiesgo, clase, extra = "") => `
     <tr><td>${modelo}</td><td>${probRiesgo != null ? (probRiesgo * 100).toFixed(1) + " %" : "—"}</td>
-    <td>${clase != null ? CLASE_LABEL[clase] : "—"}</td><td>${extra}</td></tr>`;
+    <td>${clase != null ? t("clase_" + clase) : "—"}</td><td>${extra}</td></tr>`;
 
   const m = res.modelos;
   let html = `<table class="tabla-modelos">
-    <tr><th>Modelo</th><th>P(riesgo)</th><th>Clase</th><th>Nota</th></tr>
+    <tr><th>${t("th_modelo")}</th><th>${t("th_prob")}</th><th>${t("th_clase")}</th><th>${t("th_nota")}</th></tr>
     ${fila("XGBoost calor", m.XGBoost_calor?.prob_riesgo, m.XGBoost_calor?.clase_threshold, `set_size ${m.XGBoost_calor?.conformal_set_size}`)}
     ${fila("RandomForest frío", m.RandomForest_frio?.prob_riesgo, m.RandomForest_frio?.clase_threshold, `set_size ${m.RandomForest_frio?.conformal_set_size}`)}
     ${fila("LSTM calor", m.LSTM?.calor?.prob_riesgo, m.LSTM?.calor?.clase_threshold)}
@@ -385,7 +388,7 @@ function renderDetalle(res) {
 async function predecir() {
   const estado = $("estado");
   estado.className = "status";
-  estado.innerHTML = '<span class="spinner"></span>Descargando datos y ejecutando los 3 modelos ONNX…';
+  estado.innerHTML = '<span class="spinner"></span>' + t("descargando");
 
   try {
     const perfil = perfilDesdeFormulario();

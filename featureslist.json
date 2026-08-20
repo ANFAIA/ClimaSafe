@@ -2127,8 +2127,12 @@
         "La documentacion (mkdocs) se incluye en el alcance o se documenta explicitamente como fase posterior si es demasiado grande",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-20",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-20"
     },
     {
       "id": "WEB-015",
