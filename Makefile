@@ -14,7 +14,8 @@
         init harness-check backlog \
         agents-list agents-run agents-doctor agents-test agents-eval \
         prompts-sync assistants-sync prompts-check \
-        bot bot-start bot-daemon bot-stop bot-restart bot-logs
+        bot bot-start bot-daemon bot-stop bot-restart bot-logs \
+        backup-bd restore-bd
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Variables
@@ -286,6 +287,19 @@ bot-logs:
 
 setup-claude:
 	@$(UVRUN) python scripts/setup_claude_config.py
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Backup / restauración de la BD de perfiles (SEC-001)
+# ─────────────────────────────────────────────────────────────────────────────
+
+backup-bd:
+	@echo "▶  Backup de la BD de perfiles (data/climasafe.db)"
+	$(UVRUN) $(PYTHON) scripts/backup_bd.py backup
+
+restore-bd:
+	@test -n "$(ORIGEN)" || (echo "Uso: make restore-bd ORIGEN=ruta/al/backup.db"; exit 1)
+	@echo "▶  Restaurando la BD desde $(ORIGEN) (con bot y web detenidos)"
+	$(UVRUN) $(PYTHON) scripts/backup_bd.py restore "$(ORIGEN)"
 
 
 profile:

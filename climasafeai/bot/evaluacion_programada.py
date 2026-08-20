@@ -216,5 +216,7 @@ async def encolar_evaluacion(cola: ColaMensajes, tarea: str | None = None) -> in
     destinos = destinos_env()
     perfil, lat, lon, provincia = _cargar_ubicacion_y_perfil()
     texto = await _calcular_texto(tarea, lat, lon, provincia, perfil)
-    logger.info("Evaluación %s (%s) encolada para %s", tarea, provincia, destinos)
+    # SEC-001: `destinos` son chat_id/IDs de Telegram en claro; solo se loguea
+    # el número de destinos, nunca la lista.
+    logger.info("Evaluación %s (%s) encolada para %d destinos", tarea, provincia, len(destinos))
     return cola.encolar_lote([(destino, texto) for destino in destinos])

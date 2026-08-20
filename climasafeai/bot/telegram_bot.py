@@ -2791,7 +2791,10 @@ async def _recibir_ubicacion(chat_id: int, location: dict) -> None:
         return
 
     lat, lon = location.get("latitude"), location.get("longitude")
-    logger.info("Ubicación de %s: %s, %s", chat_id, lat, lon)
+    # SEC-001: ni lat/lon exactas ni chat_id completo al log — son datos
+    # identificables. El chat_id lo tapa _OcultarChatId, las coordenadas no
+    # deben aparecer ni para eso.
+    logger.info("Ubicación recibida de %s", chat_id)
 
     sitio = provincia_desde_coords(lat, lon) or {}
     conv["data"]["lat"] = lat
@@ -2819,7 +2822,11 @@ async def procesar_update(update: dict) -> None:
             await _recibir_ubicacion(chat_id, msg["location"])
             return
 
-        logger.info("Mensaje de %s: %s", chat_id, texto[:50])
+        # SEC-001: el texto del mensaje puede contener edad, medicación o
+        # cualquier dato de salud en lenguaje natural; no se escribe al log,
+        # solo la longitud (suficiente para depurar el flujo). El chat_id lo
+        # tapa _OcultarChatId.
+        logger.info("Mensaje de %s (%d caracteres)", chat_id, len(texto))
 
         if texto.startswith("/start"):
             respuesta = await procesar_mensaje(chat_id, texto)
@@ -2875,7 +2882,10 @@ async def procesar_update(update: dict) -> None:
     elif cb:
         chat_id = cb["message"]["chat"]["id"]
         data = cb.get("data", "")
-        logger.info("Callback de %s: %s", chat_id, data[:30])
+        # SEC-001: el callback_data son nombres de campos de salud (edit_edad,
+        # enfermedad_reciente...); no se escribe. El chat_id lo tapa
+        # _OcultarChatId.
+        logger.info("Callback de %s", chat_id)
 
         # Cambio de modelo inline
         if data and data.startswith("modelo_"):
@@ -2978,6 +2988,35 @@ class _OcultarToken(logging.Filter):
         return True
 
 
+class _OcultarChatId(logging.Filter):
+    """Tapa los chat_id de Telegram (números de 6+ dígitos) en cualquier línea.
+
+    SEC-001: el chat_id completo es un dato identificable — con él se puede
+    emparejar una línea del log con la persona concreta. Se aplica junto a
+    _OcultarToken en todos los handlers del bot: aunque una línea futura meta
+    un chat_id sin querer, al disco nunca llega el número completo. Los chat_id
+    llegan como int (msg['chat']['id']), así que no basta con mirar strings.
+    """
+
+    _RE = re.compile(r"\b\d{6,}\b")
+    _REEMPLAZO = "<CHAT_ID>"
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._RE.sub(self._REEMPLAZO, record.msg)
+        if record.args:
+            args = record.args if isinstance(record.args, tuple) else (record.args,)
+            record.args = tuple(
+                self._REEMPLAZO
+                if isinstance(a, int) and self._RE.search(str(a))
+                else self._RE.sub(self._REEMPLAZO, a)
+                if isinstance(a, str) and self._RE.search(a)
+                else a
+                for a in args
+            )
+        return True
+
+
 def _setup_logging() -> None:
     """Logging a archivo rotativo siempre, y a consola solo si es un terminal real.
 
@@ -3003,6 +3042,7 @@ def _setup_logging() -> None:
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     filtro = _OcultarToken()
+    filtro_pii = _OcultarChatId()
 
     # Archivo rotativo (5 MB × 3 backups)
     file_handler = RotatingFileHandler(
@@ -3020,6 +3060,7 @@ def _setup_logging() -> None:
 
     for h in handlers:
         h.addFilter(filtro)
+        h.addFilter(filtro_pii)
         h._climasafe = True          # marca para no volver a anadirlos
         root.addHandler(h)
     root.setLevel(logging.INFO)

@@ -102,7 +102,9 @@ def buscar_lugar(nombre: str, pais: str = "es") -> dict | None:
             "nombre": _extraer_nombre(item),
         }
     except (KeyError, TypeError, ValueError):
-        logger.warning("Respuesta de Nominatim sin lat/lon utilizables: %s", item)
+        # SEC-001: `item` trae la dirección completa (calle, ciudad, país);
+        # no se escribe al log.
+        logger.warning("Respuesta de Nominatim sin lat/lon utilizables")
         return None
 
 

@@ -273,7 +273,9 @@ def _parse_json(raw: str | None) -> dict:
     try:
         cargado = json.loads(texto[inicio:fin + 1])
     except json.JSONDecodeError:
-        logger.warning("El extractor no devolvió JSON válido: %s", texto[:200])
+        # SEC-001: el texto del LLM puede repetir los datos de salud del
+        # usuario; no se escribe, solo la longitud.
+        logger.warning("El extractor no devolvió JSON válido (texto de %d caracteres)", len(texto))
         return {}
     return cargado if isinstance(cargado, dict) else {}
 

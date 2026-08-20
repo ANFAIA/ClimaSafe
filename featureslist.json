@@ -1274,8 +1274,11 @@
         "Se decide y se documenta si los datos de salud se cifran en reposo o no, con el motivo: una decision escrita, no un silencio",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-20",
+      "review_rounds": 0,
+      "closed": "2026-08-20"
     },
     {
       "id": "BOT-017",
@@ -2066,6 +2069,26 @@
       "started": "2026-08-19",
       "review_rounds": 0,
       "closed": "2026-08-19"
+    },
+    {
+      "id": "DOC-006",
+      "title": "Actualizar el sitio curado (docs_site/) con los resultados de la semana 13-19/08 y regenerar la documentacion publicada en GitHub Pages",
+      "description": "Actualizar el sitio curado (docs_site/) con los resultados de la semana 13-19/08 y regenerar la documentacion publicada en GitHub Pages",
+      "acceptance_criteria": [
+        "El sitio curado docs_site/ (6 paginas) refleja los resultados de la semana 13-19/08: modelo bayesiano jerarquico (BAYES-001) en modelos-pesos",
+        "RAG afinado (RAG-006, distiluse, recall docs 0.611/factores 0.940) y QC del dataset a 0 hallazgos (LLM-017) en llm",
+        "LLM remoto gratis (HOST-001, groq/openai/gpt-oss-20b) y estudio base-vs-instruct (LLM-016) en llm",
+        "control de acceso y estandares MCP (MCP-002/003/004) en arquitectura. Cada pagina enlaza a la documentacion completa en documentacion/",
+        "Se sincroniza docs_site/ al repo personal (cacelass.github.io/climasafe/documentacion-src/docs_site/) y build.sh regenera climasafe/documentacion/ sin errores (mkdocs build exit 0)",
+        "Las paginas responden 200 bajo servidor local y el contenido nuevo esta presente (grep de bayes_jerarquico, rag_006, gpt-oss-20b)",
+        "No se commitea en el repo personal: los commits los decide el humano",
+        "make test sigue en verde (puerta init.sh)"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-20",
+      "owner": "claude",
+      "review_rounds": 0
     }
   ]
 }

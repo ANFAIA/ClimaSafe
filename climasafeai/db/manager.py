@@ -16,6 +16,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -114,12 +115,28 @@ class DBManager:
 
     # ── Conexión ────────────────────────────────────────────────────
 
+    def _asegurar_permisos(self) -> None:
+        """Permisos 600 para la BD y sus auxiliares WAL.
+
+        SEC-001: la BD contiene edad, sexo, comorbilidades, medicación,
+        ubicación y chat_id de personas reales. El fichero nace con el umask
+        del proceso (normalmente 644) y quedaría legible por cualquiera en la
+        máquina; también los -wal/-shm de WAL, que contienen las mismas filas.
+        Idempotente: se llama en cada conexión y tras backup/restauración.
+        """
+        for p in (self.db_path, Path(f"{self.db_path}-wal"), Path(f"{self.db_path}-shm")):
+            try:
+                os.chmod(p, 0o600)
+            except FileNotFoundError:
+                pass
+
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:
         c = sqlite3.connect(str(self.db_path))
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA foreign_keys=ON")
+        self._asegurar_permisos()
         try:
             yield c
             c.commit()
@@ -128,6 +145,46 @@ class DBManager:
             raise
         finally:
             c.close()
+
+    # ── Backup y restauración (SEC-001) ─────────────────────────────
+
+    def backup(self, destino: str | Path) -> dict:
+        """Copia de seguridad consistente de la BD (SEC-001).
+
+        Usa la API de backup de sqlite3 (equivalente a VACUUM INTO): copia el
+        estado de la BD aunque otra conexión esté escribiendo (WAL incluido).
+        El backup también se protege con permisos 600.
+        """
+        destino = Path(destino)
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        with self.conn() as c:
+            with sqlite3.connect(str(destino)) as bd:
+                c.backup(bd)
+        os.chmod(destino, 0o600)
+        return {"backup": str(destino)}
+
+    def restaurar(self, origen: str | Path) -> dict:
+        """Restaura la BD desde una copia de seguridad (SEC-001).
+
+        Sobrescribe el fichero actual con el contenido del backup. Se eliminan
+        antes los auxiliares WAL: un -wal/-shm viejo mezclaría el estado previo
+        con el restaurado. La restauración debe hacerse con la aplicación
+        detenida (documentado en documentacion/seguridad_bd.md); la copia de un
+        fichero no es atómica si hay un escritor en marcha.
+        """
+        import shutil
+
+        origen = Path(origen)
+        if not origen.exists():
+            raise FileNotFoundError(f"No existe el backup: {origen}")
+        for sufijo in ("-wal", "-shm"):
+            try:
+                os.remove(f"{self.db_path}{sufijo}")
+            except FileNotFoundError:
+                pass
+        shutil.copy2(origen, self.db_path)
+        self._asegurar_permisos()
+        return {"restaurado": str(origen)}
 
     # ── Inicialización ──────────────────────────────────────────────
 
