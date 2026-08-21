@@ -146,7 +146,13 @@
       th_clase: "Clase",
       th_nota: "Nota",
       err_fecha_pasada: "La fecha {0} ya pasó. Solo se predice hoy o el futuro cubierto por el forecast meteorológico.",
-      err_forecast: "El forecast meteorológico no cubre {0}. No se puede predecir sin datos."
+      err_forecast: "El forecast meteorológico no cubre {0}. No se puede predecir sin datos.",
+      // WEB-015: localStorage profile + privacy
+      privacy_notice: "Tus datos se guardan solo en tu navegador (localStorage). No salen de tu dispositivo ni se envían a ningún servidor. Puedes borrarlos en cualquier momento con el botón «Borrar mis datos».",
+      btn_borrar_datos: "Borrar mis datos",
+      btn_borrar_datos_aria: "Borrar los datos del perfil guardados en el navegador",
+      datos_borrados: "Datos borrados. El formulario se ha restablecido.",
+      perfil_restaurado: "Perfil restaurado desde el navegador."
     },
     en: {
       nav_form: "form",
@@ -273,7 +279,13 @@
       th_clase: "Class",
       th_nota: "Note",
       err_fecha_pasada: "Date {0} has already passed. Only today or the future covered by the weather forecast can be predicted.",
-      err_forecast: "The weather forecast does not cover {0}. Cannot predict without data."
+      err_forecast: "The weather forecast does not cover {0}. Cannot predict without data.",
+      // WEB-015: localStorage profile + privacy
+      privacy_notice: "Your data is stored only in your browser (localStorage). It never leaves your device and is not sent to any server. You can delete it at any time using the «Delete my data» button.",
+      btn_borrar_datos: "Delete my data",
+      btn_borrar_datos_aria: "Delete the profile data stored in the browser",
+      datos_borrados: "Data deleted. The form has been reset.",
+      perfil_restaurado: "Profile restored from the browser."
     }
   };
 

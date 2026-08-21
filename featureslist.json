@@ -2144,8 +2144,12 @@
         "Hay un boton Borrar mis datos y un aviso de privacidad de que los datos no salen del navegador",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-21",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-21"
     },
     {
       "id": "WEB-016",

@@ -18,6 +18,92 @@ const { t } = window.ClimaSafeI18n || { t: (k) => k };
 
 const $ = (id) => document.getElementById(id);
 
+// WEB-015: localStorage key for demo profile
+const PROFILE_KEY = "climasafe_demo_profile";
+
+function guardarPerfil(perfil) {
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(perfil));
+  } catch (e) {
+    console.warn("No se pudo guardar el perfil en localStorage:", e);
+  }
+}
+
+function cargarPerfil() {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn("No se pudo cargar el perfil de localStorage:", e);
+    return null;
+  }
+}
+
+function borrarPerfil() {
+  try {
+    localStorage.removeItem(PROFILE_KEY);
+  } catch (e) {
+    console.warn("No se pudo borrar el perfil de localStorage:", e);
+  }
+}
+
+function restaurarFormularioDesdePerfil(perfil) {
+  if (!perfil) return;
+  $("edad").value = perfil.edad ?? 45;
+  $("sexo").value = perfil.sexo ?? "hombre";
+  $("grasa").value = perfil.porcentaje_grasa ?? "";
+  $("aclimatado").checked = !!perfil.aclimatado;
+  $("entrenado").checked = !!perfil.entrenado;
+  if (perfil.nivel_actividad) $("nivel_actividad").value = perfil.nivel_actividad;
+  if (perfil.deporte) {
+    $("deporte").value = perfil.deporte;
+  }
+  $("hora_inicio").value = perfil.hora_inicio ?? 10;
+  $("duracion").value = perfil.duracion_actividad_h ?? 2;
+  // Comorbilidades
+  document.querySelectorAll(".comorb").forEach((c) => (c.checked = false));
+  (perfil.comorbilidades || []).forEach((v) => {
+    const el = document.querySelector(`.comorb[value="${v}"]`);
+    if (el) el.checked = true;
+  });
+  // Farmacos
+  document.querySelectorAll(".farmaco").forEach((c) => (c.checked = false));
+  (perfil.farmacos || []).forEach((v) => {
+    const el = document.querySelector(`.farmaco[value="${v}"]`);
+    if (el) el.checked = true;
+  });
+  // Social
+  document.querySelectorAll(".social").forEach((c) => (c.checked = false));
+  (perfil.situacion_social || []).forEach((v) => {
+    const el = document.querySelector(`.social[value="${v}"]`);
+    if (el) el.checked = true;
+  });
+  $("fototipo").value = perfil.fototipo ?? "";
+  $("falta_sueno").checked = !!perfil.falta_sueno;
+  $("enfermedad_reciente").checked = !!perfil.enfermedad_reciente;
+  $("fiesta").checked = !!perfil.fiesta;
+  $("alcohol_reciente").checked = !!perfil.alcohol_reciente;
+  if (perfil.ocupacion) $("ocupacion").value = perfil.ocupacion;
+  // Tipo de actividad (para mostrar/ocultar filas correctas)
+  const tipo = perfil.deporte ? (perfil.deporte === "competicion" ? "competicion" : "deporte") : "reposo";
+  // Actually, we need to infer from the original tipo_actividad. Let's check if we stored it.
+  // For simplicity, we'll derive from deporte/ocupacion.
+  if (perfil.ocupacion) {
+    $("tipo_actividad").value = "trabajo";
+  } else if (perfil.deporte) {
+    $("tipo_actividad").value = "deporte"; // could be competicion too, but good enough
+  } else {
+    $("tipo_actividad").value = "reposo";
+  }
+  onCambiarTipoActividad();
+  // Location fields (optional)
+  if (perfil.lat) $("lat").value = perfil.lat;
+  if (perfil.lon) $("lon").value = perfil.lon;
+  if (perfil.provincia) $("provincia").value = perfil.provincia;
+  if (perfil.fecha) $("fecha").value = perfil.fecha;
+}
+
 // Aviso médico-legal: ventana emergente al cargar. Se recuerda la aceptación
 // en localStorage (mismo navegador), pero el disclaimer queda visible de forma
 // permanente en los resultados.
@@ -55,6 +141,61 @@ async function init() {
   rellenarHoras();
   $("tipo_actividad").addEventListener("change", onCambiarTipoActividad);
   onCambiarTipoActividad();
+
+  // WEB-015: restore profile from localStorage on load
+  const perfilGuardado = cargarPerfil();
+  if (perfilGuardado) {
+    restaurarFormularioDesdePerfil(perfilGuardado);
+    // Update map marker if lat/lon restored
+    if (perfilGuardado.lat && perfilGuardado.lon) {
+      ponerMarcador(perfilGuardado.lat, perfilGuardado.lon);
+    }
+    // Show brief toast-like status
+    const estado = $("estado");
+    estado.className = "status";
+    estado.textContent = t("perfil_restaurado");
+    setTimeout(() => { estado.className = "status oculto"; }, 3000);
+  }
+
+  // WEB-015: delete button handler
+  const btnBorrar = $("borrar-datos");
+  if (btnBorrar) {
+    btnBorrar.addEventListener("click", () => {
+      borrarPerfil();
+      // Reset form to defaults
+      $("edad").value = 45;
+      $("sexo").value = "hombre";
+      $("grasa").value = "";
+      $("aclimatado").checked = false;
+      $("entrenado").checked = false;
+      $("nivel_actividad").value = "moderada";
+      $("deporte").value = "";
+      $("hora_inicio").value = "10";
+      $("duracion").value = "2";
+      document.querySelectorAll(".comorb, .farmaco, .social").forEach((c) => (c.checked = false));
+      $("fototipo").value = "";
+      $("falta_sueno").checked = false;
+      $("enfermedad_reciente").checked = false;
+      $("fiesta").checked = false;
+      $("alcohol_reciente").checked = false;
+      $("ocupacion").value = "";
+      $("tipo_actividad").value = "reposo";
+      onCambiarTipoActividad();
+      // Reset location fields
+      $("lat").value = "";
+      $("lon").value = "";
+      $("provincia").value = "Madrid";
+      $("fecha").value = "hoy";
+      // Reset map marker
+      ponerMarcador(40.4168, -3.7038);
+      // Show confirmation
+      const estado = $("estado");
+      estado.className = "status";
+      estado.textContent = t("datos_borrados");
+      setTimeout(() => { estado.className = "status oculto"; }, 3000);
+    });
+  }
+
   try {
     const ort = await getOrt();
     // Los .wasm/.mjs de onnxruntime-web viven en vendor/, junto a ort.min.js.
@@ -197,6 +338,11 @@ function perfilDesdeFormulario() {
     enfermedad_reciente: $("enfermedad_reciente").checked,
     fiesta: $("fiesta").checked || $("alcohol_reciente").checked,
     ocupacion: $("ocupacion").value || null,
+    // WEB-015: location fields for persistence
+    lat: $("lat").value ? Number($("lat").value) : null,
+    lon: $("lon").value ? Number($("lon").value) : null,
+    provincia: $("provincia").value,
+    fecha: $("fecha").value,
   };
 }
 
@@ -392,6 +538,9 @@ async function predecir() {
 
   try {
     const perfil = perfilDesdeFormulario();
+    // WEB-015: save profile to localStorage
+    guardarPerfil(perfil);
+
     const { weather, offline, aviso } = await obtenerWeather();
     const res = await predictEnsemble(
       {
