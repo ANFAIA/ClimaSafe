@@ -229,6 +229,8 @@ MODELO_API = "groq/openai/gpt-oss-20b"
 # GEMINI_API_KEY real el 18-08-2026: gemini-2.5-flash da 404 "no longer
 # available", gemini-3.6-flash responde).
 MODELO_API_GEMINI = "gemini/gemini-3.6-flash"
+# BOT-023: OpenRouter como complemento a Groq — modelos gratuitos
+MODELO_API_OPENROUTER = "openrouter/deepseek/deepseek-chat-v3-0324:free"
 MODELO_DETERMINISTA = "__determinista__"  # valor centinela: sin LLM
 
 
@@ -244,12 +246,16 @@ def _modelo_por_defecto() -> str:
     local), se cae al LLM remoto gratuito si hay clave; solo sin ninguna clave
     se queda en determinista. Sin este salto, un bot desplegado sin Ollama
     contestaría siempre con plantilla y el LLM remoto no se usaría nunca.
+
+    BOT-0023: OpenRouter se añade como alternativa a Groq/Gemini.
     """
     st = check_ollama()
     if st.get("available"):
         return st.get("best_model") or MODELO_LOCAL
     if os.getenv("GROQ_API_KEY"):
         return MODELO_API
+    if os.getenv("OPENROUTER_API_KEY"):
+        return MODELO_API_OPENROUTER
     if os.getenv("GEMINI_API_KEY"):
         return MODELO_API_GEMINI
     return MODELO_DETERMINISTA

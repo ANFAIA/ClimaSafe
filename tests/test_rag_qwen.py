@@ -119,10 +119,64 @@ class TestMejorDisponible:
         assert cfg.model == MODELO_FINE_TUNED
 
     @patch("climasafeai.llm.rag_qwen._modelos_ollama")
-    def test_vacio_cae_al_fallback_cpu(self, mock_list):
+    def test_vacio_cae_al_fallback_cpu(self, mock_list, monkeypatch):
         mock_list.return_value = []
+        # BOT-023: mockear variables de entorno para que no haya clave remota
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         cfg = LLMConfig.mejor_disponible()
         assert cfg.model == MODELO_LOCAL_CPU
+
+
+# ── BOT-023: _detectar_openrouter_free ────────────────────────────────
+
+
+class TestDetectarOpenRouterFree:
+    def test_sin_api_key_devuelve_none(self, monkeypatch):
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        from climasafeai.llm.rag_qwen import _detectar_openrouter_free
+        assert _detectar_openrouter_free() is None
+
+    @patch("climasafeai.llm.rag_qwen.httpx")
+    def test_respuesta_ok_selecciona_mayor_contexto(self, mock_httpx, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "data": [
+                {"id": "deepseek/deepseek-chat", "context_length": 8000, "pricing": {"prompt": "0", "completion": "0"}},
+                {"id": "mistralai/mistral-large", "context_length": 16000, "pricing": {"prompt": "0", "completion": "0"}},
+                {"id": "meta-llama/llama-3.3-70b", "context_length": 32000, "pricing": {"prompt": "0", "completion": "0"}},
+            ]
+        }
+        mock_httpx.get.return_value = mock_resp
+        from climasafeai.llm.rag_qwen import _detectar_openrouter_free
+        result = _detectar_openrouter_free()
+        assert result == "openrouter/meta-llama/llama-3.3-70b"
+
+    @patch("climasafeai.llm.rag_qwen.httpx")
+    def test_error_red_devuelve_none(self, mock_httpx, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        mock_httpx.get.side_effect = Exception("timeout")
+        from climasafeai.llm.rag_qwen import _detectar_openrouter_free
+        result = _detectar_openrouter_free()
+        assert result is None
+
+    @patch("climasafeai.llm.rag_qwen.httpx")
+    def test_sin_modelos_free_devuelve_none(self, mock_httpx, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "data": [
+                {"id": "openai/gpt-4", "context_length": 8000, "pricing": {"prompt": "0.01", "completion": "0.01"}},
+            ]
+        }
+        mock_httpx.get.return_value = mock_resp
+        from climasafeai.llm.rag_qwen import _detectar_openrouter_free
+        result = _detectar_openrouter_free()
+        assert result is None
 
 
 # ── check_ollama ────────────────────────────────────────────────────────

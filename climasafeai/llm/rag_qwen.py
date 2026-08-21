@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 import litellm
 
 from climasafeai.db.manager import DBManager
@@ -122,6 +123,16 @@ MODELO_FINE_TUNED = "ollama/qwen3:climasafe"
 # HOST-001: llama-3.3-70b-versatile dejó de existir en el free tier de Groq
 # (404 verificado el 18-08-2026); gpt-oss-20b es el sustituto del free tier.
 MODELO_API_DEFECTO = "groq/openai/gpt-oss-20b"
+# BOT-023: OpenRouter como complemento a Groq — modelos gratuitos (free)
+ENV_OPENROUTER_API_KEY = "OPENROUTER_API_KEY"
+# Modelos free de OpenRouter ordenados por tamaño (mayor primero)
+MODELOS_OPENROUTER_FREE = [
+    "openrouter/deepseek/deepseek-chat-v3-0324:free",
+    "openrouter/mistralai/mistral-large-2411:free",
+    "openrouter/google/gemini-2.0-flash-exp:free",
+    "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+    "openrouter/qwen/qwen-2.5-72b-instruct:free",
+]
 
 # RAG-003: distancia coseno máxima (sqlite-vec: 0 = idéntico, 2 = opuesto)
 # para inyectar contexto en una pregunta de usuario. Lo que queda por encima
@@ -136,6 +147,48 @@ MODELO_API_DEFECTO = "groq/openai/gpt-oss-20b"
 #     asistente de salud se prefiere no inyectar contexto dudoso a arriesgar
 #     el ruido de frío en una pregunta de calor.
 UMBRAL_DISTANCIA = 0.50
+
+
+# ── BOT-023: detección de modelos free de OpenRouter ──────────────────
+
+
+def _detectar_openrouter_free() -> str | None:
+    """Detecta el modelo gratuito más grande disponible en OpenRouter.
+
+    Si OPENROUTER_API_KEY no está configurado, devuelve None.
+    Si hay un error de red o la API no responde, devuelve None (fallback).
+    """
+    api_key = os.environ.get(ENV_OPENROUTER_API_KEY, "").strip()
+    if not api_key:
+        return None
+    try:
+        resp = httpx.get(
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            logger.warning("OpenRouter API devolvió %d", resp.status_code)
+            return None
+        models = resp.json().get("data", [])
+        # Filtrar modelos free y ordenar por contexto (mayor primero)
+        free_models = [
+            m for m in models
+            if m.get("pricing", {}).get("prompt") == "0"
+            and m.get("pricing", {}).get("completion") == "0"
+        ]
+        if not free_models:
+            logger.info("OpenRouter: no hay modelos free disponibles")
+            return None
+        # Ordenar por contexto_length (mayor primero)
+        free_models.sort(key=lambda m: m.get("context_length", 0), reverse=True)
+        best = free_models[0]
+        model_id = best.get("id", "")
+        logger.info("OpenRouter free: seleccionado %s (contexto %d)", model_id, best.get("context_length", 0))
+        return f"openrouter/{model_id}"
+    except Exception as exc:
+        logger.warning("Error detectando modelos OpenRouter: %s", exc)
+        return None
 
 # BOT-022: cuando el modelo agota max_tokens (finish_reason="length"), la
 # respuesta llega cortada a mitad sin que nadie se entere. Se marca con un
@@ -191,7 +244,7 @@ class LLMConfig:
 
     @classmethod
     def mejor_disponible(cls) -> "LLMConfig":
-        """Detecta el mejor modelo Ollama disponible.
+        """Detecta el mejor modelo disponible (orden: local > Groq > OpenRouter).
 
         El orden no es por tamaño, es por lo que midió el benchmark de LLM-003
         (4 modelos × 100 ejemplos de data/llm/val.jsonl, corrida definitiva):
@@ -215,6 +268,12 @@ class LLMConfig:
             nombre_corto = candidate.split("/", 1)[1] if "/" in candidate else candidate
             if nombre_corto in modelos:
                 return cls(model=candidate)
+        # BOT-023: si no hay Ollama, intenta Groq (HOST-001) y luego OpenRouter
+        if os.environ.get("GROQ_API_KEY"):
+            return cls(model=MODELO_API_DEFECTO)
+        openrouter_model = _detectar_openrouter_free()
+        if openrouter_model:
+            return cls(model=openrouter_model)
         return cls(model=MODELO_LOCAL_CPU)
 
 

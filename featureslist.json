@@ -2203,8 +2203,12 @@
         "Si no hay clave o cuota, cae al fallback determinista/plantilla",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-21",
+      "owner": "claude",
+      "review_rounds": 1,
+      "closed": "2026-08-21"
     },
     {
       "id": "DEPLOY-003",
@@ -2321,8 +2325,12 @@
         "animaciones stagger en hero/cards",
         "make test en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-21",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-21"
     }
   ]
 }
