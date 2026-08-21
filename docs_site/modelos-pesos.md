@@ -79,6 +79,30 @@ ocupación…). Ver la página **[Riesgo y personalización](riesgo-personalizac
 allí están las tablas completas de factores con su peso y su fuente, la
 composición en odds y el cap a ×3.0.
 
+### Atención: dos factores edad distintos
+
+Hay **dos capas** de factor edad que actúan en momentos distintos:
+
+1. **Ensemble ML** (`ensemble.py`): factor de **ingeniería inversa**. El modelo
+   se entrenó con datos de mortalidad de MoMo (ISCIII), que registra muertes
+   atribuibles a calor (X30) y frío (X31). La mayoría de muertes registradas
+   son de personas mayores de 70 años, por lo que el modelo "sobreestima" el
+   riesgo en jóvenes. Para corregir esto: 85+ años = 1.0 (sin ajuste); a
+   menor edad el factor es menor (0.6–0.875), lo que **reduce** la
+   probabilidad de riesgo para jóvenes. Este factor se aplica sobre la
+   `prob_poblacional` antes de la personalización.
+
+2. **Personalización individual** (`personalizacion.py`): ajusta el riesgo
+   individual según la edad real del usuario. A 85+ años el factor es ×2.0
+   (calor) / ×1.7 (frío); a menor edad el factor se acerca a 1.0. Este
+   factor se aplica en **odds** sobre la probabilidad ya ajustada por el
+   ensemble.
+
+**No se duplican**: el factor del ensemble corrige el sesgo del modelo (por
+qué el modelo "ve" más riesgo en jóvenes de lo que hay en realidad); el factor
+de personalización refleja la vulnerabilidad fisiológica real (por qué una
+persona de 85 años tiene más riesgo que una de 30).
+
 ## Detalle técnico
 
 La implementación vive en el repositorio:

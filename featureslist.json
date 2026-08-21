@@ -2287,6 +2287,40 @@
         "Las landings mantienen el contenido y los enlaces actuales",
         "make test sigue en verde"
       ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-21",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-21"
+    },
+    {
+      "id": "DOC-008",
+      "title": "Clarificar la dualidad del factor edad en la documentacion (ensemble ML vs personalizacion)",
+      "description": "Clarificar la dualidad del factor edad en la documentacion (ensemble ML vs personalizacion)",
+      "acceptance_criteria": [
+        "docs_site/modelos-pesos.md aclara que hay DOS factores edad",
+        "docs_site/riesgo-personalizacion.md explica la relacion",
+        "make test en verde"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-21",
+      "owner": "claude",
+      "review_rounds": 0,
+      "closed": "2026-08-21"
+    },
+    {
+      "id": "WEB-020",
+      "title": "Mejorar el diseño de cacelass.github.io: GSAP animaciones + mejor tipografia + layout",
+      "description": "Mejorar el diseño de cacelass.github.io: GSAP animaciones + mejor tipografia + layout",
+      "acceptance_criteria": [
+        "GSAP ScrollTrigger reemplaza IntersectionObserver",
+        "mejor tipografia (Space Grotesk o similar)",
+        "container mas amplio (1140px)",
+        "animaciones stagger en hero/cards",
+        "make test en verde"
+      ],
       "status": "pending",
       "depends_on": []
     }

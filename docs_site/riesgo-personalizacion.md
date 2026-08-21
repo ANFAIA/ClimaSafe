@@ -30,6 +30,15 @@ Un campo ausente = factor neutro ×1.0. El **producto total se capa a 3.0** (los
 factores no son independientes: mayor + obeso + cardiópata solapan mecanismos).
 Los factores sociales situacionales se combinan con **máximo**, no producto.
 
+> **Nota sobre el factor edad en la probabilidad poblacional:** Antes de
+> personalizar, el ensemble ML aplica un **factor de ingeniería inversa** sobre
+> la `prob_poblacional` (en `ensemble.py`): 85+ años = 1.0 (sin ajuste); a
+> menor edad = 0.6–0.875 (reduce el riesgo). Esto corrige el sesgo del modelo,
+> entrenado con datos de mortalidad de MoMo (ISCIII) donde la mayoría de
+> muertes son de personas >70 años, por lo que el modelo sobreestima el
+> riesgo en jóvenes. El factor de personalización de esta página (×1.2 a 65a,
+> ×2.0 a 85a) es **distinto** y se aplica después, en odds. No se duplican.
+
 ## Factores individuales — CALOR
 
 | Factor | Coef. | Fuente |
