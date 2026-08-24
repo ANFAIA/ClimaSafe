@@ -1056,8 +1056,11 @@
         "sandboxing: process_tool.run_command gana lista blanca de binarios y confinamiento del cwd al repo (hoy tiene shell=False y timeout pero acepta cualquier argv y cualquier directorio)",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "BUG-003",

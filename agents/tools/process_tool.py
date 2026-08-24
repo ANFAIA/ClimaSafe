@@ -5,6 +5,9 @@ Todas las herramientas que envuelven un binario de sistema (git, docker...)
 pasan por aquí en vez de llamar a `subprocess` directamente, para que las
 reglas de seguridad (`shell=False`, timeout, captura de stderr) se apliquen
 en un único sitio.
+
+ARNES-011: process_tool.expone ALLOWED_BINARIES para que la Security Layer
+(agents.security) pueda validar binarios y cwd antes de ejecutar.
 """
 
 from __future__ import annotations
@@ -17,6 +20,18 @@ from pathlib import Path
 from agents.exceptions import MissingDependencyError, ToolExecutionError
 
 DEFAULT_TIMEOUT_SECONDS = 60
+
+# ---------------------------------------------------------------------------
+# Sandbox: lista blanca de binarios permitidos (ARNES-011)
+# La validación se aplica en agents.security.approve_tool_call, no aquí,
+# para no romper tests que usan directorios temporales.
+# ---------------------------------------------------------------------------
+ALLOWED_BINARIES: frozenset[str] = frozenset({
+    "git", "python", "python3", "uv", "pip", "ruff", "pytest",
+    "make", "bash", "sh", "ls", "cat", "grep", "find", "wc",
+    "head", "tail", "diff", "sort", "uniq", "jq",
+    "docker", "curl", "wget",
+})
 
 
 @dataclass
@@ -51,6 +66,10 @@ def run_command(
     Ejecuta `args` (nunca a través de una shell — evita inyección de comandos)
     y devuelve un `ProcessResult`. Si `check=True`, lanza `ToolExecutionError`
     cuando el returncode no es 0.
+
+    ARNES-011: La lista blanca de binarios y el confinamiento del cwd se
+    validan en la Security Layer (agents.security.approve_tool_call), que es
+    el único punto de entrada antes de ejecutar cualquier tool.
     """
     if not args:
         raise ValueError("run_command requiere una lista de argumentos no vacía.")
