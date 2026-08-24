@@ -101,7 +101,10 @@ todo se ejecuta en tu navegador.
 Sí, para cualquier punto con coordenadas válidas.
 
 **¿Puedo usarlo para mi empresa o comunidad?**
-Contacta con el equipo en [ANFAIA](https://github.com/ANFAIA).
+Sí. ClimaSafe está publicado bajo la **licencia Apache 2.0**, que permite
+usarlo, modificarlo y distribuirlo libremente (incluso comercialmente),
+siempre que se conserve el aviso de licencia y se indique si se hicieron
+cambios. El código está en [ANFAIA/ClimaSafe](https://github.com/ANFAIA/ClimaSafe).
 
 ---
 
