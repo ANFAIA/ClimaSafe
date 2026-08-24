@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%2F%20RandomForest-orange)
 ![Tracking](https://img.shields.io/badge/Experiment%20Tracking-MLflow-blue?logo=mlflow)
-![Version](https://img.shields.io/badge/Version-0.0.100-green)
+![Version](https://img.shields.io/badge/Version-0.0.101-green)
 ![Author](https://img.shields.io/badge/Author-Alejandro%20Cancelas%20Chapela-blueviolet)
 ![Template](https://img.shields.io/badge/Generado%20con-dskit-58a6ff?logo=github)
 
@@ -11,7 +11,7 @@
 
 **Tipo de ML:** `supervisado`  
 **Autor:** Alejandro Cancelas Chapela  
-**Versión:** 0.0.100 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
+**Versión:** 0.0.101 · XGBoost (calor) + RandomForest (frío) + LSTM province_hybrid
 
 ClimaSafe estima, para cada **provincia y día**, el nivel de riesgo por temperatura
 (`0` seguro / `1` precaución / `2` peligro) a partir de variables meteorológicas de
@@ -25,8 +25,14 @@ Sin instalar nada:
 
 - **Demo interactiva** — [probar-ya](https://cacelass.github.io/climasafe/probar-ya/):
   elige provincia y perfil y mira el riesgo.
-- **Documentación** — [climasafe/documentacion](https://cacelass.github.io/climasafe/documentacion/).
 - **Home del proyecto** — [cacelass.github.io](https://cacelass.github.io/).
+
+### Documentación
+
+| Para quién | Dónde | Qué encontrarás |
+|------------|-------|-----------------|
+| **Usuarios** (no técnicos) | [Guía de usuario](https://cacelass.github.io/climasafe/documentacion/guia-usuario/) | Cómo usar ClimaSafe: la demo, el bot, los niveles de riesgo. Sin código. |
+| **Desarrolladores** | [Documentación técnica](https://cacelass.github.io/climasafe/documentacion/) | Arquitectura, modelos, pesos, integración MCP, LLM, papers. |
 
 ### Enfoque de modelado
 

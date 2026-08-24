@@ -2278,8 +2278,9 @@
         "La guia de usuario es legible de una pasada y no duplica la tecnica",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-24"
     },
     {
       "id": "WEB-019",
