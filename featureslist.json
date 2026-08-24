@@ -1515,10 +1515,13 @@
         "Las pulsaciones y el sueno se guardan y se loguean solo como decida SEC-001, y una sesion terminada no deja rastro fuera de lo acordado alli",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "DATA-005"
-      ]
+      ],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "LLM-012",
@@ -1532,8 +1535,11 @@
         "Sale una recomendacion explicita: se explora o se descarta, con el motivo escrito. Si se explora, las features que salgan se proponen al backlog, no se implementan aqui",
         "init.sh sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "MCP-003",
