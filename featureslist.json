@@ -921,11 +921,13 @@
         "process_tool.run_command gana lista blanca de binarios y confinamiento del cwd al repo: hoy tiene shell=False y timeout pero acepta cualquier argv y cualquier directorio",
         "make test pasa"
       ],
-      "status": "blocked",
+      "status": "done",
       "depends_on": [
         "BOT-006"
       ],
-      "blocked_reason": "Absorbida y ampliada: la vision de seguridad del usuario (frontera LLM->Policy->Tool) supera el alcance del gateway simple. Sus 5 criterios se amplian y pasan a ARNES-011."
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "ARNES-006",
@@ -940,12 +942,15 @@
         "Se reutilizan los 26 agentes Python de agents/ como tools, sin reescribirlos",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "ARNES-003",
         "ARNES-004",
         "ARNES-005"
-      ]
+      ],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "ARNES-007",
