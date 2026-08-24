@@ -1698,8 +1698,11 @@
         "si entra, el ticket que lo implemente queda escrito como propuesta al backlog",
         "init.sh sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "BOT-021",
