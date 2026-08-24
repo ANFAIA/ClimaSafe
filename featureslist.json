@@ -965,10 +965,13 @@
         "El coste en tokens de la compactacion por resumen se mide y se pega: resumir tambien cuesta",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "ARNES-006"
-      ]
+      ],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "ARNES-008",

@@ -14,6 +14,12 @@ agents/agents/ (como wrappers). El catálogo es cerrado y por agente
 LiteLLM como proveedor: abstrae Ollama, Groq, OpenAI y otros bajo la
 misma API. No reescribimos la capa de proveedor — usamos litellm.completion()
 directamente (capítulo 03 del tutorial cubierto).
+
+ARNES-007: Subagentes y compactación.
+  - delegate_to_subagent: tool built-in que arranca un sub-loop con su propio
+    system prompt y catálogo de tools (definidos en .opencode/agents/*.md).
+  - Estrategias de compactación: NoneCompaction, SlidingWindowCompaction,
+    SummaryCompaction. Seleccionables sin tocar el bucle.
 """
 
 from __future__ import annotations
@@ -27,11 +33,19 @@ from typing import Any
 
 import litellm
 
+from agents.compaction import (
+    CompactionStrategy,
+    NoneCompaction,
+    SlidingWindowCompaction,
+    SummaryCompaction,
+    count_tokens_approx,
+)
 from agents.security import (
     ToolCall,
     approve_tool_call,
     register_default_policies,
 )
+from agents.subagent import load_subagent_config
 
 # ---------------------------------------------------------------------------
 # Tool discovery: escanea agents/tools/ (via tool_registry) y agents/agents/
@@ -60,6 +74,9 @@ def _discover_tools() -> dict[str, dict[str, Any]]:
 
     # --- Fuente 2: agentes como tools ---
     _discover_agent_tools()
+
+    # --- Fuente 3: herramientas built-in (delegación) ---
+    _discover_builtin_tools()
 
     return _discovered_tools
 
@@ -262,6 +279,85 @@ def _discover_agent_tools() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Built-in tools (not from registry, always available)
+# ---------------------------------------------------------------------------
+
+def _discover_builtin_tools() -> None:
+    """Registra herramientas built-in que no vienen del tool_registry."""
+    if "delegate_to_subagent" not in _discovered_tools:
+        _discovered_tools["delegate_to_subagent"] = {
+            "name": "delegate_to_subagent",
+            "description": (
+                "Delega una tarea a un subagente. El subagente arranca con "
+                "contexto vacío, su propio system prompt y su propio catálogo "
+                "de tools (definidos en .opencode/agents/*.md)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "agent_name": {
+                        "type": "string",
+                        "description": (
+                            "Nombre del subagente (explorer, implementer, reviewer)"
+                        ),
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Tarea concreta para el subagente",
+                    },
+                    "max_iterations": {
+                        "type": "integer",
+                        "description": "Máximo de iteraciones del sub-loop (default: 5)",
+                    },
+                },
+                "required": ["agent_name", "prompt"],
+            },
+            "execute": execute_delegation,
+        }
+
+
+def execute_delegation(
+    agent_name: str,
+    prompt: str,
+    max_iterations: int = 5,
+    model: str = "ollama/llama3.2",
+) -> dict[str, Any]:
+    """
+    Ejecuta un subagente: carga su config de .opencode/agents/*.md,
+    arranca un agent_loop nuevo con su system prompt y tools.
+    """
+    config = load_subagent_config(agent_name)
+    if config is None:
+        agents_dir = Path(__file__).parent.parent / ".opencode" / "agents"
+        available = [f.stem for f in agents_dir.glob("*.md")] if agents_dir.exists() else []
+        return {
+            "error": f"Subagente '{agent_name}' no encontrado. Disponibles: {available}",
+            "blocked": False,
+        }
+
+    # Build the sub-loop's tool catalog from the subagent's allowed tools
+    from agents.loop import agent_loop as _agent_loop
+
+    result = _agent_loop(
+        prompt=prompt,
+        agent_type=agent_name,
+        model=model,
+        max_iterations=max_iterations,
+        system_prompt=config.system_prompt,
+    )
+
+    return {
+        "success": result.success,
+        "response": result.final_response,
+        "tool_calls_count": len(result.tool_calls),
+        "tool_calls": [
+            {"tool": tc["tool"], "args": tc["args"]}
+            for tc in result.tool_calls
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Closed tool catalog per agent type
 # ---------------------------------------------------------------------------
 
@@ -295,6 +391,9 @@ def _build_catalogs() -> dict[str, set[str]]:
         # El propio agente siempre puede invocarse a sí mismo
         if agent_name in _discovered_tools:
             allowed.add(agent_name)
+        # delegate_to_subagent always available (ARNES-007)
+        if "delegate_to_subagent" in _discovered_tools:
+            allowed.add("delegate_to_subagent")
         AGENT_TOOL_CATALOGS[agent_name] = allowed
 
     return AGENT_TOOL_CATALOGS
@@ -419,6 +518,7 @@ def agent_loop(
     model: str = "ollama/llama3.2",
     max_iterations: int = 10,
     system_prompt: str | None = None,
+    compaction: CompactionStrategy | None = None,
 ) -> LoopResult:
     """
     Bucle interno del agente: evalúa con llamadas al modelo y ejecución
@@ -429,9 +529,16 @@ def agent_loop(
     2. Si el modelo devuelve tool calls → ejecutarlas (via gateway)
     3. Añadir resultado al historial y repetir
     4. Si no hay tool calls → el modelo terminó, devolver respuesta
+
+    Compaction (ARNES-007):
+      Se aplica antes de cada llamada al LLM para reducir el contexto.
+      Por defecto NoneCompaction (sin compactación).
     """
     _discover_tools()
     _build_catalogs()
+
+    if compaction is None:
+        compaction = NoneCompaction()
 
     tools = _build_tools_for_model(agent_type)
 
@@ -443,6 +550,10 @@ def agent_loop(
     all_tool_calls: list[dict[str, Any]] = []
 
     for iteration in range(max_iterations):
+        # Apply compaction before each LLM call
+        compaction_result = compaction.apply(messages)
+        messages = compaction_result.messages
+
         response = _call_llm(messages, model, tools if tools else None)
 
         # Si no hay tool calls, el modelo terminó
