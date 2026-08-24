@@ -1390,11 +1390,14 @@
         "Se decide POR LOS NUMEROS si entra o no, y si entra queda claro que modelo base obliga a usar y que pasa con Qwen y con el fine-tuning de LLM-006",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "LLM-007",
         "RAG-004"
-      ]
+      ],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "LLM-009",
