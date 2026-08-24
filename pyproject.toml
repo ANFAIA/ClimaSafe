@@ -1,6 +1,6 @@
 [project]
 name = "climasafeai"
-version = "0.0.103"
+version = "0.0.104"
 description = "Prediccion de riesgo climatico personalizado (calor/frio/uv) con ML"
 authors = [
   { name = "Alejandro Cancelas Chapela" }
@@ -138,6 +138,14 @@ api = [
     "uvicorn[standard]",
     "pydantic>=2.0",
     "httpx",   # cliente HTTP para tests de la API
+]
+
+# BOT-018: voz en el bot de Telegram (STT + TTS)
+# faster-whisper: transcripción local con Whisper (~140 MB modelo base, CPU)
+# gTTS: síntesis de voz vía Google TTS (sin API key)
+voice = [
+    "faster-whisper>=1.0.0",
+    "gTTS>=2.3.0",
 ]
 
 

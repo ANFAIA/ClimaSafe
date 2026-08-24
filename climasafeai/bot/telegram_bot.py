@@ -18,9 +18,11 @@ import os
 import re
 import signal
 import sys
+import tempfile
 import unicodedata
 from datetime import date, datetime
 from enum import Enum, auto
+from pathlib import Path
 
 from climasafeai.bot.geocoding import buscar_lugar, provincia_desde_coords
 from climasafeai.features.personalizacion import (
@@ -47,6 +49,7 @@ from climasafeai.llm.rag_qwen import (
 )
 from climasafeai.models.ensemble import predict_ensemble
 from climasafeai.models.recomendaciones import _canal_dominante, recomendacion_resumen
+from climasafeai.bot.voice import cleanup_audio, text_to_speech, transcribe_voice
 
 logger = logging.getLogger(__name__)
 
@@ -2410,18 +2413,33 @@ async def _finalizar_parte(chat_id: int) -> None:
     abierto para preguntas libres con RAG: se guarda `ultima_prediccion` como
     contexto y se invita a preguntar (p. ej. qué es SPF) o a volver a /start.
     En modo determinista se responde con la plantilla y se cierra como antes.
+
+    BOT-018: además del texto, se genera un audio con TTS (gTTS) para que el
+    usuario pueda escuchar el parte. El audio se envía como nota de voz. Si
+    gTTS no está disponible o falla, el parte se envía solo en texto.
     """
     conv = _conversaciones.get(chat_id)
     if not conv:
         return
     texto = await ejecutar_prediccion(chat_id)
-    if conv.get("modelo", MODELO_DETERMINISTA) != MODELO_DETERMINISTA:
-        conv["data"]["_prediccion_hecha"] = True
-        conv["ultima_prediccion"] = texto
-        await enviar_mensaje(chat_id, f"{texto}\n\n{CHAT_CIERRE}")
-        return
-    await enviar_mensaje(chat_id, texto)
-    _conversaciones.pop(chat_id, None)
+    audio_path = None
+    try:
+        if conv.get("modelo", MODELO_DETERMINISTA) != MODELO_DETERMINISTA:
+            conv["data"]["_prediccion_hecha"] = True
+            conv["ultima_prediccion"] = texto
+            await enviar_mensaje(chat_id, f"{texto}\n\n{CHAT_CIERRE}")
+        else:
+            await enviar_mensaje(chat_id, texto)
+            _conversaciones.pop(chat_id, None)
+
+        # BOT-018: intentar enviar el parte como audio
+        if texto:
+            audio_path = await asyncio.to_thread(text_to_speech, texto)
+            if audio_path:
+                await enviar_audio(chat_id, audio_path, caption="Parte hablado")
+    finally:
+        # BOT-018: siempre limpiar el audio temporal
+        cleanup_audio(audio_path)
 
 
 # Telegram rechaza con 400 los mensajes de más de 4096 caracteres.
@@ -2812,6 +2830,140 @@ async def _recibir_ubicacion(chat_id: int, location: dict) -> None:
     await enviar_siguiente_pregunta(chat_id)
 
 
+# ── BOT-018: recepción de notas de voz ────────────────────────────────────
+
+
+async def _descargar_audio(file_id: str) -> Path | None:
+    """Descarga un fichero de Telegram y devuelve la ruta local.
+
+    Telegram no sirve los ficheros directamente: primero hay que pedir la
+    ubicación con getFile y luego descargar la URL que devuelve. El fichero
+    temporal se crea en un directorio seguro y se borra después de procesarlo.
+    """
+    try:
+        file_info = await _tg("getFile", file_id=file_id)
+        file_path = file_info.get("result", {}).get("file_path")
+        if not file_path:
+            logger.warning("getFile no devolvió file_path para %s", file_id)
+            return None
+        file_url = (
+            f"https://api.telegram.org/file/bot"
+            f"{os.getenv('TELEGRAM_BOT_TOKEN', '')}/{file_path}"
+        )
+        # Descargar el fichero
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(file_url)
+            resp.raise_for_status()
+
+        # Crear fichero temporal con la extensión correcta
+        ext = Path(file_path).suffix or ".ogg"
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=ext, prefix="voice_", delete=False,
+        )
+        tmp_path = Path(tmp.name)
+        tmp.write(resp.content)
+        tmp.close()
+
+        logger.debug(
+            "Audio descargado: %s (%d bytes)", tmp_path.name, len(resp.content),
+        )
+        return tmp_path
+
+    except Exception:
+        logger.exception("Error descargando audio %s", file_id)
+        return None
+
+
+async def _recibir_voz(chat_id: int, voice: dict) -> None:
+    """Procesa una nota de voz: descarga, transcribe y alimenta el flujo de texto.
+
+    El audio se descarga a un temporal, se transcribe con faster-whisper
+    (o fallback), y la transcripción se procesa exactamente como un mensaje
+    de texto: misma lógica, sin duplicar nada.
+
+    Si el motor STT no está instalado o falla, se avisa al usuario pero el
+    bot sigue funcionando en texto. Los audios temporales se borran siempre.
+    """
+    file_id = voice.get("file_id")
+    if not file_id:
+        return
+
+    logger.info("Nota de voz recibida de %s", chat_id)
+    audio_path = None
+
+    try:
+        audio_path = await _descargar_audio(file_id)
+        if audio_path is None:
+            await enviar_mensaje(
+                chat_id,
+                "No pude descargar el audio. Envíalo de nuevo o escribe tu mensaje.",
+            )
+            return
+
+        # Transcribir
+        texto = await asyncio.to_thread(transcribe_voice, audio_path)
+
+        if texto is None:
+            # Motor STT no disponible o fallo
+            await enviar_mensaje(
+                chat_id,
+                "No pude transcribir el audio. "
+                "Escribe tu mensaje o instala faster-whisper para habilitar "
+                "el reconocimiento de voz.",
+            )
+            return
+
+        logger.info("Voz transcrita: '%s'", texto[:100])
+
+        # Enviar la transcripción como confirmación visual
+        await enviar_mensaje(chat_id, f"🎙 *Voz:* {texto}")
+
+        # Procesar exactamente como un mensaje de texto
+        respuesta = await procesar_mensaje(chat_id, texto)
+        if respuesta:
+            await enviar_mensaje(chat_id, respuesta)
+        else:
+            await enviar_siguiente_pregunta(chat_id)
+
+    finally:
+        # Siempre limpiar el audio temporal
+        cleanup_audio(audio_path)
+
+
+async def enviar_audio(chat_id: int, audio_path: Path, caption: str = "") -> bool:
+    """Envía un fichero de audio al chat de Telegram.
+
+    Usa sendAudio de la Bot API. El audio se envía como nota de voz
+    (Ogg/Opus) o como archivo de audio (MP3), según el formato.
+
+    Returns:
+        True si se envió correctamente, False si falló.
+    """
+    if not audio_path or not audio_path.exists():
+        return False
+
+    try:
+        url = f"{_telegram_api()}/sendAudio"
+        async with httpx.AsyncClient(timeout=30) as client:
+            with open(audio_path, "rb") as f:
+                files = {"audio": (audio_path.name, f, "audio/ogg")}
+                data = {"chat_id": str(chat_id)}
+                if caption:
+                    data["caption"] = caption
+                resp = await client.post(url, data=data, files=files)
+                resp.raise_for_status()
+
+        logger.debug("Audio enviado a %s: %s", chat_id, audio_path.name)
+        return True
+
+    except Exception:
+        logger.exception("Error enviando audio a %s", chat_id)
+        return False
+
+
+# ── Fin BOT-018 ───────────────────────────────────────────────────────────
+
+
 async def procesar_update(update: dict) -> None:
     """Procesa una update de Telegram."""
     msg = update.get("message")
@@ -2826,6 +2978,14 @@ async def procesar_update(update: dict) -> None:
         # da la geocodificación inversa.
         if msg.get("location"):
             await _recibir_ubicacion(chat_id, msg["location"])
+            return
+
+        # BOT-018: nota de voz → transcripción → mismo flujo que texto.
+        # El audio se descarga, transcribe con faster-whisper (o fallback), y
+        # la transcripción se procesa exactamente como un mensaje de texto.
+        # Si el motor STT no está disponible o falla, se avisa al usuario.
+        if msg.get("voice"):
+            await _recibir_voz(chat_id, msg["voice"])
             return
 
         # SEC-001: el texto del mensaje puede contener edad, medicación o

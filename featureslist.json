@@ -1317,8 +1317,11 @@
         "Los audios recibidos y generados se borran despues de procesarse y no aparecen en logs/, se demuestra listando el directorio temporal despues de una conversacion",
         "Hay tests del camino de voz con un audio de ejemplo y del fallback sin motor de voz, y make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "DATA-004",
