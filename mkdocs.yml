@@ -43,6 +43,7 @@ extra_css:
 
 nav:
   - Inicio: index.md
+  - Guía de usuario: guia-usuario.md
   - Modelos y pesos: modelos-pesos.md
   - Riesgo y personalización: riesgo-personalizacion.md
   - Arquitectura: arquitectura.md

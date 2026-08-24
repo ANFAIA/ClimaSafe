@@ -1,18 +1,19 @@
-# ClimaSafe
+# ClimaSafe — Documentación técnica
 
-> Sistema de **aviso** de riesgo cardiovascular por temperatura (calor / frío),
-> personalizado por persona, ubicación, día y hora.
+> **Para desarrolladores e ingenieros.** Si no eres técnico, usa la
+> [guía de usuario](guia-usuario.md).
 
-ClimaSafe estima tu nivel de riesgo — **SEGURO / PRECAUCIÓN / PELIGRO** — ante el
-calor y el frío, para cualquier punto de España y para el día (u hora) que
-elijas. Combina tres modelos de ML con índices térmicos clásicos y ajusta el
-riesgo poblacional con tus factores individuales (edad, comorbilidades,
-medicación, actividad, aclimatación…).
+Sistema de **aviso** de riesgo cardiovascular por temperatura (calor / frío),
+personalizado por persona, ubicación, día y hora.
 
 ## Pruébalo
 
 - **[Demo en el navegador](https://cacelass.github.io/climasafe/probar-ya/)** —
   el pipeline completo ejecutándose con WebAssembly, sin servidor.
+- **[Bot de Telegram](https://cacelass.github.io/climasafe/telegram.html)** —
+  alertas diarias y consultas de riesgo.
+- **[Servidor MCP](https://cacelass.github.io/climasafe/mcp.html)** —
+  integración con asistentes de IA.
 - **[Repositorio](https://github.com/ANFAIA/ClimaSafe)** — código, modelos y
   datos.
 
@@ -24,7 +25,15 @@ XGBoost (calor), RandomForest (frío) y una LSTM con embedding de provincia
 produce la probabilidad de riesgo poblacional; esa probabilidad se personaliza
 con factores de la literatura epidemiológica y se traduce a clase.
 
-## Qué hay en esta documentación
+## Documentación
+
+### Para todos
+
+| Página | Qué explica |
+|---|---|
+| [Guía de usuario](guia-usuario.md) | Cómo usar ClimaSafe sin ser técnico: la demo, el bot, los niveles de riesgo. |
+
+### Para desarrolladores
 
 | Página | Qué explica |
 |---|---|
