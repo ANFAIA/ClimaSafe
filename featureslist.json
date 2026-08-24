@@ -1708,8 +1708,11 @@
         "si alguna metrica no se puede medir hoy, queda escrito que falta y que se necesita para medirla",
         "init.sh sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "UV-001",
