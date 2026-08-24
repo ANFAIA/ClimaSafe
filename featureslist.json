@@ -1354,10 +1354,13 @@
         "Los datos del wearable son datos de salud y quedan sujetos a lo que decida SEC-001: no se guardan ni se loguean fuera de lo acordado alli",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "SEC-001"
-      ]
+      ],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "LLM-007",
