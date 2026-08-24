@@ -1373,8 +1373,11 @@
         "Sale una recomendacion concreta para LLM-006 y LLM-002 y las features que se deriven quedan escritas como propuesta al backlog, no implementadas aqui",
         "init.sh sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-24",
+      "review_rounds": 0,
+      "closed": "2026-08-24"
     },
     {
       "id": "LLM-008",
