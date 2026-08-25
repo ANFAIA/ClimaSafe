@@ -1,0 +1,7 @@
+{
+  "name": "Formula",
+  "type": "formula",
+  "class": "both",
+  "description": "Deterministic formula-based risk (heat index + wind chill)",
+  "enabled": true
+}

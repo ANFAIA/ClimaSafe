@@ -36,6 +36,7 @@ from climasafeai.data.weather_fetcher import (
 from climasafeai.utils.paths import MODELS_DIR, ARTIFACTS_DIR
 from climasafeai.models.explicabilidad import explicar_ensemble
 from climasafeai.models.recomendaciones import generar_recomendaciones
+from climasafeai.models.registry import discover_models
 
 # Cache de modelos para no recargar en cada predicción
 _MODEL_CACHE: dict[str, object] = {}
@@ -445,11 +446,15 @@ def _proba_from_formula(current: dict) -> dict:
 def _conformal_weighted_ensemble(model_results: dict, tipo: str) -> dict:
     """Media ponderada por set_size conformal de los modelos del ensemble.
 
+    Contribuyen los modelos que produjeron resultado en ESTA llamada
+    (claves de ``model_results``); el registry aporta solo metadatos (tipo y
+    clase) si el modelo tiene manifiesto. Así funciona igual con manifiestos,
+    sin ellos o con diccionarios sintéticos (tests unitarios).
+
     Parameters
     ----------
     model_results : dict
-        Resultados de todos los modelos (XGBoost_calor, RandomForest_frio,
-        LSTM, Formula).
+        Resultados de todos los modelos descubiertos por manifiesto.
     tipo : str
         "calor" o "frio".
 
@@ -457,22 +462,27 @@ def _conformal_weighted_ensemble(model_results: dict, tipo: str) -> dict:
     -------
     dict con "prob_riesgo" (float) y "clase" (int).
     """
-    if tipo == "calor":
-        model_keys = ["XGBoost_calor", "LSTM", "Formula"]
-    else:
-        model_keys = ["RandomForest_frio", "LSTM", "Formula"]
+    specs = {m["name"]: m for m in discover_models()}
 
     prob_sum = 0.0
     weight_sum = 0.0
 
-    for key in model_keys:
-        res = model_results.get(key)
-        if res is None:
-            continue
-        if isinstance(res, dict) and "error" in res:
+    for key, res in model_results.items():
+        if not isinstance(res, dict) or "error" in res:
             continue
 
-        if key == "LSTM":
+        spec = specs.get(key)
+        if spec and spec["class"] not in (tipo, "both"):
+            continue
+
+        # Tipo desde el manifiesto; sin él se infiere por forma: el tabular
+        # trae prob_riesgo arriba, lstm/formula traen subdict por tipo (y
+        # ambas pesan 1/2, así que basta distinguirlas del tabular).
+        mtype = spec["type"] if spec else (
+            "tabular" if "prob_riesgo" in res else "lstm"
+        )
+
+        if mtype == "lstm":
             sub = res.get(tipo, {})
             if not sub or not isinstance(sub, dict) or "error" in sub:
                 continue
@@ -481,7 +491,7 @@ def _conformal_weighted_ensemble(model_results: dict, tipo: str) -> dict:
                 continue
             # LSTM no tiene conformal → set_size por defecto = 2
             weight = 1.0 / 2.0
-        elif key == "Formula":
+        elif mtype == "formula":
             sub = res.get(tipo, {})
             if not sub or not isinstance(sub, dict):
                 continue
@@ -491,7 +501,7 @@ def _conformal_weighted_ensemble(model_results: dict, tipo: str) -> dict:
             # Fórmula no tiene conformal → set_size por defecto = 2
             weight = 1.0 / 2.0
         else:
-            # XGBoost_calor o RandomForest_frio — tienen conformal_set_size
+            # Tabular models — tienen conformal_set_size
             prob = res.get("prob_riesgo")
             if prob is None:
                 continue
@@ -559,17 +569,70 @@ def predict_ensemble(
 
     resultados = {}
 
-    xgb_result = _predecir_tabular("XGBoost_calor.joblib", "calor", df_features, provincia, grupo_edad=estrato)
-    resultados["XGBoost_calor"] = xgb_result
+    # ── Model discovery via manifests ──────────────────────────────────────
+    # Instead of hardcoding model paths, scan for *.manifest.json files.
+    # Each manifest declares name, type, class and file.  The prediction
+    # backend is chosen by type (tabular → _predecir_tabular, lstm →
+    # _predecir_lstm, formula → _proba_from_formula).
+    discovered = discover_models()
+    for model_spec in discovered:
+        name = model_spec["name"]
+        mtype = model_spec["type"]
 
-    rf_result = _predecir_tabular("RandomForest_frio.joblib", "frio", df_features, provincia, grupo_edad=estrato)
-    resultados["RandomForest_frio"] = rf_result
+        try:
+            if mtype == "tabular":
+                model_class = model_spec["class"]
+                model_file = model_spec["file"]
+                resultados[name] = _predecir_tabular(
+                    model_file, model_class, df_features, provincia,
+                    grupo_edad=estrato,
+                )
+            elif mtype == "lstm":
+                resultados[name] = _predecir_lstm(
+                    df_hora, df_features, provincia, grupo_edad=estrato,
+                )
+            elif mtype == "formula":
+                resultados[name] = _proba_from_formula(weather["current"])
+        except Exception:
+            # If a model fails, skip it — the ensemble tolerates missing models.
+            pass
 
-    lstm_result = _predecir_lstm(df_hora, df_features, provincia, grupo_edad=estrato)
-    resultados["LSTM"] = lstm_result
+    # Backward compat: without any usable ML model (tabular/lstm) this is not
+    # an ensemble — raise like the pre-manifest code did when the first
+    # _predecir_tabular failed. A lone Formula (or an {"error": ...} stub,
+    # same convention as _conformal_weighted_ensemble) must not replace ML.
+    ml_names = {m["name"] for m in discovered if m["type"] in ("tabular", "lstm")}
+    hay_ml = any(
+        isinstance(resultados.get(n), dict)
+        and resultados[n]
+        and "error" not in resultados[n]
+        for n in ml_names
+    )
+    if ml_names and not hay_ml:
+        raise RuntimeError(
+            f"Ningún modelo ML del ensemble pudo ejecutarse (descubiertos: {sorted(ml_names)})"
+        )
 
-    formula_result = _proba_from_formula(weather["current"])
-    resultados["Formula"] = formula_result
+    # Fallback: if no manifests found, use the hardcoded defaults so the
+    # system works even without any manifest files (backward compat).
+    if not resultados:
+        xgb_result = _predecir_tabular(
+            "XGBoost_calor.joblib", "calor", df_features, provincia,
+            grupo_edad=estrato,
+        )
+        resultados["XGBoost_calor"] = xgb_result
+
+        rf_result = _predecir_tabular(
+            "RandomForest_frio.joblib", "frio", df_features, provincia,
+            grupo_edad=estrato,
+        )
+        resultados["RandomForest_frio"] = rf_result
+
+        lstm_result = _predecir_lstm(df_hora, df_features, provincia, grupo_edad=estrato)
+        resultados["LSTM"] = lstm_result
+
+        formula_result = _proba_from_formula(weather["current"])
+        resultados["Formula"] = formula_result
 
     # Ensemble conformal-weighted: media ponderada por set_size
     ens_calor = _conformal_weighted_ensemble(resultados, "calor")
@@ -768,8 +831,8 @@ def predict_ensemble(
     if perfil and "_perfil_horario" in perfil:
         weather_result["perfil_horario"] = perfil["_perfil_horario"]
 
-    X_calor = xgb_result.get("_X")
-    X_frio = rf_result.get("_X")
+    X_calor = resultados.get("XGBoost_calor", {}).get("_X")
+    X_frio = resultados.get("RandomForest_frio", {}).get("_X")
 
     explicacion = explicar_ensemble(
         {
@@ -832,13 +895,15 @@ _CONFIANZA_ETIQUETA = {1: "alta", 2: "media", 3: "baja"}
 def _set_size_conformal_del_dia(resultado: dict) -> int:
     """Tamaño medio del prediction set conformal de los modelos ML del día.
 
-    XGBoost_calor y RandomForest_frio llevan `conformal_set_size` (1/2/3) en
-    cada predicción; el ensemble ya pondera por ese mismo set size. Si no hay
-    señal conformal (modelos sin artefacto) se usa 2 (media), el valor neutro.
+    Lee los `conformal_set_size` (1/2/3) que traigan los resultados de esa
+    llamada: solo los tabulares emiten ese campo (lstm/fórmula no tienen
+    conformal), así que no hace falta descubrir nada por disco. Sin señal
+    conformal, fallback a 2 (media).
     """
     sizes = []
-    for mod in ("XGBoost_calor", "RandomForest_frio"):
-        m = (resultado.get("modelos") or {}).get(mod) or {}
+    for m in (resultado.get("modelos") or {}).values():
+        if not isinstance(m, dict):
+            continue
         ss = m.get("conformal_set_size")
         if isinstance(ss, (int, float)) and 1 <= ss <= 3:
             sizes.append(int(ss))

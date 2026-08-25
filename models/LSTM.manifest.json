@@ -1,0 +1,8 @@
+{
+  "name": "LSTM",
+  "type": "lstm",
+  "class": "both",
+  "file": "LSTM_province_hybrid.pt",
+  "description": "LSTM province-hybrid model (sequential weather data + demographics)",
+  "enabled": true
+}

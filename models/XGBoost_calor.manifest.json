@@ -1,0 +1,8 @@
+{
+  "name": "XGBoost_calor",
+  "type": "tabular",
+  "class": "calor",
+  "file": "XGBoost_calor.joblib",
+  "description": "XGBoost model for heat risk prediction (3-class: seguro/precaucion/peligro)",
+  "enabled": true
+}

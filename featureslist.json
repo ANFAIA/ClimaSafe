@@ -985,10 +985,13 @@
         "Queda escrito que pasa con .opencode/ y con ARNES-002: se mantiene, se migra o se retira",
         "make test pasa"
       ],
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "ARNES-007"
-      ]
+      ],
+      "started": "2026-08-25",
+      "review_rounds": 1,
+      "blocked_reason": "Benchmark completo requiere ~2.5h (6 runs x 25min) con LLM local. Metodologia documentada en progress/implementer-ARNES-008. Retomar cuando el humano decida ejecutar."
     },
     {
       "id": "ARNES-009",
@@ -2213,8 +2216,11 @@
         "Se verifica en las rutas principales de cacelass.github.io y probar-ya a varios anchos",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-25",
+      "review_rounds": 1,
+      "blocked_reason": "El humano está trabajando en la web directamente. Se salta esta feature."
     },
     {
       "id": "WEB-018",
@@ -2227,8 +2233,11 @@
         "Alcance solo en el repo/pagina de ClimaSafe, no en el home general",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "started": "2026-08-25",
+      "review_rounds": 0,
+      "blocked_reason": "El humano indica que ya está lista. Se salta."
     },
     {
       "id": "BOT-023",
@@ -2302,8 +2311,11 @@
         "La salida del ensemble es compatible hacia atras (mismo contrato)",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-25",
+      "review_rounds": 0,
+      "closed": "2026-08-25"
     },
     {
       "id": "DOC-007",
