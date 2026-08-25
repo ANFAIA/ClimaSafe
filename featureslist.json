@@ -2269,8 +2269,11 @@
         "Queda escrito como conviven los dos (agente commits + tag automatico) y que el repo personal queda fuera de alcance",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-25",
+      "review_rounds": 0,
+      "closed": "2026-08-25"
     },
     {
       "id": "PACK-002",

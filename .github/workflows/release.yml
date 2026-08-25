@@ -6,6 +6,13 @@ name: Release
 # Idempotente: si el tag v<version> ya existe, no hace nada.
 # CI NO commitea NADA en el repo (ni CHANGELOG.md ni código): los commits los
 # hace el humano/local. El changelog de la versión va en el cuerpo del release.
+#
+# DEPLOY-003: release-please se evaluó y se descartó — sería un SEGUNDO
+# escritor de la versión (Release PRs que suben pyproject.toml) y commitea con
+# identidad de bot. Evaluación completa y modelo de convivencia:
+# documentacion/despliegue/releases.md.
+# SOLO ANFAIA: el guard del job evita etiquetar si el workflow corre en otro
+# repo (espejos/forks); el pages personal nunca recibe tags ni releases.
 
 on:
   push:
@@ -18,6 +25,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    if: github.repository == 'ANFAIA/ClimaSafe'
     steps:
       - uses: actions/checkout@v4
         with:

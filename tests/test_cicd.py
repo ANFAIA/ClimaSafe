@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -67,6 +68,30 @@ def test_release_no_commitea_bot():
     script = (SCRIPTS / "release_ci.sh").read_text(encoding="utf-8")
     assert "GIT_NAME" not in script, "release_ci.sh no debe definir identidad de bot"
     assert "user.name" not in script, "release_ci.sh no debe configurar user.name"
+
+
+def test_release_solo_en_repo_anfaia():
+    """DEPLOY-003: el release (tags/versiones) vive SOLO en ANFAIA/ClimaSafe.
+    Si el repo se espeja a otro remoto, el job debe saltarse, no etiquetar."""
+    cfg = _cargar_workflow("release.yml")
+    job = cfg["jobs"]["release"]
+    assert job.get("if") == "github.repository == 'ANFAIA/ClimaSafe'", (
+        "release.yml debe acotarse al repo ANFAIA con un guard de repository"
+    )
+
+
+def test_no_release_please():
+    """DEPLOY-003: release-please se evaluó y se descartó (sería un segundo
+    escritor de la versión en pyproject.toml y commitea con identidad de bot).
+    Guard contra reintroducirlo por accidente: no debe USARSE en ningún
+    workflow ni existir su configuración de manifiesto."""
+    for yml in WORKFLOWS.glob("*.yml"):
+        contenido = yml.read_text(encoding="utf-8")
+        assert not re.search(r"uses:\s*.*release-please", contenido), (
+            f"{yml.name} usa release-please — releer documentacion/despliegue/releases.md"
+        )
+    for config in ("release-please-config.json", ".release-please-manifest.json"):
+        assert not (ROOT / config).exists(), f"{config} no debe existir"
 
 
 def test_pages_usa_secreto_y_script():

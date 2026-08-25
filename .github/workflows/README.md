@@ -40,6 +40,10 @@ fuera del alcance de DEPLOY-002.
 
 ## Release (`release.yml`)
 
+> Evaluación de release-please y modelo de convivencia commits↔tag:
+> `documentacion/despliegue/releases.md`. El job solo corre en
+> `ANFAIA/ClimaSafe` (guard `github.repository`).
+
 - El bump de versión en `pyproject.toml` lo hace **`harness finish` en local**
   (DocumentationAgent/GIT-001) antes del push. El workflow lee esa versión y la
   publica: si no existe el tag `v<version>`, genera la sección de CHANGELOG
