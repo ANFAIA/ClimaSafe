@@ -465,7 +465,8 @@ function renderPerfil(res) {
   for (const p of perfil) {
     const h = Math.round(p.hora);
     const div = document.createElement("div");
-    div.className = "barra" + (h >= inicio && h < fin ? " ventana" : "");
+    const hiClase = p.HI >= 39 ? 2 : p.HI >= 27 ? 1 : 0;
+    div.className = "barra rango-" + hiClase + (h >= inicio && h < fin ? " ventana" : "");
     div.style.height = `${Math.max(4, (p.HI / hiMax) * 100)}%`;
     div.title = `${h}:00 · HI ${p.HI.toFixed(1)} °C${p.temp != null ? ` · ${p.temp.toFixed(1)} °C` : ""}`;
     barras.appendChild(div);
@@ -476,8 +477,9 @@ function renderPerfil(res) {
     eje.appendChild(s);
   }
   $("perfil-leyenda").textContent =
-    `Barras: Heat Index por hora del día (máx. ${hiMax.toFixed(1)} °C). ` +
-    `Amarillo: ventana de actividad (${inicio}:00–${fin}:00).`;
+    `Barras: Heat Index por hora (máx. ${hiMax.toFixed(1)} °C). ` +
+    `Verde: seguro · Ámbar: precaución · Rojo: peligro. ` +
+    `Contorno blanco: ventana de actividad (${inicio}:00–${fin}:00).`;
 }
 
 function renderRecomendaciones(res) {
