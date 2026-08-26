@@ -2203,8 +2203,11 @@
         "Se documenta el modelo concreto elegido, su peso de descarga y la privacidad",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-26",
+      "review_rounds": 0,
+      "closed": "2026-08-26"
     },
     {
       "id": "WEB-017",
@@ -2286,9 +2289,11 @@
         "make test sigue en verde",
         "dmg/Flathub/Electron/Homebrew quedan documentados como futuros si aplica"
       ],
-      "status": "blocked",
+      "status": "in_progress",
       "depends_on": [],
-      "blocked_reason": "Bloqueada por permisos/credenciales del humano: el usuario no esta en el grupo docker (daemon permission denied) asi que no se puede construir la imagen, y no hay credenciales de registry para publicarla. Accion humana: anadir al usuario al grupo docker (sudo usermod -aG docker cacelas) y decidir registry + login. La parte pip y la redaccion del Dockerfile se pueden hacer despues sin perder estado."
+      "started": "2026-08-26",
+      "owner": "pack",
+      "review_rounds": 0
     },
     {
       "id": "LLM-019",
@@ -2389,6 +2394,36 @@
       "owner": "claude",
       "review_rounds": 0,
       "closed": "2026-08-21"
+    },
+    {
+      "id": "WEB-021",
+      "title": "Paleta de climasafe.html en probar-ya (local)",
+      "description": "Paleta de climasafe.html en probar-ya (local)",
+      "acceptance_criteria": [
+        "index.html de web/probar-ya usa los tokens exactos de style.css del sitio: bg #09090b, surface #16161a, border #27272a, text #fafafa, accent #006eff, crema #fff8f1 y rojos ClimaSafe #dc2626/#f87171",
+        "fuentes DM Serif Display + Space Grotesk + JetBrains Mono",
+        "fondo plano sin rejilla de puntos",
+        "seccion formulario en crema con tarjetas oscuras y seccion resultado oscura (.section-dark) con tarjetas crema, como el patron intercalado del sitio",
+        "hero con eyebrow pill rojo, h1 serif y CTAs pill rojos",
+        "badges/estado/reco/tablas legibles sobre crema",
+        "main.js linea 284 usa azules #006eff/#4d94ff",
+        "copias sincronizadas a migithub/cacelass.github.io/climasafe/probar-ya"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-022",
+      "title": "climasafe.html: textos al ancho y botones agrupados",
+      "description": "climasafe.html: textos al ancho y botones agrupados",
+      "acceptance_criteria": [
+        "En cacelass.github.io (../migithub/cacelass.github.io): hero-sub, proj-wide e impact-note de climasafe.html ocupan el ancho del contenedor (override .climasafe-page en style.css)",
+        "proj-links reorganizado con grupos desplegables details/summary: Documentacion (guia-usuario, docs tecnicas) e Instalacion (pip/Docker -> github#instalar, Telegram, MCP), cerrados al clicar fuera",
+        "claves i18n nuevas en es/en y bump de ?v= de i18n.js",
+        "todos los enlaces apuntan a ficheros que existen"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }

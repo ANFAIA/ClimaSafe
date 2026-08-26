@@ -93,6 +93,20 @@ pulsar «Predecir» y comprobar que solo aparecen peticiones a ficheros
 estáticos locales y a `api.open-meteo.com`. Automatizable con
 `tests/test_demo_sin_backend.py`.
 
+## LLM local opcional (WEB-016)
+
+La tarjeta «Redactar el parte con IA local» carga transformers.js v4 desde
+jsDelivr y descarga **en runtime** IBM Granite 4.0 1B
+(`onnx-community/granite-4.0-1b-ONNX-web`, Apache 2.0) solo si el usuario la
+activa: ≈1,25 GB por WebGPU (q4f16) o ≈1,8 GB por WASM (q4). El navegador
+cachea los pesos (Cache API); la redacción ejecuta 100 % local usando como
+contexto los resultados ya calculados por el pipeline ONNX, que nunca se
+sustituyen. Cualquier fallo (sin red, descarga, WebGPU/WASM) deja el parte de
+plantilla intacto. Detalles, justificación del modelo y verificación manual:
+`documentacion/wasm/llm_navegador.md`. Las unidades puras JS se prueban en
+`test/llm_unit.mjs` (vía `tests/test_demo_llm_units.py`, incluido en
+`make test`).
+
 ## Test de paridad (node)
 
 ```bash

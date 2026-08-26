@@ -11,6 +11,8 @@ import { fetchWeatherData, provinciaMasCercana, getProvinceCoords } from "./weat
 import { predictEnsemble } from "./modelos.js?v=20260814";
 import { generarRecomendaciones } from "./recomendaciones.js";
 import { nivelActividadDeDeporte } from "./personalizacion.js";
+// WEB-016: redacción local del parte con un LLM (transformers.js, opt-in).
+import { initParteIA } from "./llm.js?v=20260826";
 
 // i18n (WEB-014): textos dinámicos vía el diccionario de js/i18n.js. Si el
 // mecanismo no está cargado (p.ej. en tests), t() devuelve la clave tal cual.
@@ -130,6 +132,8 @@ let artefactos = null;
 let modelos = null;
 let catalogoRec = null;
 let escenarios = null;
+// WEB-016: última salida de predictEnsemble; el LLM local la usa como contexto.
+let ultimaSalida = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Carga inicial
@@ -559,6 +563,8 @@ async function predecir() {
       offline,
       aviso,
     });
+    // WEB-016: disponible como contexto para la redacción local con el LLM.
+    ultimaSalida = res;
     estado.className = "status oculto";
     $("resultado").scrollIntoView({ behavior: "smooth" });
   } catch (e) {
@@ -569,4 +575,7 @@ async function predecir() {
 }
 
 $("predecir").addEventListener("click", predecir);
+// WEB-016: tarjeta «Redactar el parte con IA local». Nada se descarga hasta
+// que el usuario pulsa; si algo falla, el parte de plantilla sigue intacto.
+initParteIA(() => ultimaSalida);
 init();

@@ -152,7 +152,19 @@
       btn_borrar_datos: "Borrar mis datos",
       btn_borrar_datos_aria: "Borrar los datos del perfil guardados en el navegador",
       datos_borrados: "Datos borrados. El formulario se ha restablecido.",
-      perfil_restaurado: "Perfil restaurado desde el navegador."
+      perfil_restaurado: "Perfil restaurado desde el navegador.",
+      // WEB-016: redacción local del parte con LLM (transformers.js)
+      card_ia: "Redactar el parte con IA local",
+      ia_desc: "Opcional: un LLM pequeño (IBM Granite 4.0 1B) se descarga una sola vez desde HuggingFace y redacta el parte en prosa usando los resultados ya calculados arriba.",
+      ia_btn_activar: "Activar IA local (descarga única ≈ 1–2 GB)",
+      ia_btn_repetir: "Volver a generar el parte",
+      ia_cargando_lib: "Cargando transformers.js desde CDN…",
+      ia_descargando: "Descargando modelo ({0})… {1}%",
+      ia_generando: "Generando el parte en tu dispositivo (sin GPU puede tardar 1–3 min)…",
+      ia_listo: "Parte redactado localmente con {0}.",
+      ia_error: "IA local no disponible ({0}). El parte con la plantilla clásica sigue funcionando sin cambios.",
+      ia_privacy: "Privacidad: el modelo corre íntegramente en tu navegador (WebGPU o WASM) y queda cacheado para usos siguientes. Ni tus datos ni el texto generado se envían a ningún servidor; solo la descarga inicial viene de HuggingFace.",
+      ia_disclaimer: "Texto redactado por un LLM local a partir de los resultados deterministas del modelo. Puede contener errores; las cifras válidas son las mostradas arriba."
     },
     en: {
       nav_form: "form",
@@ -285,7 +297,19 @@
       btn_borrar_datos: "Delete my data",
       btn_borrar_datos_aria: "Delete the profile data stored in the browser",
       datos_borrados: "Data deleted. The form has been reset.",
-      perfil_restaurado: "Profile restored from the browser."
+      perfil_restaurado: "Profile restored from the browser.",
+      // WEB-016: local briefing drafting with LLM (transformers.js)
+      card_ia: "Draft the briefing with local AI",
+      ia_desc: "Optional: a small LLM (IBM Granite 4.0 1B) is downloaded once from HuggingFace and writes the briefing in prose using the results already computed above.",
+      ia_btn_activar: "Enable local AI (one-time download ≈ 1–2 GB)",
+      ia_btn_repetir: "Regenerate the briefing",
+      ia_cargando_lib: "Loading transformers.js from CDN…",
+      ia_descargando: "Downloading model ({0})… {1}%",
+      ia_generando: "Writing the briefing on your device (without GPU it may take 1–3 min)…",
+      ia_listo: "Briefing drafted locally with {0}.",
+      ia_error: "Local AI unavailable ({0}). The classic template briefing keeps working unchanged.",
+      ia_privacy: "Privacy: the model runs entirely in your browser (WebGPU or WASM) and is cached for subsequent uses. Neither your data nor the generated text is sent to any server; only the initial download comes from HuggingFace.",
+      ia_disclaimer: "Text drafted by a local LLM from the model's deterministic results. It may contain errors; the valid figures are the ones shown above."
     }
   };
 

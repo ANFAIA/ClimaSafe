@@ -72,7 +72,7 @@
       font-family: var(--mono); font-size: 0.76rem; color: var(--accent2);
       letter-spacing: 2px; text-transform: uppercase; margin-bottom: 18px;
     }
-    .proj-hero h1 { font-size: 2.2rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
+    .proj-hero h1 { font-size: 2.2rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: break-word; word-break: break-word; text-wrap: balance; }
     .hl { background: linear-gradient(90deg, var(--accent2), var(--purple)); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .hero-sub { color: var(--muted); margin: 18px 0 28px; max-width: 640px; font-size: 0.95rem; }
     .proj-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -201,6 +201,12 @@
     .aviso-disclaimer {
       font-size: 0.72rem; color: var(--dim); line-height: 1.5;
       border-top: 1px solid var(--border); margin-top: 18px; padding-top: 10px;
+    }
+    /* WEB-016: salida del parte redactado por el LLM local */
+    .parte-ia-salida {
+      white-space: pre-wrap; font-family: var(--sans); font-size: 0.88rem;
+      background: var(--bg2); border: 1px solid var(--border-hi);
+      border-radius: var(--r); padding: 12px 14px; margin-top: 10px; line-height: 1.6;
     }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -486,6 +492,22 @@
           <ul id="recomendaciones" class="reco"></ul>
         </div>
 
+        <!-- WEB-016: redacción del parte con un LLM local (transformers.js).
+             Opt-in: el modelo (~1–2 GB) solo se descarga desde HuggingFace si
+             el usuario lo activa y queda cacheado en el navegador; la
+             redacción ejecuta 100 % local y cualquier fallo cae en la
+             plantilla clásica de arriba. Detalles:
+             documentacion/wasm/llm_navegador.md -->
+        <div class="card">
+          <h3 data-i18n="card_ia">Redactar el parte con IA local</h3>
+          <p class="meta" style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;" data-i18n="ia_desc">Opcional: un LLM pequeño (IBM Granite 4.0 1B) se descarga una sola vez desde HuggingFace y redacta el parte en prosa usando los resultados ya calculados arriba.</p>
+          <button id="parte-ia-activar" class="hero-cta" style="width:auto;" data-i18n="ia_btn_activar">Activar IA local (descarga única ≈ 1–2 GB)</button>
+          <div id="parte-ia-estado" class="status oculto" aria-live="polite"></div>
+          <pre id="parte-ia-salida" class="parte-ia-salida oculto"></pre>
+          <p class="meta" style="font-size:0.78rem;color:var(--muted);margin-top:10px;" data-i18n="ia_privacy">Privacidad: el modelo corre íntegramente en tu navegador (WebGPU o WASM) y queda cacheado para usos siguientes. Ni tus datos ni el texto generado se envían a ningún servidor; solo la descarga inicial viene de HuggingFace.</p>
+          <p class="aviso-disclaimer" data-i18n="ia_disclaimer">Texto redactado por un LLM local a partir de los resultados deterministas del modelo. Puede contener errores; las cifras válidas son las mostradas arriba.</p>
+        </div>
+
         <div class="card">
           <details>
             <summary data-i18n="summary_detalle">Detalle del ensemble (probabilidades poblacionales, factores, override)</summary>
@@ -537,6 +559,6 @@
   <script src="js/i18n.js?v=20260821"></script>
   <!-- Cache-busting: GitHub Pages cachea max-age=600; el ?v= obliga a cargar
        los módulos nuevos tras cada cambio (sube el número al tocar js/). -->
-  <script type="module" src="js/main.js?v=20260821"></script>
+  <script type="module" src="js/main.js?v=20260826"></script>
 </body>
 </html>
