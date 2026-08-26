@@ -2286,8 +2286,9 @@
         "make test sigue en verde",
         "dmg/Flathub/Electron/Homebrew quedan documentados como futuros si aplica"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "blocked",
+      "depends_on": [],
+      "blocked_reason": "Bloqueada por permisos/credenciales del humano: el usuario no esta en el grupo docker (daemon permission denied) asi que no se puede construir la imagen, y no hay credenciales de registry para publicarla. Accion humana: anadir al usuario al grupo docker (sudo usermod -aG docker cacelas) y decidir registry + login. La parte pip y la redaccion del Dockerfile se pueden hacer despues sin perder estado."
     },
     {
       "id": "LLM-019",
@@ -2300,8 +2301,11 @@
         "Se decide por los numeros si se cambia el modelo por defecto y se deja escrito el porque",
         "make test sigue en verde"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-25",
+      "review_rounds": 0,
+      "closed": "2026-08-26"
     },
     {
       "id": "ML-001",

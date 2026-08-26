@@ -1,0 +1,432 @@
+{
+  "val": "data/llm/val.jsonl",
+  "n": 15,
+  "informes": [
+    {
+      "modelo": "groq/openai/gpt-oss-20b",
+      "tamano": "-",
+      "n": 15,
+      "fallos": 0,
+      "clase_acc": 0.6,
+      "formato_acc": 0.8,
+      "pct_con_inventadas": 0.6666666666666666,
+      "inventadas_media": 2,
+      "err_indice_medio": 3.048181818181818,
+      "sin_indice": 0.26666666666666666,
+      "latencia_p50": 2.6916682749999836,
+      "latencia_p95": 3.109133122000003,
+      "tok_por_peticion": 2064.733333333333,
+      "coste_por_peticion": 0.0014569866666666667,
+      "_filas": [
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1",
+            "5.32",
+            "73.17"
+          ],
+          "err_indice": 0.59
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 4,
+          "inventadas": [
+            "15",
+            "20",
+            "4.86",
+            "80.6"
+          ],
+          "err_indice": 0.83
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 1,
+          "inventadas": [
+            "30"
+          ],
+          "err_indice": 0.53
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 5,
+          "inventadas": [
+            "0.65",
+            "0.78",
+            "1.18",
+            "14",
+            "2"
+          ],
+          "err_indice": 0.06000000000000005
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.08",
+            "28.9",
+            "38"
+          ],
+          "err_indice": 28.189999999999998
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "SEGURO",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 5,
+          "inventadas": [
+            "0.08",
+            "0.12",
+            "1.1",
+            "15",
+            "60"
+          ],
+          "err_indice": 0.64
+        },
+        {
+          "clase_esperada": "SEGURO",
+          "clase_obtenida": null,
+          "clase_ok": false,
+          "formato_ok": false,
+          "n_inventadas": 0,
+          "inventadas": [],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 2,
+          "inventadas": [
+            "0.32",
+            "1"
+          ],
+          "err_indice": 0.19
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "SEGURO",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 1,
+          "inventadas": [
+            "1"
+          ],
+          "err_indice": 0.87
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 1,
+          "inventadas": [
+            "12.8"
+          ],
+          "err_indice": 0.84
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "SEGURO",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 0,
+          "inventadas": [],
+          "err_indice": 0.61
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 5,
+          "inventadas": [
+            "0.7",
+            "0.9",
+            "1.29",
+            "17.21",
+            "83.76"
+          ],
+          "err_indice": 0.18000000000000005
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 0,
+          "inventadas": [],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": null,
+          "clase_ok": false,
+          "formato_ok": false,
+          "n_inventadas": 0,
+          "inventadas": [],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": null,
+          "clase_ok": false,
+          "formato_ok": false,
+          "n_inventadas": 0,
+          "inventadas": [],
+          "err_indice": null
+        }
+      ]
+    },
+    {
+      "modelo": "groq/openai/gpt-oss-120b",
+      "tamano": "-",
+      "n": 15,
+      "fallos": 0,
+      "clase_acc": 0.6,
+      "formato_acc": 1.0,
+      "pct_con_inventadas": 1.0,
+      "inventadas_media": 4.6,
+      "err_indice_medio": 4.868888888888889,
+      "sin_indice": 0.4,
+      "latencia_p50": 3.0317743879998034,
+      "latencia_p95": 3.8464364790002037,
+      "tok_por_peticion": 1691.4,
+      "coste_por_peticion": 0.00086874,
+      "_filas": [
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1",
+            "60",
+            "73"
+          ],
+          "err_indice": 0.59
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 6,
+          "inventadas": [
+            "0.4",
+            "0.82",
+            "10",
+            "4.11",
+            "7",
+            "80.6"
+          ],
+          "err_indice": 0.010000000000000009
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 2,
+          "inventadas": [
+            "30",
+            "73"
+          ],
+          "err_indice": 0.53
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 5,
+          "inventadas": [
+            "14.2",
+            "14.21",
+            "68.58",
+            "68.6",
+            "7"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 6,
+          "inventadas": [
+            "0.7",
+            "0.85",
+            "1.25",
+            "16",
+            "30",
+            "500"
+          ],
+          "err_indice": 0.14
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "15.56",
+            "30",
+            "60.7"
+          ],
+          "err_indice": 0.76
+        },
+        {
+          "clase_esperada": "SEGURO",
+          "clase_obtenida": "SEGURO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1",
+            "18.55",
+            "30"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 5,
+          "inventadas": [
+            "1",
+            "16",
+            "250",
+            "30",
+            "35.71"
+          ],
+          "err_indice": 35.2
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 4,
+          "inventadas": [
+            "2",
+            "60",
+            "66.9",
+            "7.58"
+          ],
+          "err_indice": 5.53
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 1,
+          "inventadas": [
+            "12.81"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 5,
+          "inventadas": [
+            "1",
+            "17.6",
+            "30",
+            "6.46",
+            "86.6"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 8,
+          "inventadas": [
+            "0.78",
+            "1.2",
+            "1.6",
+            "17",
+            "30",
+            "5.3"
+          ],
+          "err_indice": 0.8800000000000001
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 4,
+          "inventadas": [
+            "1",
+            "30",
+            "77",
+            "9.3"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 7,
+          "inventadas": [
+            "0.7",
+            "0.8",
+            "30",
+            "6",
+            "60",
+            "85"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 7,
+          "inventadas": [
+            "0.45",
+            "0.72",
+            "1.2",
+            "10.98",
+            "11.7",
+            "7"
+          ],
+          "err_indice": 0.18000000000000005
+        }
+      ]
+    }
+  ]
+}

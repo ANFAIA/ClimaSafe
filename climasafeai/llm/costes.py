@@ -84,6 +84,9 @@ def comprobar_presupuesto(tokens: int, *, etiqueta: str, tope: int | None = None
 PRECIOS_MODELOS: dict[str, dict[str, float]] = {
     # Modelos remotos que usa el proyecto (ver MODELO_API_DEFECTO en rag_qwen).
     "gpt-oss-20b": {"prompt": 0.20, "completion": 0.80},
+    # LLM-019: hermano mayor del anterior, también en el free tier de Groq
+    # ($0.15/$0.60 por millón, tarifas públicas de Groq verificadas 08/2026).
+    "gpt-oss-120b": {"prompt": 0.15, "completion": 0.60},
     # Referencia de modelos remotos habituales (editar al gusto).
     "gpt-4o": {"prompt": 2.50, "completion": 10.00},
     "gpt-4o-mini": {"prompt": 0.15, "completion": 0.60},

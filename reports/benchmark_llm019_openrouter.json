@@ -1,0 +1,12 @@
+{
+  "val": "data/llm/val.jsonl",
+  "n": 15,
+  "informes": [
+    {
+      "modelo": "openrouter/deepseek/deepseek-chat-v3-0324:free",
+      "n": 0,
+      "fallos": 0,
+      "error": "sin clave OPENROUTER_API_KEY — medición en vivo pendiente de que el humano añada la clave"
+    }
+  ]
+}

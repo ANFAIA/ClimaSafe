@@ -1,33 +1,46 @@
 #! /usr/bin/env python
 """
-Benchmark de modelos locales sobre data/llm/val.jsonl (LLM-003).
+Benchmark de modelos sobre data/llm/val.jsonl (LLM-003, extendido en LLM-019).
 
 Mide sin juez LLM. Un modelo puntuando a otro mete su propio sesgo y no es
 reproducible; aquí la respuesta de referencia sale del pipeline determinista,
 así que se puede comparar carácter por carácter y número por número.
 
 Métricas:
-  clase      ¿acierta SEGURO / PRECAUCION / PELIGRO?
-  formato    ¿trae las líneas que el bot espera (RIESGO, índice, factor)?
-  inventadas ¿mete cifras que no están ni en la pregunta ni en la referencia?
-  err_indice desviación absoluta media del índice personalizado
-  latencia   segundos por respuesta (mediana y p95)
+   clase      ¿acierta SEGURO / PRECAUCION / PELIGRO?
+   formato    ¿trae las líneas que el bot espera (RIESGO, índice, factor)?
+   inventadas ¿mete cifras que no están ni en la pregunta ni en la referencia?
+   err_indice desviación absoluta media del índice personalizado
+   latencia   segundos por respuesta (mediana y p95)
+   coste      tokens y $/petición a precio de lista (tabla PRECIOS_MODELOS,
+              ARNES-004); los free tier de Groq/Gemini y Ollama pagan $0 real
+
+Proveedores gratuitos (LLM-019): cualquier string LiteLLM vale —
+"groq/openai/gpt-oss-20b", "gemini/gemini-3.6-flash",
+"openrouter/deepseek/deepseek-chat-v3-0324:free". Los modelos openrouter/ sin
+OPENROUTER_API_KEY se reportan «sin clave»: no se inventan resultados.
+--pausa espacia las peticiones para respetar los rate limits del free tier.
 
 Uso:
     uv run python climasafeai/llm/benchmark.py --modelos ollama/qwen2.5:1.5b
     uv run python climasafeai/llm/benchmark.py --modelos ollama/qwen2.5:1.5b,ollama/gemma3:4b
     uv run python climasafeai/llm/benchmark.py --limite 20 --json informe.json
+    uv run python climasafeai/llm/benchmark.py --limite 25 --pausa 3 \
+        --modelos "groq/openai/gpt-oss-20b,gemini/gemini-3.6-flash"
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import statistics
 import time
 from pathlib import Path
 from typing import Any
+
+from climasafeai.llm.costes import coste_llamada, resumen_sesion
 
 VAL_POR_DEFECTO = Path("data/llm/val.jsonl")
 
@@ -132,10 +145,29 @@ def _tamano_ollama(modelo: str) -> str:
     return "?"
 
 
-def evaluar_modelo(modelo: str, ejemplos: list[dict], verbose: bool = True) -> dict[str, Any]:
+def _sin_clave_openrouter(modelo: str) -> str | None:
+    """LLM-019: puerta de OpenRouter. Sin OPENROUTER_API_KEY no hay llamada
+    que intentar — el error sería de autenticación, no una medida — así que
+    se reporta «sin clave» y la fila queda fuera de la comparación numérica.
+    La vía openrouter/ de LiteLLM ya está lista para cuando haya clave."""
+    if modelo.startswith("openrouter/") and not os.environ.get("OPENROUTER_API_KEY", "").strip():
+        return ("sin clave OPENROUTER_API_KEY — medición en vivo pendiente de "
+                "que el humano añada la clave")
+    return None
+
+
+def evaluar_modelo(modelo: str, ejemplos: list[dict], verbose: bool = True,
+                   pausa: float = 0.0) -> dict[str, Any]:
     from climasafeai.llm.rag_qwen import LLMConfig, _chat_litellm
 
+    sin_clave = _sin_clave_openrouter(modelo)
+    if sin_clave:
+        return {"modelo": modelo, "n": 0, "fallos": 0, "error": sin_clave}
+
     config = LLMConfig(model=modelo)
+    # ARNES-004: sesión dedicada por modelo para leer tokens/coste de ESE
+    # modelo sin contaminar la sesión "default" del bot.
+    sesion = f"benchmark:{modelo}"
     filas, latencias, fallos = [], [], 0
 
     for i, ej in enumerate(ejemplos, 1):
@@ -144,13 +176,16 @@ def evaluar_modelo(modelo: str, ejemplos: list[dict], verbose: bool = True) -> d
             {"role": "user", "content": f"{ej['instruction']}\n\n{ej['input']}"},
         ]
         t0 = time.perf_counter()
-        respuesta = _chat_litellm(mensajes, config)
+        respuesta = _chat_litellm(mensajes, config, sesion_id=sesion)
         latencias.append(time.perf_counter() - t0)
 
         if not respuesta:
             fallos += 1
-            continue
-        filas.append(evaluar_respuesta(respuesta, ej))
+        else:
+            filas.append(evaluar_respuesta(respuesta, ej))
+        # LLM-019: pausa entre peticiones para los rate limits del free tier.
+        if pausa and i < len(ejemplos):
+            time.sleep(pausa)
         if verbose and i % 10 == 0:
             aciertos = sum(f["clase_ok"] for f in filas)
             print(f"    {i}/{len(ejemplos)} · clase {aciertos}/{len(filas)} · "
@@ -161,6 +196,8 @@ def evaluar_modelo(modelo: str, ejemplos: list[dict], verbose: bool = True) -> d
         return {"modelo": modelo, "n": 0, "fallos": fallos,
                 "error": "ninguna respuesta utilizable"}
 
+    resumen = resumen_sesion(sesion)
+    llamadas = int(resumen["llamadas"])
     errores = [f["err_indice"] for f in filas if f["err_indice"] is not None]
     return {
         "modelo": modelo,
@@ -175,27 +212,46 @@ def evaluar_modelo(modelo: str, ejemplos: list[dict], verbose: bool = True) -> d
         "sin_indice": sum(f["err_indice"] is None for f in filas) / n,
         "latencia_p50": statistics.median(latencias),
         "latencia_p95": sorted(latencias)[int(len(latencias) * 0.95) - 1] if latencias else None,
+        # LLM-019: coste por petición a precio de lista (tabla única de
+        # ARNES-004). En free tier (Groq/Gemini) y Ollama la factura real es
+        # $0; esta cifra dice lo que costaría si se pagara.
+        "tok_por_peticion": (
+            (resumen["prompt_tokens"] + resumen["completion_tokens"]) / llamadas
+            if llamadas else None
+        ),
+        "coste_por_peticion": (
+            coste_llamada(modelo, int(resumen["prompt_tokens"]),
+                          int(resumen["completion_tokens"])) / llamadas
+            if llamadas else None
+        ),
         "_filas": filas,
     }
 
 
 def imprimir_tabla(informes: list[dict]) -> None:
-    cab = (f"{'modelo':<26} {'tam':>8} {'clase':>7} {'formato':>8} "
-           f"{'inventa':>8} {'err_idx':>8} {'p50 s':>7} {'p95 s':>7}")
+    cab = (f"{'modelo':<38} {'tam':>8} {'clase':>7} {'formato':>8} "
+           f"{'inventa':>8} {'err_idx':>8} {'p50 s':>7} {'p95 s':>7} "
+           f"{'tok/req':>9} {'$/req':>8}")
     print("\n" + cab)
     print("-" * len(cab))
     for r in informes:
         if r.get("error"):
-            print(f"{r['modelo']:<26} {'—':>8}  {r['error']}")
+            print(f"{r['modelo']:<38}  {r['error']}")
             continue
         err = f"{r['err_indice_medio']:.3f}" if r["err_indice_medio"] is not None else "—"
-        print(f"{r['modelo']:<26} {r['tamano']:>8} {r['clase_acc']:>6.0%} "
+        tok = f"{r['tok_por_peticion']:.0f}" if r.get("tok_por_peticion") is not None else "—"
+        coste = f"${r['coste_por_peticion']:.4f}" if r.get("coste_por_peticion") is not None else "—"
+        print(f"{r['modelo']:<38} {r.get('tamano', '—'):>8} {r['clase_acc']:>6.0%} "
               f"{r['formato_acc']:>7.0%} {r['pct_con_inventadas']:>7.0%} "
-              f"{err:>8} {r['latencia_p50']:>7.2f} {r['latencia_p95'] or 0:>7.2f}")
+              f"{err:>8} {r['latencia_p50']:>7.2f} {r['latencia_p95'] or 0:>7.2f} "
+              f"{tok:>9} {coste:>8}")
     print("\nclase   = acierta SEGURO/PRECAUCION/PELIGRO")
     print("formato = trae las líneas que el bot espera")
     print("inventa = % de respuestas con al menos una cifra que no estaba en los datos")
     print("err_idx = desviación media del índice personalizado")
+    print("tok/req = tokens (prompt+completion) por petición, del usage real del proveedor")
+    print("$/req   = coste por petición a precio de lista (PRECIOS_MODELOS). Free tier")
+    print("          de Groq/Gemini y Ollama: factura real $0.00 — el límite es el rate limit")
 
 
 def cargar_val(ruta: Path, limite: int | None) -> list[dict]:
@@ -209,6 +265,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Modelos LiteLLM separados por comas")
     p.add_argument("--val", type=Path, default=VAL_POR_DEFECTO, help="JSONL de validación")
     p.add_argument("--limite", type=int, default=None, help="Usar solo los N primeros ejemplos")
+    p.add_argument("--pausa", type=float, default=0.0,
+                   help="Segundos entre peticiones (rate limits del free tier)")
     p.add_argument("--json", type=Path, default=None, help="Guardar el informe completo aquí")
     return p.parse_args(argv)
 
@@ -238,7 +296,7 @@ def main() -> None:
     informes = []
     for modelo in modelos:
         print(f"\n▶  {modelo}", flush=True)
-        informes.append(evaluar_modelo(modelo, ejemplos))
+        informes.append(evaluar_modelo(modelo, ejemplos, pausa=args.pausa))
         _guardar(informes)
         imprimir_tabla(informes)
 

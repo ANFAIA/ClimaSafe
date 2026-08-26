@@ -122,6 +122,11 @@ MODELO_LOCAL_GPU = "ollama/qwen2.5:7b"
 MODELO_FINE_TUNED = "ollama/qwen3:climasafe"
 # HOST-001: llama-3.3-70b-versatile dejó de existir en el free tier de Groq
 # (404 verificado el 18-08-2026); gpt-oss-20b es el sustituto del free tier.
+# LLM-019: el benchmark de free tiers sobre data/llm/val.jsonl (n=15, 25-08-2026)
+# lo confirma por los números — es el único remoto que no inventa cifras en el
+# 100% de las respuestas (67% vs 100% de gpt-oss-120b y gemini-3.6-flash),
+# tiene el menor err_indice de los remotos (3.05 vs 4.87/10.61) y la mejor
+# latencia (p50 2.7s vs 28s de Gemini). Informe: reports/benchmark_llm019.json.
 MODELO_API_DEFECTO = "groq/openai/gpt-oss-20b"
 # BOT-023: OpenRouter como complemento a Groq — modelos gratuitos (free)
 ENV_OPENROUTER_API_KEY = "OPENROUTER_API_KEY"

@@ -1,0 +1,206 @@
+{
+  "val": "data/llm/val.jsonl",
+  "n": 15,
+  "informes": [
+    {
+      "modelo": "gemini/gemini-3.6-flash",
+      "tamano": "-",
+      "n": 14,
+      "fallos": 1,
+      "clase_acc": 0.7142857142857143,
+      "formato_acc": 0.9285714285714286,
+      "pct_con_inventadas": 1.0,
+      "inventadas_media": 3,
+      "err_indice_medio": 10.605,
+      "sin_indice": 0.5714285714285714,
+      "latencia_p50": 27.59129774200028,
+      "latencia_p95": 41.43216236399985,
+      "tok_por_peticion": 2255.0,
+      "coste_por_peticion": 0.0008162428571428572,
+      "_filas": [
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.19",
+            "2.1",
+            "2.5"
+          ],
+          "err_indice": 1.9100000000000001
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.55",
+            "5.6",
+            "8.68"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.2",
+            "1.85",
+            "2.22"
+          ],
+          "err_indice": 1.6900000000000002
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.65",
+            "5.88",
+            "9.7"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": null,
+          "clase_ok": false,
+          "formato_ok": false,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.32",
+            "28.6",
+            "37.75"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 2,
+          "inventadas": [
+            "3.85",
+            "9.63"
+          ],
+          "err_indice": 3.09
+        },
+        {
+          "clase_esperada": "SEGURO",
+          "clase_obtenida": "SEGURO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 1,
+          "inventadas": [
+            "1"
+          ],
+          "err_indice": 18.020000000000003
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "0.95",
+            "33.67",
+            "35.44"
+          ],
+          "err_indice": 33.160000000000004
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.27",
+            "10.1",
+            "7.95"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 4,
+          "inventadas": [
+            "1.8",
+            "12",
+            "13.5",
+            "7.5"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 5,
+          "inventadas": [
+            "1.18",
+            "17.56",
+            "5.4",
+            "6.37",
+            "86.59"
+          ],
+          "err_indice": 5.76
+        },
+        {
+          "clase_esperada": "PRECAUCION",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 4,
+          "inventadas": [
+            "1.4",
+            "3.8",
+            "5.32",
+            "9.34"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PRECAUCION",
+          "clase_ok": false,
+          "formato_ok": true,
+          "n_inventadas": 3,
+          "inventadas": [
+            "1.1",
+            "6.2",
+            "6.82"
+          ],
+          "err_indice": null
+        },
+        {
+          "clase_esperada": "PELIGRO",
+          "clase_obtenida": "PELIGRO",
+          "clase_ok": true,
+          "formato_ok": true,
+          "n_inventadas": 2,
+          "inventadas": [
+            "1.74",
+            "11.62"
+          ],
+          "err_indice": null
+        }
+      ]
+    }
+  ]
+}
