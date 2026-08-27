@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .dockerignore (PACK-002) — el contexto de build lleva SOLO lo que la imagen
+# necesita para servir: paquete, servicio web, modelos joblib y BD de perfiles.
+# El despliegue interno del sistema de agentes NO viaja en la imagen.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# VCS y CI
+.git
+.github
+.gitignore
+
+# Arnés interno y estado del trabajo (PACK-002: fuera de la imagen)
+.opencode
+agents/workspace
+progress
+featureslist.json
+skills
+graphify-out
+tasks.py
+
+# Entornos y cachés
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+
+# Datos pesados: a la imagen solo va data/climasafe.db (COPY explícito en el Dockerfile)
+data/raw
+data/interim
+data/processed
+
+# Modelos: solo *.joblib top-level + artifacts/ entran en el contexto.
+# Los *.pt (GNN/LSTM, ~2 GB) no los carga el servicio web.
+models/*
+!models/*.joblib
+!models/artifacts
+
+# Build, docs y salidas
+dist
+build
+site
+docs_site
+docs/build
+documentacion
+reports
+notebooks
+experimentos
+references
+mlflow.db
+logs
+scratch_retrain.log
+
+# Web estática publicada por separado en GitHub Pages (la sirven WEB-*)
+web
+
+# Pipeline completo y tests: la imagen sirve, no entrena ni verifica
+main.py
+tests
+tuning
+monitoring
+ingest
+
+# Secretos — JAMÁS dentro del contexto ni de la imagen
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.cdsapirc
+
+# Los propios ficheros Docker (no se copian dentro de la imagen)
+Dockerfile
+docker-compose.yml
+.dockerignore

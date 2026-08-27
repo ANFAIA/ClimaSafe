@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml — ClimaSafeAI (PACK-002)
+#
+# Usuario no técnico (una vez publicada la imagen):
+#   docker run -d -p 8080:8080 ghcr.io/cacelass/climasafeai:latest
+#   → abre http://localhost:8080
+#
+# Con este fichero:
+#   docker compose up -d          # solo web (perfil por defecto)
+#   docker compose --profile bot up -d   # web + bot de Telegram
+#
+# La imagen NO lleva secretos: el bot lee TELEGRAM_BOT_TOKEN del .env local.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  web:
+    build: .
+    image: ${CLIMASAFE_IMAGE:-ghcr.io/cacelass/climasafeai:latest}
+    container_name: climasafe-web
+    ports:
+      - "8080:8080"
+    volumes:
+      # Volúmenes nombrados: la primera vez se siembran con lo que trae la
+      # imagen (BD de perfiles + modelos joblib) y persisten entre reinicios.
+      - climasafe_data:/app/data
+      - climasafe_models:/app/models
+    restart: unless-stopped
+
+  bot:
+    image: ${CLIMASAFE_IMAGE:-ghcr.io/cacelass/climasafeai:latest}
+    build: .
+    container_name: climasafe-bot
+    profiles: ["bot"]
+    command: ["python", "-m", "climasafeai.bot.telegram_bot"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Copia .env.example a .env y pon tu token de @BotFather}
+    volumes:
+      - climasafe_data:/app/data
+      - climasafe_models:/app/models
+    restart: unless-stopped
+
+volumes:
+  climasafe_data:
+  climasafe_models:

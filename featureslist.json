@@ -2289,11 +2289,12 @@
         "make test sigue en verde",
         "dmg/Flathub/Electron/Homebrew quedan documentados como futuros si aplica"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-26",
       "owner": "pack",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-27"
     },
     {
       "id": "LLM-019",
@@ -2425,8 +2426,9 @@
         "claves i18n nuevas en es/en y bump de ?v= de i18n.js",
         "todos los enlaces apuntan a ficheros que existen"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-26"
     }
   ]
 }
