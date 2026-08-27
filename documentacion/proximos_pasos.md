@@ -1,6 +1,6 @@
 # Próximos pasos — hoja de ruta
 
-**Última revisión:** 2026-07-30
+**Última revisión:** 2026-08-27
 
 ---
 
@@ -42,8 +42,8 @@
 | ✅ | **ENS-001**: max-vote → conformal-weighted average | Hecho |
 | ✅ | Curvas de riesgo por edad (comparativa 5 edades) | Hecho |
 | ✅ | `POST /api/riesgo-volumen` — estimación volumétrica | Hecho |
-| ⬜ | **CSV-001** — riesgo colectivo por CSV | Pendiente |
-| ⬜ | **MAPA-001** — exportar mapa como PNG/GeoJSON | Pendiente |
+| ✅ | **CSV-001** — riesgo colectivo por CSV | Hecho |
+| ✅ | **MAPA-001** — exportar mapa como PNG/GeoJSON | Hecho |
 
 ### Fase 2 — Mapa de riesgo por zona
 
@@ -57,41 +57,87 @@
 | ✅ | Selector de perfil de vulnerabilidad | Hecho |
 | ✅ | Overlay de rectángulos coloreados en Leaflet | Hecho |
 
-### Fase 3 — Bot de Telegram (determinista)
-
-El anterior bot vía spacebot (con LLM y errores de tool calling) ha sido **reemplazado** por un bot determinista en `climasafeai/bot/telegram_bot.py`. No depende de LLM para la recogida de datos: todo son teclados inline nativos de Telegram. El LLM solo se usa para redactar la respuesta final (con fallback a plantilla).
+### Fase 3 — Bot de Telegram (determinista + LLM)
 
 | # | Qué | Archivos |
 |---|-----|----------|
 | ✅ | Bot determinista con 17 estados y teclados inline | `climasafeai/bot/telegram_bot.py` |
 | ✅ | Flujo completo: sexo, edad, grasa, fototipo, aclimatado, actividad, duración, hora, trabajo, deporte, comorbilidades, medicación, estado previo, situación social, ubicación | `climasafeai/bot/telegram_bot.py` |
 | ✅ | Toggles multiselect con toast de confirmación (sin bucle) | `climasafeai/bot/telegram_bot.py` |
-| ✅ | Deporte como teclado inline con opciones predefinidas (correr, ciclismo, fútbol, tenis, pádel, senderismo, natación) + opción "Otro" para texto libre | `climasafeai/bot/telegram_bot.py` |
+| ✅ | Deporte como teclado inline con opciones predefinidas | `climasafeai/bot/telegram_bot.py` |
 | ✅ | Perfiles SQLite: carga al /start si el chat_id está vinculado | `climasafeai/bot/telegram_bot.py`, `climasafeai/db/manager.py` |
 | ✅ | Skip automático de preguntas personales si hay perfil cargado | `climasafeai/bot/telegram_bot.py` |
-| ✅ | Guardado de perfil al final de la conversación (pregunta Si/No + alias) | `climasafeai/bot/telegram_bot.py` |
-| ✅ | Geocodificación vía Nominatim (nunca LLM) para ubicaciones escritas | `climasafeai/bot/geocoding.py` |
+| ✅ | Guardado de perfil al final de la conversación | `climasafeai/bot/telegram_bot.py` |
+| ✅ | Geocodificación vía Nominatim (nunca LLM) | `climasafeai/bot/geocoding.py` |
 | ✅ | Botón nativo de ubicación (request_location) | `climasafeai/bot/telegram_bot.py` |
-| ✅ | 36 tests del flujo completo | `tests/test_telegram_bot.py` |
-| ✅ | `make bot` — lanzar en foreground | `Makefile` |
-| ✅ | `make bot-daemon` / `make bot-stop` / `make bot-logs` | `Makefile` |
+| ✅ | **BOT-005**: Parte del bot con datos previos, intensidad y recomendación | `climasafeai/bot/telegram_bot.py`, `climasafeai/models/recomendaciones.py` |
+| ✅ | **BOT-011**: Parte claro y personalizado con explicación del % | `climasafeai/models/recomendaciones.py`, `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-012**: Horas peligrosas y horario recomendado en el parte | `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-013**: Confianza del modelo y explicación de la clase | `climasafeai/llm/rag_qwen.py`, `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-014**: Chat post-parte con canal dominante y factores con peso | `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-016**: Tipo de ocupación/deporte al añadir rutina | `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-017**: Repetir última salida al cargar perfil | `climasafeai/db/manager.py`, `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-018**: Voz (STT Whisper + TTS gTTS) | `climasafeai/bot/voice.py` |
+| ✅ | **BOT-019**: Menos pasos (deducción con perfil + rutina) | `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-020**: Formato del parte: clasificación, %, factores, tabla, recomendaciones | `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-021**: Memoria conversacional (entender "voy al tenis como ayer") | `climasafeai/bot/telegram_bot.py` |
+| ✅ | **BOT-022**: Fix reenvío LLM y limpieza de think (Qwen3) | `climasafeai/bot/telegram_bot.py`, `climasafeai/llm/rag_qwen.py` |
+| ✅ | **BOT-023**: OpenRouter como complemento a Groq (modelos free) | `climasafeai/llm/rag_qwen.py`, `climasafeai/bot/telegram_bot.py` |
+| ✅ | **HOST-001**: LLM remoto (Groq/OpenRouter) + fallback determinista | `climasafeai/bot/telegram_bot.py`, `climasafeai/llm/rag_qwen.py` |
+| ✅ | **TG-002**: Perfil vinculado al chat de Telegram | `climasafeai/bot/telegram_bot.py` |
+| ✅ | **CHAT-003**: Fusionar /chat en /start (LLM + chat abierto) | `climasafeai/bot/telegram_bot.py` |
+| ✅ | Rutinas semanales con deporte y ocupación | `climasafeai/bot/telegram_bot.py` |
+| ✅ | Avisos diarios del riesgo | `climasafeai/bot/telegram_bot.py` |
+| ✅ | Logging seguro (sin token, sin duplicados) | `climasafeai/bot/telegram_bot.py` |
 
 ### Fase 4 — MCP y herramientas para asistentes
 
 | # | Qué | Estado |
 |---|-----|--------|
-| ✅ | Servidor MCP de predicción (6 tools) | `agents/tools/prediction_mcp_tool.py` |
+| ✅ | Servidor MCP de predicción (6+ tools) | `agents/tools/prediction_mcp_tool.py` |
 | ✅ | Servidor MCP de factores (10 tools) | `agents/tools/factors_mcp_tool.py` |
 | ✅ | `predict_risk_mcp` — todos los campos de la web | Hecho |
+| ✅ | `grafica_riesgo_horario_mcp` — imagen PNG de la curva | Hecho |
 | ✅ | `crear_perfil_mcp` — con fototipo y situacion_social | Hecho |
 | ✅ | `cargar_perfil_mcp` / `cargar_perfil_por_chat_id_mcp` | Hecho |
 | ✅ | `listar_usuarios_mcp` / `vincular_chat_id_mcp` | Hecho |
-| ✅ | `make mcp` / `make mcp-factors` / `make mcp-stdio` | `Makefile` |
-| ✅ | Modo stdio (Claude Desktop) y SSE | Hecho |
+| ✅ | `riesgo_rutinas_dia_mcp` — riesgo de rutinas por día | Hecho |
+| ✅ | Modo stdio (Claude Desktop) y streamable HTTP | Hecho |
+| ✅ | **MCP-002**: Capa de solo lectura por defecto, escritura con token | Hecho |
+| ✅ | **MCP-003**: Control de acceso por identidad (IDs opacos) | Hecho |
+| ✅ | **MCP-004**: Adaptación a spec MCP 2025-06-18+ (annotations) | Hecho |
+| ✅ | **MCP-IMG-001**: Gráfica del riesgo por hora desde MCP | Hecho |
+| ✅ | **MCP-APPS-001**: MVP de MCP Apps (UI interactiva) | Hecho |
 
-### Fase 5 — Arnés (agentes Python)
+### Fase 5 — LLM y RAG
 
-Sistema de 26 agentes Python para orquestar el ciclo de desarrollo. Cada feature se abre, implementa, revisa y cierra con verificación automática.
+| # | Qué | Estado |
+|---|-----|--------|
+| ✅ | **LLM-001**: Qwen 2.5 7B local + RAG + fallback determinista | Hecho |
+| ✅ | **LLM-003**: Sistema de prompts (SYSTEM_PARTE, etc.) | Hecho |
+| ✅ | **LLM-004**: Dataset LLM con input que lleva tiempo y UV | Hecho |
+| ✅ | **LLM-005**: Parte del LLM explica factores y recomendaciones | Hecho |
+| ✅ | **LLM-006**: Notebook Colab para fine-tuning (GPU T4 gratuita) | Hecho |
+| ✅ | **LLM-007**: Estudio LoRA/aLoRA/multi-adapter | Hecho |
+| ✅ | **LLM-008**: Evaluación Granite aLoRA para RAG (NO adoptar) | Hecho |
+| ✅ | **LLM-012**: DLMs para fine-tuning (DESCARTADO) | Hecho |
+| ✅ | **LLM-013**: Adaptar fine-tuning a Qwen3-1.7B | Hecho |
+| ✅ | **LLM-014**: Bot usa qwen3:climasafe como modelo fine-tuneado | Hecho |
+| ✅ | **LLM-015**: Guía de revisión + script QC del dataset | Hecho |
+| ✅ | **LLM-016**: Estudio base vs instruct | Hecho |
+| ✅ | **LLM-017**: Dataset regenerado con QC a 0 hallazgos | Hecho |
+| ✅ | **LLM-018**: Notebook actualizado a Qwen3 instruct + dataset | Hecho |
+| ✅ | **LLM-019**: Benchmark de modelos LLM gratuitos | Hecho |
+| ✅ | **RAG-001**: Fine-tuning Gemma 4 + RAG local | Hecho |
+| ✅ | **RAG-002**: RAG indexa coeficientes y DOI | Hecho |
+| ✅ | **RAG-003**: Filtrar literatura del dominio vs ruido | Hecho |
+| ✅ | **RAG-004**: Set de evaluación del RAG (recall/precision) | Hecho |
+| ✅ | **RAG-005**: Reindexa cuando cambia el texto (hash sha256) | Hecho |
+| ✅ | **RAG-006**: Afinar retrieval (solapamiento + comparar embeddings) | Hecho |
+| ✅ | **HOST-001**: LLM en hosting gratuito (Groq/OpenRouter) | Hecho |
+| ✅ | **BAYES-001**: Modelo bayesiano jerárquico por provincias | Hecho |
+
+### Fase 6 — Arnés y agentes
 
 | # | Qué | Archivos |
 |---|-----|----------|
@@ -100,31 +146,107 @@ Sistema de 26 agentes Python para orquestar el ciclo de desarrollo. Cada feature
 | ✅ | `featureslist.json` — backlog con criterios de aceptación | `featureslist.json` |
 | ✅ | `progress/` — estado vivo de la feature en curso | `progress/` |
 | ✅ | Agentes: lider, explorer, implementer, reviewer, harness | `agents/` |
-| ✅ | `make init` / `make harness-check` / `make backlog` | `Makefile` |
+| ✅ | **ARNES-003**: Modo debug para ver payload al LLM | `climasafeai/llm/rag_qwen.py` |
+| ✅ | **ARNES-004**: Contador de tokens y coste por petición | `climasafeai/llm/costes.py` |
+| ✅ | **ARNES-006**: Bucle propio en Python sobre LiteLLM | `agents/loop.py` |
+| ✅ | **ARNES-007**: Subagentes y compactación | `agents/subagent.py`, `agents/compaction.py` |
+| ✅ | **ARNES-009**: Comparativa de arneses (ADK, DeepAgents, manual) | `documentacion/arnes_comparativa.md` |
+| ✅ | **ARNES-010**: Tope de presupuesto de tokens por petición | `climasafeai/llm/costes.py` |
+| ✅ | **ARNES-011**: Security/Policy Layer (permisos, sandbox, auditoría) | `agents/security.py` |
+| ✅ | **ARNES-012**: Timeout de harness (900s → 3600s) | `agents/agents/harness_agent.py` |
+| ✅ | **ARNES-013**: Candado por dueño (dos asistentes en paralelo) | `agents/agents/harness_agent.py` |
+| ✅ | **ARNES-014**: Commit automático al cerrar ticket (con --commit) | `agents/agents/harness_agent.py` |
+| ✅ | **GIT-001**: Bump de versión + propuesta de commit sin co-autoría | `agents/agents/git_agent.py` |
+
+### Fase 7 — Web UI
+
+| # | Qué | Estado |
+|---|-----|--------|
+| ✅ | Formulario completo con mapa y selector de perfiles | Hecho |
+| ✅ | Modo Individual / Grupo / Chat | Hecho |
+| ✅ | Curvas de riesgo por edad | Hecho |
+| ✅ | Estimación volumétrica de afectados | Hecho |
+| ✅ | Mapa de riesgo por zona (grid + Leaflet) | Hecho |
+| ✅ | **WEB-003**: Fix campo desconocido en perfil (500 → 200 + warning) | Hecho |
+| ✅ | **WEB-004**: XSS almacenado (escapar nombre de usuario) | Hecho |
+| ✅ | **WEB-005**: HTTP 200 con error en el cuerpo (→ HTTPException) | Hecho |
+| ✅ | **WEB-006**: Borrar perfil no deja rutinas huérfanas | Hecho |
+| ✅ | **WEB-007**: Chat como vista dedicada (no panel embebido) | Hecho |
+| ✅ | **WEB-009**: Precarga de datos del perfil guardado | Hecho |
+| ✅ | **WEB-011**: Conversión ONNX de modelos + artefactos a JSON | Hecho |
+| ✅ | **WEB-012**: Demo "Probar ya" con ONNX en el navegador | Hecho |
+| ✅ | **WEB-013**: Accesibilidad (axe-core: 0 critical/serious) | Hecho |
+| ✅ | **WEB-014**: i18n (ES/EN) con detección de idioma | Hecho |
+| ✅ | **WEB-015**: Perfil en localStorage de la demo | Hecho |
+| ✅ | **WEB-016**: LLM en navegador (transformers.js + Granite 1B) | Hecho |
+| ✅ | **WEB-019**: Shaders WebGL en landings | Hecho |
+| ✅ | **WEB-020**: GSAP animaciones + Space Grotesk | Hecho |
+| ✅ | **WEB-021**: Paleta de climasafe.html en probar-ya | Hecho |
+| ✅ | **WEB-022**: climasafe.html textos al ancho + botones agrupados | Hecho |
+| ✅ | **UX-001**: Agente conversacional en GUI (estilo SymptomAI) | Hecho |
+| ✅ | **FORECAST-001**: Tendencia semanal con bandas de confianza | Hecho |
+| ✅ | **FORECAST-004**: Banda y horizonte explicados en pantalla | Hecho |
+
+### Fase 8 — Mensajería y despliegue
+
+| # | Qué | Estado |
+|---|-----|--------|
+| ✅ | **MSG-001**: Abstracción de mensajería (Telegram/Hermes/Webhook) | Hecho |
+| ✅ | **MSG-003**: Worker de notificaciones con cola SQLite | Hecho |
+| ✅ | **MSG-004**: Evaluaciones programadas sin Docker (worker) | Hecho |
+| ✅ | **DEPLOY-001**: Agente de release automatizado | Hecho |
+| ✅ | **DEPLOY-002**: CI/CD + GitHub Pages | Hecho |
+| ✅ | **DEPLOY-003**: Modelo de releases (sin release-please) | Hecho |
+
+### Fase 9 — Seguridad y datos
+
+| # | Qué | Estado |
+|---|-----|--------|
+| ✅ | **SEC-001**: Protección BD (permisos, logs sanitizados, backup) | Hecho |
+| ✅ | **MCP-002**: Solo lectura por defecto en MCP | Hecho |
+| ✅ | **MCP-003**: Control de acceso por identidad en MCP | Hecho |
+| ✅ | **BUG-001**: NaN en datos meteorológicos → propagación | Hecho |
+| ✅ | **BUG-002**: Riesgo colectivo por etiqueta (F821) | Hecho |
+| ✅ | **BUG-003**: Test del parte (role=user) | Hecho |
+| ✅ | **BUG-005**: SFTConfig pickling en fine_tune.py | Hecho |
+| ✅ | **BUG-006**: PosixPath.lower() en exportar_gguf | Hecho |
+
+### Fase 10 — Investigación y documentación
+
+| # | Qué | Estado |
+|---|-----|--------|
+| ✅ | **RESEARCH-001**: HMM, Bayesianas, GPs, GNNs, TFT, RL (viabilidad) | Hecho |
+| ✅ | **FORECAST-002**: Modelos fundacionales (TimesFM, Granite, WeatherNext) | Hecho |
+| ✅ | **FORECAST-003**: Estudio volumen de gente (APARCAR) | Hecho |
+| ✅ | **DOC-002**: Quitar densidad a documentación y README | Hecho |
+| ✅ | **DOC-003**: README con formato original | Hecho |
+| ✅ | **DOC-004**: PRD de ClimaSafeAI | Hecho |
+| ✅ | **DOC-005**: Sitio MkDocs Material | Hecho |
+| ✅ | **DOC-006**: Actualizar sitio curado (docs_site/) | Hecho |
+| ✅ | **DOC-007**: Dos niveles de documentación (usuarios + técnicos) | Hecho |
+| ✅ | **DOC-008**: Clarificar dualidad factor edad (ensemble vs personalización) | Hecho |
+| ✅ | **META-001**: Métricas de éxito del PRD en producción | Hecho |
+| ✅ | **UV-001**: Radiación UV como línea futura (v2) | Hecho |
+| ✅ | **ML-001**: Arquitectura ML plug-and-play (manifiestos JSON) | Hecho |
 
 ---
 
 ## Pendiente
 
-### Web UI
-- Exportar mapa como PNG/GeoJSON (**MAPA-001**)
-- Riesgo colectivo por CSV (**CSV-001**)
+### Prioritario (producción)
 
-### Forecasting
-- Tendencia semanal con bandas de confianza
-- Modelos fundacionales: TimesFM 2.5, Granite-TTM-R3, WeatherNext 2
+- **LLM-002**: Fine-tuning ejecutado + skill publicada + deploy verificado (bloqueado: sin GPU NVIDIA/CUDA)
+- **PACK-002**: Empaquetado para técnicos y no técnicos (pip/npm/Docker)
+- **CHAT-001**: /chat usa el pipeline (cuestionario conversacional con predicción real)
+- Crear PAT `PAGES_DEPLOY_TOKEN` para publicación automática a GitHub Pages
+- Regenerar dataset LLM completo y re-ejecutar QC
+- Reentrenar LoRA sobre Qwen3-Instruct (siguiente paso LLM-014)
 
-### Bot Telegram
+### Nice to have
+
+- Exportar mapa como PNG/GeoJSON en la web (ya funcional desde MAPA-001)
 - Grupos con comandos `/clima`, `/recomendaciones`
-- Notificaciones programadas (crontab en Docker)
-
-### RAG + LLM
-- Fine-tuning Gemma 4 vía Unsloth
-- Resúmenes con RAG sobre documentos del proyecto
-- Consultas en lenguaje natural con respuesta sintetizada
-
-### Agentes
-- Publicar skill ClimaSafeAI en skills.sh registry
+- Notificaciones programadas (ya funcional desde MSG-004, sin Docker)
 - Flue Framework (ejecución durable, sandboxes)
 
 ---
@@ -132,13 +254,16 @@ Sistema de 26 agentes Python para orquestar el ciclo de desarrollo. Cada feature
 ## Resumen visual
 
 ```
-Bot Telegram   ── Bot determinista 17 estados ✅ · Perfiles SQLite ✅
-MCP            ── 6+10 tools ✅ · Modo stdio/SSE ✅
-Arnés          ── Ciclo agents/ ✅ · init.sh ✅ · backlog ✅
-Web UI         ── Curvas edad ✅ · Volumen ✅ · Mapa riesgo ✅ · [⬜ exportar]
-CSV colectivo  ── [⬜ CSV-001]
-Forecasting    ── Tendencia semanal · TimesFM · márgenes error
-RAG + LLM      ── Gemma 4 + Unsloth + LoRA [⬜]
+Bot Telegram   ── Bot determinista 17 estados ✅ · Perfiles ✅ · Rutinas ✅ · Avisos ✅ · Voz ✅
+LLM            ── Qwen3 local + Groq/OpenRouter remoto + fallback determinista ✅
+RAG            ── sqlite-vec + distiluse embeddings ✅ · Eval set 43 preguntas ✅
+MCP            ── 16+ tools ✅ · stdio/HTTP ✅ · Control acceso ✅ · MCP Apps ✅
+Arnés          ── 26 agentes ✅ · Security layer ✅ · Subagentes ✅ · Compactación ✅
+Web UI         ── Curvas edad ✅ · Mapa riesgo ✅ · Demo WASM+ONNX ✅ · LLM navegador ✅
+Forecasting    ── Tendencia semanal ✅ · Bandas conformal ✅ · Open-Meteo 7 días ✅
+ML             ── Plug-and-play (manifiestos) ✅ · Bayesiano jerárquico ✅
+CI/CD          ── GitHub Actions ✅ · Pages ✅ · Releases ✅
+Seguridad      ── BD permisos ✅ · Logs sanitizados ✅ · MCP solo-lectura ✅
 ```
 
 ## Referencias
@@ -150,3 +275,5 @@ RAG + LLM      ── Gemma 4 + Unsloth + LoRA [⬜]
 - `ml/conclusiones_modelos.md` — métricas y comparación de modelos
 - `ml/contrafactuales.md` — generación de contrafactuales
 - `conformal_prediction.md` — split conformal
+- `documentacion/prd.md` — Product Requirements Document
+- `documentacion/componentes.md` — guía de componentes
