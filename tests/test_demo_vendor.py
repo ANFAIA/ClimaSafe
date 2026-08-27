@@ -49,7 +49,7 @@ def test_demo_formulario_tiene_los_campos_del_bot_y_mcp():
 def test_demo_nav_y_volver_apuntan_fuera_de_probar_ya():
     """Los enlaces de la demo son relativos y vuelven al proyecto/home, no a README."""
     html = (_ROOT / "web" / "probar-ya" / "index.html").read_text(encoding="utf-8")
-    assert 'href="../../projects/climasafe.html"' in html, "falta el botón Volver al proyecto"
+    assert 'href="../../projects/climasafe/"' in html, "falta el botón Volver al proyecto"
     assert 'href="../../index.html"' in html, "el '← index' no apunta al home real"
     assert "cómo regenerar / desplegar" not in html, "el botón sin sentido sigue en el hero"
 

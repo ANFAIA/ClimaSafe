@@ -25,7 +25,7 @@ Sin instalar nada:
 
 - **Demo interactiva** — [probar-ya](https://cacelass.github.io/climasafe/probar-ya/):
   elige provincia y perfil y mira el riesgo.
-- **Home del proyecto** — [cacelass.github.io](https://cacelass.github.io/projects/climasafe.html).
+- **Home del proyecto** — [cacelass.github.io](https://cacelass.github.io/projects/climasafe/).
 
 ### Documentación
 
