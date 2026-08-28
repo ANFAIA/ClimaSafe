@@ -2553,8 +2553,11 @@
         "Se decide POR LOS NUMEROS si entra al ensemble o no",
         "make test pasa"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-28",
+      "review_rounds": 0,
+      "closed": "2026-08-28"
     },
     {
       "id": "ML-004",
