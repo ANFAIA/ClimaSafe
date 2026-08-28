@@ -906,9 +906,9 @@ function esc(v) {
 function initMap(lat, lon) {
   if (!map) {
     map = L.map('map', { zoomControl: true }).setView([lat, lon], 8);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 18,
-      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
     }).addTo(map);
     map.on('click', function(e) {
       const lat = e.latlng.lat.toFixed(4);
@@ -1322,8 +1322,8 @@ function initResultsMap(lat, lon, zoom) {
     return;
   }
   _resultsMap = L.map(container, { zoomControl: true }).setView([lat, lon], zoom);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18, attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18, attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
   }).addTo(_resultsMap);
   setTimeout(() => _resultsMap.invalidateSize(), 200);
 }

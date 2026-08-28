@@ -2455,8 +2455,11 @@
         "no aparece ningún prompt de API key",
         "los tiles cargan correctamente"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-28",
+      "review_rounds": 0,
+      "closed": "2026-08-28"
     },
     {
       "id": "WEB-025",
