@@ -186,7 +186,17 @@ def preprocess_data(
             )
         fechas_para_split = pd.to_datetime(df["fecha"]).copy()
 
-    # 2. Eliminar columnas (generales + fuga de datos + extra por clase)
+    # 2. Feature gate anti-leakage (inspirado en PPE de Google).
+    #    Evalúa cada covariable contra 4 criterios ANTES de dropear columnas,
+    #    para que el informe refleje todas las features del dataset crudo.
+    from climasafeai.features.feature_gate import run_feature_gate
+    gate_report = run_feature_gate(
+        df, clase=clase, target_col=target_col,
+        exclude_cols=["provincia", "fecha", "datetime"],
+    )
+    print(gate_report.summary())
+
+    # 3. Eliminar columnas (generales + fuga de datos + extra por clase)
     #    ANTES de feature engineering para evitar que features derivadas
     #    reintroduzcan información de columnas eliminadas intencionalmente.
     cols_a_eliminar = (
@@ -199,30 +209,30 @@ def preprocess_data(
         df.drop(columns=cols_presentes, inplace=True)
         print(f"    Columnas eliminadas ({clase}): {cols_presentes}")
 
-    # 3. Feature engineering (después de dropear columnas)
+    # 4. Feature engineering (después de dropear columnas)
     df = _feature_engineering(df)
 
-    # 3.5 Transformación logarítmica
+    # 4.5 Transformación logarítmica
     df = _apply_logcols(df, LOGCOLS)
 
-    # 4. Codificación ordinal
+    # 5. Codificación ordinal
     for col, mapping in ORDINAL_MAPPINGS.items():
         if col in df.columns:
             df[col] = df[col].map(mapping)
             print(f"    Codificación ordinal: {col}")
 
-    # 5. X / y
+    # 6. X / y
     X = df.drop(columns=[target_col])
     y = df[target_col]
 
-    # 6. Nulos
+    # 7. Nulos
     num_cols = X.select_dtypes(include=[np.number]).columns
     cat_cols = X.select_dtypes(exclude=[np.number]).columns
     X[num_cols] = X[num_cols].fillna(X[num_cols].mean())
     for col in cat_cols:
         X[col] = X[col].fillna(X[col].mode()[0])
 
-    # 7. LabelEncoder
+    # 8. LabelEncoder
     encoders = {}  # guardamos un encoder por columna categórica para reproducibilidad
     for col in cat_cols:
         le_col = LabelEncoder()

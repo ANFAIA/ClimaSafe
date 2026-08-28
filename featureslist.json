@@ -2429,6 +2429,160 @@
       "status": "done",
       "depends_on": [],
       "closed": "2026-08-26"
+    },
+    {
+      "id": "WEB-023",
+      "title": "Demo: opción 'Mañana' no genera predicción",
+      "description": "Demo: opción 'Mañana' no genera predicción",
+      "acceptance_criteria": [
+        "El select de fecha tiene la opción Mañana",
+        "al seleccionarla y predecir, se muestra el resultado para mañana",
+        "si Open-Meteo no tiene forecast para mañana, se usa fallback de escenario"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-28",
+      "review_rounds": 0,
+      "closed": "2026-08-28"
+    },
+    {
+      "id": "WEB-024",
+      "title": "Demo: mapa pide API key (antes no la pedía)",
+      "description": "Demo: mapa pide API key (antes no la pedía)",
+      "acceptance_criteria": [
+        "El mapa de la demo usa CartoDB dark tiles sin API key",
+        "al cargar la página, el mapa se muestra sin pedir clave",
+        "no aparece ningún prompt de API key",
+        "los tiles cargan correctamente"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-025",
+      "title": "Instalacion: botón volver, dropdown desplegable, ancho de cards y contraste",
+      "description": "Instalacion: botón volver, dropdown desplegable, ancho de cards y contraste",
+      "acceptance_criteria": [
+        "Botón 'volver al proyecto' en hero de instalacion",
+        "dropdown en climasafe.html con 6 opciones (pip, Docker, prompt, dev, Telegram, MCP)",
+        "method-cards en secciones .section con fondo oscuro y texto claro",
+        "sin max-width:640px en cards pip y dev",
+        "Telegram bot note envuelto en method-card"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-026",
+      "title": "Instalacion: secciones agente, compose GitHub, MCP web y ecosistema",
+      "description": "Instalacion: secciones agente, compose GitHub, MCP web y ecosistema",
+      "acceptance_criteria": [
+        "Sección 05: prompt agéntico copiable con botón",
+        "Sección 06: docker-compose.gh.yml que construye desde GitHub",
+        "Sección 07: MCP vía web (GitHub Pages) y MCP local",
+        "Sección 08: enlaces a ANFAIA, CESGA, GitHub, Telegram, MCP, demo",
+        "i18n keys es/en para todas las secciones"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "WEB-027",
+      "title": "Páginas ClimaSafe: título monocolor (sin azul en .hl)",
+      "description": "Páginas ClimaSafe: título monocolor (sin azul en .hl)",
+      "acceptance_criteria": [
+        "El h1 de las páginas ClimaSafe (telegram, mcp, instalacion) es completamente blanco",
+        "el span con clase .hl hereda color del padre en vez de usar accent2"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "PACK-003",
+      "title": "pip: modelos pre-entrenados descargables sin entrenar",
+      "description": "pip: modelos pre-entrenados descargables sin entrenar",
+      "acceptance_criteria": [
+        "Un comando (make download-models o similar) descarga los .joblib y artifacts/ desde GitHub Releases",
+        "el usuario no necesita descargar datos ni entrenar para empezar a usar climasafeai-mcp o la API",
+        "los modelos se guardan en models/ y se cargan automáticamente",
+        "la doc de instalación refleja este flujo",
+        "el tamaño total de descarga es razonable (<200MB)"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "PACK-004",
+      "title": "pip: make download-models descarga los 3 modelos (~11MB)",
+      "description": "pip: make download-models descarga los 3 modelos (~11MB)",
+      "acceptance_criteria": [
+        "make download-models descarga modelo_desplegado_calor.joblib (3.3MB), modelo_desplegado_frio.joblib (7.6MB), LSTM_province_hybrid_seed42.pt (272KB) y artifacts/ (~96KB) desde GitHub Releases",
+        "total ~11MB",
+        "se guardan en models/",
+        "funciona tras pip install sin necesidad de descargar datos ni entrenar",
+        "la API y climasafeai-mcp cargan los modelos automáticamente"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ML-002",
+      "title": "Feature Gate automatizado: 4 criterios anti-leakage inspirados en el PPE de Google",
+      "description": "Feature Gate automatizado: 4 criterios anti-leakage inspirados en el PPE de Google",
+      "acceptance_criteria": [
+        "Existe un paso previo al entrenamiento que evalua cada covariable contra 4 criterios anti-leakage: (1) no es sub-componente matematico del target, (2) no viene de la misma encuesta que el target, (3) no es efecto causal downstream del target, (4) no usa datos temporales futuros",
+        "El feature gate se integra en generar_dataset.py y en el pipeline de entrenamiento",
+        "Se pega la lista de features filtradas y las que pasan, con el motivo de cada filtracion",
+        "make test pasa"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "started": "2026-08-28",
+      "review_rounds": 0,
+      "closed": "2026-08-28"
+    },
+    {
+      "id": "ML-003",
+      "title": "Embeddings geoespaciales como features: Population Dynamics y AlphaEarth para mejorar la prediccion por provincia",
+      "description": "Embeddings geoespaciales como features: Population Dynamics y AlphaEarth para mejorar la prediccion por provincia",
+      "acceptance_criteria": [
+        "Se evalua si los embeddings de Population Dynamics Foundation Models (PDFM) o AlphaEarth mejoran la prediccion por provincia",
+        "Se comparan al menos dos fuentes de embeddings (PDFM, AlphaEarth, o equivalentes open source como census embeddings) sobre el conjunto de validacion existente",
+        "Se mide el impacto en R2 y en la calidad del conformal prediction",
+        "Se documenta que aporta cada fuente de embeddings frente a los features actuales (coordenadas, provincia, clima)",
+        "Se decide POR LOS NUMEROS si entra al ensemble o no",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ML-004",
+      "title": "AutoML para seleccion de modelos: busqueda automatica sobre familias de modelos con validacion temporal",
+      "description": "AutoML para seleccion de modelos: busqueda automatica sobre familias de modelos con validacion temporal",
+      "acceptance_criteria": [
+        "Existe un script que busca automaticamente sobre familias de modelos (GBDT, MLP, lineales, o las que ya usa el proyecto) y elige la mejor configuracion",
+        "La busqueda usa validacion temporal (no random split) para respetar la naturaleza series temporales del problema",
+        "Se compara contra el ensemble actual en las mismas particiones y se pega la tabla",
+        "Se decide si el AutoML reemplaza, complementa o no mejora al ensemble actual",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "ML-005",
+      "title": "Data discovery autonomo: buscar datos meteorologicos historicos cuando Open-Meteo no cubre el periodo",
+      "description": "Data discovery autonomo: buscar datos meteorologicos historicos cuando Open-Meteo no cubre el periodo",
+      "acceptance_criteria": [
+        "Cuando Open-Meteo no tiene forecast para un dia o periodo solicitado, el sistema busca automaticamente en fuentes alternativas (archive API, datos abiertos meteorologicos, o web discovery)",
+        "Se demuestra con un caso real donde Open-Meteo no tiene datos y el sistema encuentra una fuente alternativa",
+        "La busqueda se hace sin intervencion manual",
+        "Se documenta que fuentes se consultan y que cobertura temporal tienen",
+        "make test pasa"
+      ],
+      "status": "pending",
+      "depends_on": []
     }
   ]
 }
