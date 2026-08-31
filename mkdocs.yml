@@ -9,7 +9,7 @@
 # se elimina en overrides/main.html y se sustituye por el footer del sitio.
 
 site_name: ClimaSafe
-site_url: https://cacelass.github.io/projects/climasafe/
+site_url: https://cacelass.github.io/projects/climasafe/documentation/
 docs_dir: docs_site
 use_directory_urls: true
 

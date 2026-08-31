@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 #
 # pages_deploy.sh — publica la documentación (MkDocs → site/) en el GitHub Pages
-# personal del humano (cacelass/cacelass.github.io), bajo projects/climasafe/.
-# También crea projects/climasafe.html como redirect para que URLs .html (QRs) funcionen.
+# personal del humano (cacelass/cacelass.github.io), bajo
+# projects/climasafe/documentation/.
+#
+# NO toca projects/climasafe/index.html (el home del proyecto vive en el pages
+# personal y se mantiene aparte).
 #
 # Es la pieza compartida por dos vías:
 #   - CI:  .github/workflows/pages.yml clona el repo destino con el secreto
@@ -40,40 +43,23 @@ if [[ ! -d "$PAGES_DIR/.git" ]]; then
     fi
 fi
 
-PROJ_DEST="$PAGES_DIR/projects/climasafe"
-PROJ_SRC_DEST="$PAGES_DIR/projects/climasafe-src"
+DOC_DEST="$PAGES_DIR/projects/climasafe/documentation"
+SRC_DEST="$PAGES_DIR/projects/climasafe-src"
 
-echo "▶ Copiando site/ → projects/climasafe/ ($(du -sh "$ROOT/site" | cut -f1))"
-rm -rf "$PROJ_DEST"
-mkdir -p "$PROJ_DEST"
-cp -R "$ROOT/site/." "$PROJ_DEST/"
-
-# projects/climasafe.html — redirect para que el QR de la presentación funcione.
-# GitHub Pages sirve .html directamente: al abrirlo, redirige a /projects/climasafe/.
-echo "▶ Creando projects/climasafe.html (redirect para QR)"
-cat > "$PAGES_DIR/projects/climasafe.html" <<'HTMLEOF'
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta http-equiv="refresh" content="0;url=/">
-  <title>ClimaSafe — redirigiendo…</title>
-</head>
-<body>
-  <p>Redirigiendo a <a href="/">ClimaSafe</a>…</p>
-</body>
-</html>
-HTMLEOF
+echo "▶ Copiando site/ → projects/climasafe/documentation/ ($(du -sh "$ROOT/site" | cut -f1))"
+rm -rf "$DOC_DEST"
+mkdir -p "$DOC_DEST"
+cp -R "$ROOT/site/." "$DOC_DEST/"
 
 echo "▶ Copiando fuente de docs (mkdocs.yml + docs_site/ + overrides/) → projects/climasafe-src/"
-rm -rf "$PROJ_SRC_DEST"
-mkdir -p "$PROJ_SRC_DEST"
-cp "$ROOT/mkdocs.yml" "$PROJ_SRC_DEST/"
-cp -R "$ROOT/docs_site" "$PROJ_SRC_DEST/docs_site"
-cp -R "$ROOT/overrides" "$PROJ_SRC_DEST/overrides"
-cat > "$PROJ_SRC_DEST/build.sh" <<'EOF'
+rm -rf "$SRC_DEST"
+mkdir -p "$SRC_DEST"
+cp "$ROOT/mkdocs.yml" "$SRC_DEST/"
+cp -R "$ROOT/docs_site" "$SRC_DEST/docs_site"
+cp -R "$ROOT/overrides" "$SRC_DEST/overrides"
+cat > "$SRC_DEST/build.sh" <<'EOF'
 #!/usr/bin/env bash
-# Regenera projects/climasafe/ desde esta fuente, sin depender del repo ANFAIA.
+# Regenera projects/climasafe/documentation/ desde esta fuente, sin depender del repo ANFAIA.
 # Requiere mkdocs y el theme material (pip install mkdocs mkdocs-material).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -82,17 +68,17 @@ if ! command -v mkdocs >/dev/null 2>&1; then
     exit 1
 fi
 mkdocs build -f mkdocs.yml -d /tmp/climasafe-docs-build
-rm -rf ../climasafe
-cp -R /tmp/climasafe-docs-build ../climasafe
-echo "✓ Documentación regenerada en projects/climasafe/"
+rm -rf ../climasafe/documentation
+cp -R /tmp/climasafe-docs-build ../climasafe/documentation
+echo "✓ Documentación regenerada en projects/climasafe/documentation/"
 EOF
-chmod +x "$PROJ_SRC_DEST/build.sh"
+chmod +x "$SRC_DEST/build.sh"
 
 cd "$PAGES_DIR"
-git add projects/climasafe projects/climasafe.html projects/climasafe-src
+git add projects/climasafe/documentation projects/climasafe-src
 
 if git diff --cached --quiet; then
-    echo "Sin cambios en climasafe/ — nada que publicar."
+    echo "Sin cambios en projects/climasafe/documentation/ — nada que publicar."
     exit 0
 fi
 
@@ -104,12 +90,12 @@ if [[ -n "${GITHUB_ACTOR:-}" ]]; then
 else
     GIT_ID=()
 fi
-git "${GIT_ID[@]}" commit -m "deploy(climasafe): actualiza documentacion y demo probar-ya"
+git "${GIT_ID[@]}" commit -m "deploy(climasafe): actualiza documentacion"
 
 if [[ "$PUSH" == "yes" ]]; then
     echo "▶ Push a $PAGES_REMOTE"
     git push "$PAGES_REMOTE" HEAD
-    echo "✓ Publicado en https://cacelass.github.io/projects/climasafe/"
+    echo "✓ Publicado en https://cacelass.github.io/projects/climasafe/documentation/"
 else
     echo "PUSH=no — commit hecho en local y cambios staged en $PAGES_DIR (sin push)."
     git status --short | head -20
