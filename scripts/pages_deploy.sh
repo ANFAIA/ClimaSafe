@@ -46,7 +46,7 @@ PROJ_SRC_DEST="$PAGES_DIR/projects/climasafe-src"
 echo "▶ Copiando site/ → projects/climasafe/ ($(du -sh "$ROOT/site" | cut -f1))"
 rm -rf "$PROJ_DEST"
 mkdir -p "$PROJ_DEST"
-cp -R "$ROOT/site" "$PROJ_DEST"
+cp -R "$ROOT/site/." "$PROJ_DEST/"
 
 # projects/climasafe.html — redirect para que el QR de la presentación funcione.
 # GitHub Pages sirve .html directamente: al abrirlo, redirige a /projects/climasafe/.
