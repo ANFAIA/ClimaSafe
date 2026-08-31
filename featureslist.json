@@ -2472,8 +2472,9 @@
         "sin max-width:640px en cards pip y dev",
         "Telegram bot note envuelto en method-card"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-28"
     },
     {
       "id": "WEB-026",
@@ -2486,8 +2487,10 @@
         "Sección 08: enlaces a ANFAIA, CESGA, GitHub, Telegram, MCP, demo",
         "i18n keys es/en para todas las secciones"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "in_progress",
+      "depends_on": [],
+      "started": "2026-08-28",
+      "review_rounds": 0
     },
     {
       "id": "WEB-027",
