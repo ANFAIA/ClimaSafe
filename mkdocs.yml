@@ -1,6 +1,6 @@
 # Configuración del sitio de documentación (MkDocs)
 # Construye:  make docs   →  site/
-# Se publica en GitHub Pages bajo subpath: https://cacelass.github.io/climasafe/documentacion/
+# Se publica en GitHub Pages bajo subpath: https://cacelass.github.io/projects/climasafe/
 #
 # El contenido curado vive en docs_site/ (solo las 6 páginas del sitio); el
 # resto de documentacion/ (notas internas, decisiones, actas) NO se publica.
@@ -9,7 +9,7 @@
 # se elimina en overrides/main.html y se sustituye por el footer del sitio.
 
 site_name: ClimaSafe
-site_url: https://cacelass.github.io/climasafe/documentacion/
+site_url: https://cacelass.github.io/projects/climasafe/
 docs_dir: docs_site
 use_directory_urls: true
 

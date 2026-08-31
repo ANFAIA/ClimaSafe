@@ -7,8 +7,8 @@ Cubre:
      release-notes.
   3. release_ci.sh: idempotencia, tag LIGERO (sin autor github-actions), no
      commitea en el repo, CHANGELOG intacto por defecto.
-  4. pages_deploy.sh (dry-run): produce climasafe/documentacion/ +
-     climasafe/probar-ya/ + climasafe/documentacion-src/ en el repo destino,
+  4. pages_deploy.sh (dry-run): produce projects/climasafe/ +
+     projects/climasafe.html + projects/climasafe-src/ en el repo destino,
      sin push.
   5. Targets del Makefile: lint, docs, pages-deploy-dry, format-check.
 """
@@ -222,11 +222,10 @@ def test_pages_deploy_dry_run_layout(tmp_path: pathlib.Path):
     assert res.returncode == 0, res.stderr
 
     # Layout esperado en el repo destino
-    assert (dest / "climasafe" / "documentacion" / "index.html").exists(), "docs no copiadas"
-    assert (dest / "climasafe" / "probar-ya" / "index.html").exists(), "demo no copiada"
-    assert (dest / "climasafe" / "probar-ya" / "models" / "XGBoost_calor.onnx").exists(), "modelos ONNX no copiados"
-    assert (dest / "climasafe" / "documentacion-src" / "mkdocs.yml").exists(), "fuente de docs no copiada"
-    assert (dest / "climasafe" / "documentacion-src" / "overrides" / "main.html").exists(), "overrides no copiados"
+    assert (dest / "projects" / "climasafe" / "index.html").exists(), "docs no copiadas"
+    assert (dest / "projects" / "climasafe.html").exists(), "redirect no creado"
+    assert (dest / "projects" / "climasafe-src" / "mkdocs.yml").exists(), "fuente de docs no copiada"
+    assert (dest / "projects" / "climasafe-src" / "overrides" / "main.html").exists(), "overrides no copiados"
     # El home del repo destino sigue intacto
     assert (dest / "index.html").read_text() == "<h1>home</h1>"
     # PUSH=no hace el commit en local sin push: el árbol queda limpio pero el

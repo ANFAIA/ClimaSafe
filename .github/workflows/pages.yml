@@ -2,7 +2,7 @@ name: Pages
 
 # Publica docs (MkDocs → site/) y la demo del navegador (web/probar-ya/) en el
 # GitHub Pages personal del humano: cacelass/cacelass.github.io, bajo
-# climasafe/documentacion/ y climasafe/probar-ya/.
+# projects/climasafe/ (documentación) y projects/climasafe.html (redirect para QR).
 #
 # Es CROSS-REPO: necesita el secreto PAGES_DEPLOY_TOKEN (PAT con scope `repo`
 # sobre cacelass/cacelass.github.io). Si no está definido, el job se salta con
