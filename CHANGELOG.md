@@ -4641,3 +4641,69 @@
 
 - cierra BAYES-001 y DEPLOY-001
 
+## [Unreleased] — 2026-08-31
+
+### Añadido
+
+- WEB-027 título monocolor y fix API key en demo web
+- cierra WEB-024 WEB-025 WEB-026 y ML-003
+- cierra WEB-024
+- cierra ML-003
+- cierra ML-002
+- cierra WEB-021
+- cierra WEB-016
+- cierra LLM-019
+- cierra ML-001
+- cierra ARNES-007
+- cierra ARNES-006
+- cierra META-001
+- cierra LLM-012
+- cierra FORECAST-003
+- cierra LLM-008
+- cierra LLM-007
+- cierra DATA-005
+- cierra BOT-018
+- cierra ARNES-011
+- cierra UV-001
+- cierra DOC-007
+- cierra BOT-023
+- cierra DOC-008
+- cierra WEB-015
+- cierra WEB-014
+- cierra WEB-013
+- cierra ARNES-010
+- cierra WEB-009
+- cierra DOC-006
+- cierra FORECAST-004
+- cierra SEC-001
+- cierra ARNES-004
+- cierra RAG-006
+- cierra LLM-018
+- cierra LLM-017
+- cierra RAG-004
+- cierra BOT-006
+- cierra HOST-001
+- cierra WEB-002
+- cierra DEPLOY-001
+- cierra BAYES-001
+
+### Corrección de bugs
+
+- actualiza enlaces a projects/climasafe/ (sin .html)
+
+### Documentación
+
+- actualizar documentación del proyecto (proximos_pasos, componentes, README)
+- cierra DEPLOY-003
+- index técnico más completo + aclaración licencia Apache 2.0 en guía
+- guía de usuario no técnica + reestructuración docs en dos niveles (DOC-007)
+- cierra DOC-002
+
+### Build / dependencias
+
+- cierra PACK-002
+
+### Mantenimiento
+
+- cierra BAYES-001 y DEPLOY-001
+
