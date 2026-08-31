@@ -2531,8 +2531,9 @@
         "funciona tras pip install sin necesidad de descargar datos ni entrenar",
         "la API y climasafeai-mcp cargan los modelos automáticamente"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-31"
     },
     {
       "id": "ML-002",
