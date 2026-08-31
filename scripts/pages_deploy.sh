@@ -51,6 +51,9 @@ rm -rf "$DOC_DEST"
 mkdir -p "$DOC_DEST"
 cp -R "$ROOT/site/." "$DOC_DEST/"
 
+# .nojekyll: GitHub Pages ignora Jekyll y sirve index.html de directorios.
+touch "$PAGES_DIR/.nojekyll"
+
 echo "▶ Copiando fuente de docs (mkdocs.yml + docs_site/ + overrides/) → projects/climasafe-src/"
 rm -rf "$SRC_DEST"
 mkdir -p "$SRC_DEST"
@@ -75,7 +78,7 @@ EOF
 chmod +x "$SRC_DEST/build.sh"
 
 cd "$PAGES_DIR"
-git add projects/climasafe/documentation projects/climasafe-src
+git add .nojekyll projects/climasafe/documentation projects/climasafe-src
 
 if git diff --cached --quiet; then
     echo "Sin cambios en projects/climasafe/documentation/ — nada que publicar."

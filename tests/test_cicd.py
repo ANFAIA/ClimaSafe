@@ -222,6 +222,7 @@ def test_pages_deploy_dry_run_layout(tmp_path: pathlib.Path):
     assert res.returncode == 0, res.stderr
 
     # Layout esperado en el repo destino
+    assert (dest / ".nojekyll").exists(), "falta .nojekyll"
     assert (dest / "projects" / "climasafe" / "documentation" / "index.html").exists(), "docs no copiadas"
     assert (dest / "projects" / "climasafe-src" / "mkdocs.yml").exists(), "fuente de docs no copiada"
     assert (dest / "projects" / "climasafe-src" / "overrides" / "main.html").exists(), "overrides no copiados"
