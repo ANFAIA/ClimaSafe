@@ -2487,10 +2487,11 @@
         "Sección 08: enlaces a ANFAIA, CESGA, GitHub, Telegram, MCP, demo",
         "i18n keys es/en para todas las secciones"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
       "started": "2026-08-28",
-      "review_rounds": 0
+      "review_rounds": 0,
+      "closed": "2026-08-31"
     },
     {
       "id": "WEB-027",
@@ -2500,8 +2501,9 @@
         "El h1 de las páginas ClimaSafe (telegram, mcp, instalacion) es completamente blanco",
         "el span con clase .hl hereda color del padre en vez de usar accent2"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-31"
     },
     {
       "id": "PACK-003",
@@ -2514,8 +2516,9 @@
         "la doc de instalación refleja este flujo",
         "el tamaño total de descarga es razonable (<200MB)"
       ],
-      "status": "pending",
-      "depends_on": []
+      "status": "done",
+      "depends_on": [],
+      "closed": "2026-08-31"
     },
     {
       "id": "PACK-004",

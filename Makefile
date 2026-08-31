@@ -492,3 +492,8 @@ info:
 	@echo ""
 	@uv pip list 2>/dev/null | head -40 || pip list | head -40
 	@echo ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+download-models:
+	@echo "  Descargando/verificando modelos pre-entrenados..."
+	@python -c "from main import download_models; download_models()" 2>/dev/null || echo "  Modelos en models/:" && ls models/*.joblib 2>/dev/null | wc -l && ls models/*.pt 2>/dev/null | wc -l

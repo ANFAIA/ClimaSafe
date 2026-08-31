@@ -93,6 +93,16 @@ def run_full_pipeline() -> None:
             print(f"    AVISO: fallo al descargar ERA5 ({e}) — si los parquets ya existen, no es crítico")
 
     # ------------------------------------------------------------------
+    # Opcional: descargar modelos pre-entrenados desde GitHub Releases
+    # ------------------------------------------------------------------
+    print("\n¿Descargar modelos pre-entrenados? (s/N): ", end="")
+    resp = input().strip().lower()
+    if resp in ("s", "si", "y", "yes"):
+        download_models()
+    else:
+        print("    Saltando descarga de modelos.")
+
+    # ------------------------------------------------------------------
     # 2. Preprocesado → parquets etiquetados (dataset_calor/frio_labeled)
     # ------------------------------------------------------------------
     print("\n2. Preprocesado (parquets etiquetados)...")
@@ -551,6 +561,90 @@ def main():
     else:
         print("Opción no válida. Ejecutando pipeline completo por defecto.")
         run_full_pipeline()
+
+
+def main():
+    print("=" * 60)
+    print("  ClimaSafeAI — Pipeline de riesgo térmico")
+    print("=" * 60)
+    accion = input(
+        "Ejecutar pipeline completo (0) o "
+        "probar el modelo con tus datos (1)? (0/1): "
+    ).strip()
+    if accion == "0":
+        run_full_pipeline()
+    elif accion == "1":
+        try_model()
+    else:
+        print("Opción no válida. Ejecutando pipeline completo por defecto.")
+        run_full_pipeline()
+
+
+def download_models():
+    """Descarga los modelos pre-entrenados desde GitHub Releases si faltan."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    models_dir = Path("models")
+    models_dir.mkdir(exist_ok=True)
+
+    # Lista de modelos esenciales (.joblib)
+    essential_joblibs = [
+        "XGBoost_calor.joblib",
+        "RandomForest_frio.joblib",
+        "KNN_calor.joblib",
+        "KNN_frio.joblib",
+        "modelo_desplegado_calor.joblib",
+        "modelo_desplegado_frio.joblib",
+    ]
+
+    # Lista de modelos .pt (LSTM, GNN, etc.)
+    essential_pts = [
+        "LSTM.pt",
+        "LSTM_hybrid.pt",
+        "LSTM_province_hybrid.pt",
+    ]
+
+    missing_joblibs = [m for m in essential_joblibs if not (models_dir / m).exists()]
+    missing_pts = [m for m in essential_pts if not (models_dir / m).exists()]
+
+    if not missing_joblibs and not missing_pts:
+        print("    ✅ Todos los modelos esenciales ya están en models/")
+        return
+
+    print("    📦 Descargando modelos esenciales desde GitHub Releases...")
+    release_tag = "v0.0.128"
+
+    for model in missing_joblibs:
+        url = f"https://github.com/ANFAIA/ClimaSafe/releases/{release_tag}/download/{model}"
+        print(f"      ↳ {model}...")
+        try:
+            subprocess.run(
+                ["wget", "-q", "-O", str(models_dir / model), url],
+                check=True,
+                capture_output=True,
+            )
+            print(f"      ✅ {model} descargado")
+        except Exception as e:
+            print(f"      ❌ fallo al descargar {model}: {e}")
+
+    for model in missing_pts:
+        url = f"https://github.com/ANFAIA/ClimaSafe/releases/{release_tag}/download/{model}"
+        print(f"      ↳ {model}...")
+        try:
+            subprocess.run(
+                ["wget", "-q", "-O", str(models_dir / model), url],
+                check=True,
+                capture_output=True,
+            )
+            print(f"      ✅ {model} descargado")
+        except Exception as e:
+            print(f"      ❌ fallo al descargar {model}: {e}")
+
+    print("    ⬆️ Verificando conteo total...")
+    total = sum(1 for f in models_dir.iterdir() if f.is_file())
+    print(f"    📁 Total de archivos en models/: {total}")
 
 
 if __name__ == "__main__":
