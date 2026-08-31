@@ -56,11 +56,11 @@ cat > "$PAGES_DIR/projects/climasafe.html" <<'HTMLEOF'
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="refresh" content="0;url=/projects/climasafe/">
+  <meta http-equiv="refresh" content="0;url=/">
   <title>ClimaSafe — redirigiendo…</title>
 </head>
 <body>
-  <p>Redirigiendo a <a href="/projects/climasafe/">ClimaSafe</a>…</p>
+  <p>Redirigiendo a <a href="/">ClimaSafe</a>…</p>
 </body>
 </html>
 HTMLEOF
